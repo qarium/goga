@@ -857,7 +857,7 @@ def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, WorkflowAssist
     namespace = dict(workflow.assistants)
 
     for stage in workflow.stages.values():
-        for entry in stage.assistants or []:
+        for entry in (stage.assistants or {}).values():
             if _is_assistant_declaration(entry):
                 namespace[entry.name] = entry
 
@@ -961,8 +961,8 @@ def _assistants_by_id(
     Args:
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name — the source of
-            each stage's effective attachment list (extend-seeded entries
-            carry none; merged entries carry the stages-block list).
+            each stage's effective attachment map (extend-seeded entries
+            carry none; merged entries carry the stages-block map).
         expanded: The loop-expanded working step sequence — the source of each
             produced id's body for the script/planning checks. Skipped stages
             are already removed, so their attachments are never checked.
@@ -985,9 +985,11 @@ def _assistants_by_id(
 
     Raises:
         StructuralError: On any of the four attachment checks, in contract
-            order per entry (list order): an unknown reference, the same name
-            twice in one stage list, an attachment on a script-stage body, an
-            attachment on a planning-only body (each copy's body is checked).
+            order per entry (authored key order): an unknown reference, the
+            same name twice in one stage's effective attachment map (a
+            programmatic contribution — an authored map cannot repeat a
+            key), an attachment on a script-stage body, an attachment on a
+            planning-only body (each copy's body is checked).
     """
     bodies = {step.name: step.body for step in expanded}
     assistants_by_id: dict[str, list[FlowAssistant]] = {}
@@ -1002,14 +1004,16 @@ def _assistants_by_id(
         entries: list[FlowAssistant] = []
         seen: set[str] = set()
 
-        for entry in attachments:
+        for entry in attachments.values():
             # Check 1 — a reference must name a namespace member; a
             # declaration is its own source.
             source = entry if _is_assistant_declaration(entry) else namespace.get(entry.name)
             if source is None:
                 raise StructuralError(f"unknown assistant reference in workflow.stages.{base_name}: {entry.name}")
 
-            # Check 2 — the same name twice in one stage list.
+            # Check 2 — the same name twice in one stage's effective
+            # attachment map (a programmatic contribution — an authored map
+            # cannot repeat a key; the guard stays as defense).
             if entry.name in seen:
                 raise StructuralError(f"duplicate assistant in workflow.stages.{base_name}: {entry.name}")
             seen.add(entry.name)
@@ -1087,7 +1091,7 @@ def _collaboration_emission(
             output only by the two-line block.
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name. Read-only input —
-            the source of each stage's effective attachment list.
+            the source of each stage's effective attachment map.
         expanded: The loop-expanded working step sequence. Read-only input —
             the source of each produced id's body.
         expanded_ids: The base-name → produced-ids map from ``_expand_loops``.
@@ -1817,7 +1821,8 @@ def compile_flow(
             authored through the workflow stage attachments), on a
             ``trigger`` value outside ``on_success``/``manual``, or on any
             attachment check of step 4.10 (an unknown assistant reference,
-            the same assistant name twice in one stage list, an attachment
+            the same assistant name twice in one stage's effective
+            attachment map, an attachment
             on a script or planning-only stage).
         FileNotFoundError: If ``pipeline_path`` does not exist or ``flow_path``'s
             parent is missing (propagated).

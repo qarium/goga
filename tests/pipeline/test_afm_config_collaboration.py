@@ -152,10 +152,10 @@ class TestWriteAfmConfigCollaborationLogic:
             catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.", delegate=True)},
             stages={
                 "verify": WorkflowStage(
-                    assistants=[
-                        WorkflowAssistant(name="reviewer"),
-                        WorkflowAssistant(name="security", prompt="Audit."),
-                    ]
+                    assistants={
+                        "reviewer": WorkflowAssistant(name="reviewer"),
+                        "security": WorkflowAssistant(name="security", prompt="Audit."),
+                    }
                 )
             },
         )
@@ -297,7 +297,9 @@ class TestWriteAfmConfigCollaborationLogic:
             write_afm_config(None, _flow_doc(members=[_member("reviewer")]), env_declaring)
 
         inline = _workflow_doc(
-            stages={"verify": WorkflowStage(assistants=[WorkflowAssistant(name="security", prompt="Audit.")])},
+            stages={
+                "verify": WorkflowStage(assistants={"security": WorkflowAssistant(name="security", prompt="Audit.")})
+            },
         )
         with pytest.raises(
             ValueError,
@@ -307,6 +309,43 @@ class TestWriteAfmConfigCollaborationLogic:
 
         assert not config_path.exists()
         assert list(closure_base.glob("*")) == []
+
+    def test_afm_config_namespace_walks_map_attachments(self, config_path: Path, closure_base: Path) -> None:
+        """The namespace walk reads the map-form stage attachments — references resolve to map-keyed declarations.
+
+        A stage's ``assistants`` map carries a full inline declaration under
+        its name key; another stage's map-keyed reference resolves against it
+        (the walk visits every declaration of the stages block, whichever
+        stage holds it), and the no-agent error names the DECLARING stage as
+        the site.
+        """
+        workflow = _workflow_doc(
+            stages={
+                "prepare": WorkflowStage(assistants={"security": WorkflowAssistant(name="security", prompt="Audit.")}),
+                "check": WorkflowStage(assistants={"security": WorkflowAssistant(name="security")}),
+            },
+        )
+
+        write_afm_config("claude", _flow_doc(stage_attachments={"check": [_attachment("security")]}), workflow)
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert list(profiles) == ["goga-security"]
+        assert profiles["goga-security"] == {
+            "title": "security",
+            "command": "/home/goga/bin/claude-as-claude.sh",
+            "delegate": False,
+        }
+
+        config_path.unlink()
+
+        with pytest.raises(
+            ValueError,
+            match=r"assistant security at workflow.stages.prepare resolved no agent: set its agent or a global agent",
+        ):
+            write_afm_config(None, _flow_doc(stage_attachments={"check": [_attachment("security")]}), workflow)
+
+        assert not config_path.exists()
 
     def test_afm_config_unknown_reference_in_compiled_flow_raises(self, config_path: Path) -> None:
         """The defensive branch — a flow referencing an undeclared name is a pre-run error."""
@@ -394,14 +433,18 @@ class TestCollaborationDeliveryIntegration:
             tmp_path,
             ["build", "verify"],
             "assistants:\n"
-            "  - name: reviewer\n"
+            "  reviewer:\n"
             "    prompt: Review.\n"
             "    skills: [code-audit]\n"
             "stages:\n"
             "  build:\n"
-            "    assistants: [reviewer]\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n"
             "  verify:\n"
-            "    assistants: [reviewer]\n",
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
         )
         workflow = parse_workflow(workflow_path.read_text())
 
@@ -444,10 +487,13 @@ class TestCollaborationDeliveryIntegration:
             "stages:\n"
             "  prepare:\n"
             "    assistants:\n"
-            "      - name: security\n"
+            "      security:\n"
             "        prompt: Audit the diff.\n"
+            "        when: checkpoints\n"
             "  check:\n"
-            "    assistants: [security]\n",
+            "    assistants:\n"
+            "      security:\n"
+            "        when: checkpoints\n",
         )
         workflow = parse_workflow(workflow_path.read_text())
 
@@ -494,10 +540,13 @@ class TestCollaborationDeliveryIntegration:
             "stages:\n"
             "  build:\n"
             "    assistants:\n"
-            "      - name: helper\n"
+            "      helper:\n"
             "        prompt: Help out.\n"
+            "        when: checkpoints\n"
             "  check:\n"
-            "    assistants: [helper]\n",
+            "    assistants:\n"
+            "      helper:\n"
+            "        when: checkpoints\n",
         )
         workflow = parse_workflow(workflow_path.read_text())
 
@@ -541,7 +590,7 @@ class TestCollaborationDeliveryIntegration:
             tool="demo",
             document=WorkflowDocument(
                 assistants={"auditor": WorkflowAssistant(name="auditor", prompt="Audit.")},
-                stages={"build": WorkflowStage(assistants=[WorkflowAssistant(name="auditor")])},
+                stages={"build": WorkflowStage(assistants={"auditor": WorkflowAssistant(name="auditor")})},
             ),
         )
 

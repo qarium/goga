@@ -124,7 +124,7 @@ class TestApplySkipStagesContract:
         """
         catalog = {"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")}
         delegation = WorkflowDelegation(depth=2, max_tasks=7)
-        attachments = [WorkflowAssistant(name="reviewer", gate=True, when="finish")]
+        attachments = {"reviewer": WorkflowAssistant(name="reviewer", gate=True, when="finish")}
         workflow = WorkflowDocument(
             assistants=catalog,
             delegation=delegation,
@@ -136,7 +136,7 @@ class TestApplySkipStagesContract:
         assert result is not None
         assert result.assistants is catalog
         assert result.delegation is delegation
-        # The surviving stage keeps its attachment list (the same object).
+        # The surviving stage keeps its attachment map (the same object).
         assert result.stages["verify"].assistants is attachments
         # The skipped stage's wholesale replacement carries skip=True and no
         # attachments of its own (the entry had none to carry).
@@ -177,11 +177,11 @@ class TestApplySkipStagesContract:
         surviving stage's reference to a name declared on the skipped stage
         must keep resolving, exactly as with an authored ``skip: true``.
         """
-        declarations = [WorkflowAssistant(name="helper", prompt="Do things.")]
+        declarations = {"helper": WorkflowAssistant(name="helper", prompt="Do things.")}
         workflow = WorkflowDocument(
             stages={
                 "build": WorkflowStage(assistants=declarations),
-                "review": WorkflowStage(assistants=[WorkflowAssistant(name="helper")]),
+                "review": WorkflowStage(assistants={"helper": WorkflowAssistant(name="helper", when="start")}),
             },
         )
 
@@ -195,6 +195,30 @@ class TestApplySkipStagesContract:
 
 class TestApplySkipStagesLogic:
     """Logic tests — the verbatim behavior from the design Test Stack Trace."""
+
+    def test_apply_skip_stages_carries_repeat_and_assistants_map(self) -> None:
+        """The skip rebuild carries the repeat block and the map-form attachments verbatim.
+
+        The SAME ``WorkflowRepeat`` object and the SAME attachments map ride
+        into the returned document — a rebuild that dropped either would
+        silently recompile an authored cycle bound as the scalar default or
+        strand a skipped stage's inline declarations out of the
+        document-wide assistant namespace.
+        """
+        attachments = {"security": WorkflowAssistant(name="security", prompt="Audit.", when="start")}
+        workflow = WorkflowDocument(
+            stages={"scan": WorkflowStage(assistants=attachments)},
+            repeat=WorkflowRepeat(max_cycles=3),
+        )
+
+        result = apply_skip_stages(workflow, ["scan"])
+
+        assert result is not None
+        assert result.repeat is workflow.repeat
+        assert result.stages["scan"].skip is True
+        # The replacement carries the pre-skip entry's attachments map (the same object).
+        assert result.stages["scan"].assistants is attachments
+        assert result.stages["scan"].assistants["security"].prompt == "Audit."
 
     def test_apply_skip_stages_carries_repeat(self) -> None:
         """The authored repeat block survives the skip rebuild as the same object.

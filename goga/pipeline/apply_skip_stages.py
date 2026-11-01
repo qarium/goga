@@ -29,7 +29,7 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
           the same carry precedent: a rebuild that dropped them would strip
           the collaboration plumbing of its declarations and task budget for
           skip-driven runs. A skipped stage's replacement entry carries the
-          PRE-SKIP entry's ``assistants`` list (the same carry an authored
+          PRE-SKIP entry's ``assistants`` map (the same carry an authored
           skip: true stage keeps): the compiler removes the skipped stage
           before the attachment walk, so the stage's own attachments are
           never checked or emitted, but its inline DECLARATIONS stay in the

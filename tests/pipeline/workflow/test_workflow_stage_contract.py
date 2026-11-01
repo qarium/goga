@@ -147,20 +147,21 @@ class TestWorkflowStageContract:
     def test_workflow_stage_has_assistants_property(self) -> None:
         """WorkflowStage exposes an ``assistants`` property defaulting to None.
 
-        The property carries the stage's assistant attachments (each a
-        :class:`WorkflowAssistant` — a reference or an inline declaration),
-        or ``None`` when the stage attaches none; validated by
+        The property carries the stage's assistant attachments — a map of
+        :class:`WorkflowAssistant` keyed by assistant name (each entry a
+        reference or an inline declaration), or ``None`` when the stage
+        attaches none (an empty map equals absence); validated by
         ``parse_workflow`` and consumed by the compiler to emit the stage's
         assistants entries. The field is LAST in the fixed canonical order and
         its annotation pins the declared type.
         """
         assert hasattr(WorkflowStage(), "assistants")
         assert WorkflowStage().assistants is None
-        attachment = WorkflowAssistant(name="reviewer")
-        assert WorkflowStage(assistants=[attachment]).assistants == [attachment]
+        attachment = WorkflowAssistant(name="reviewer", when="start")
+        assert WorkflowStage(assistants={"reviewer": attachment}).assistants == {"reviewer": attachment}
 
         assistants = next(field for field in dataclasses.fields(WorkflowStage) if field.name == "assistants")
-        assert assistants.type == "list[WorkflowAssistant] | None"
+        assert assistants.type == "dict[str, WorkflowAssistant] | None"
 
     def test_workflow_stage_defaults_all_none(self) -> None:
         """Every field defaults to None when constructed with no arguments."""
@@ -187,7 +188,7 @@ class TestWorkflowStageContract:
             notes={"fix": "Fix and continue"},
             reflect=WorkflowReflect(file="a.md"),
             memory=True,
-            assistants=[WorkflowAssistant(name="reviewer")],
+            assistants={"reviewer": WorkflowAssistant(name="reviewer", when="start")},
         )
 
         assert stage.agent == "codex"
@@ -201,4 +202,4 @@ class TestWorkflowStageContract:
         assert stage.notes == {"fix": "Fix and continue"}
         assert stage.reflect == WorkflowReflect(file="a.md")
         assert stage.memory is True
-        assert stage.assistants == [WorkflowAssistant(name="reviewer")]
+        assert stage.assistants == {"reviewer": WorkflowAssistant(name="reviewer", when="start")}

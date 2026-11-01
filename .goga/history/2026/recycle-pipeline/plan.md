@@ -1269,17 +1269,17 @@ per the design below; migrate the rest in place.>
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 4 gates
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 4 gates
       green; re-read the ADR decisions 5–7 (hard transition; required
       `when`; unconverted `refinement.yml`)
-- [ ] **STEP 1 (Contract tests)**: in the rewritten
+- [x] **STEP 1 (Contract tests)**: in the rewritten
       `tests/pipeline/workflow/test_parse_workflow_assistants.py`: the
       map-form catalog parses into `doc.assistants` keyed by name; a stage
       attachment map parses into `doc.stages[name].assistants` keyed by
       name; `WorkflowStage(assistants={"x": ...})` constructs (the dict
       model); `from goga.pipeline.workflow import WorkflowAssistant`
       unchanged. Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation, cell by cell)**: probe in the
+- [x] **STEP 2 (REPL probe + implementation, cell by cell)**: probe in the
       venv REPL with the design's canonical map-form YAML (below) — parse
       it, then compile it and diff the stage `assistants` list against the
       old list-form output (they must be EQUAL — the engine-facing
@@ -1287,10 +1287,10 @@ never fix the contract.**
       Implement per the Contract Surface above, in order: workflow models
       → workflow parser (+ deletions) → compiler walks → hooks overlay →
       pipeline root; keep every frozen message verbatim
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/workflow/ tests/pipeline/compiler/
       tests/pipeline/hooks/ -v` — the migrated suites pass
-- [ ] **STEP 4 (Logic tests)**: in the rewritten assistants suites (design,
+- [x] **STEP 4 (Logic tests)**: in the rewritten assistants suites (design,
       verbatim): `test_parse_assistant_catalog_map_form` — input the
       canonical YAML:
 
@@ -1371,20 +1371,20 @@ never fix the contract.**
       + a `FlowDocument` referencing the same names; `write_afm_config(
       agent=None, flow=flow, workflow=workflow)` into a tmp home; assert
       the generated profiles cover the map's declaration names
-- [ ] **STEP 5 (Migration + debugging)**: migrate the affected test files
+- [x] **STEP 5 (Migration + debugging)**: migrate the affected test files
       (the verified set of 8 listed above; extend only if the suite
       reveals more) per the recipe (file-by-file; run each migrated file
       immediately — `.venv/bin/pytest tests/pipeline/<dir>/test_<file>.py
       -v`); then `.venv/bin/pytest tests/ -x` — fix implementation code
       until all tests pass (do NOT fix test code to mask behavior)
-- [ ] **STEP 6 (Contract re-verification)**: the compiled engine-facing
+- [x] **STEP 6 (Contract re-verification)**: the compiled engine-facing
       output is UNCHANGED (the STEP 2 probe + the equals test); the
       six-site `.values()` consumption verified (compiler ×2, hooks ×2,
       pipeline root ×2); the deleted helpers have no dangling references
       (`.venv/bin/ruff check goga/` catches them)
-- [ ] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
       `.venv/bin/ruff format --check goga/ tests/`; `goga lint` — 0 errors
-- [ ] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
+- [x] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
 
 ### Task 6: Integration — the skip-path end-to-end repeat proof + the byte-identity golden check (integration tests)
 

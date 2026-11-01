@@ -72,7 +72,7 @@ def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, tuple[Workflow
     }
 
     for stage_name, stage in workflow.stages.items():
-        for entry in stage.assistants or []:
+        for entry in (stage.assistants or {}).values():
             if _is_assistant_declaration(entry):
                 namespace[entry.name] = (entry, f"workflow.stages.{stage_name}")
 

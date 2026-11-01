@@ -80,13 +80,14 @@ class WorkflowStage:
             ``True``. This cell does not act on ``memory`` — it is
             declarative; the compiler performs the emission when applying the
             workflow.
-        assistants: The stage's assistant attachments (each a
-            :class:`WorkflowAssistant` — a reference or an inline
-            declaration), or ``None`` when not specified (an empty list
-            equals absence — normalized to ``None`` by
-            ``parse_workflow``). Declarative — extracted here, consumed by
-            the compiler to emit the stage's assistants entries. This cell
-            does not act on ``assistants`` — it is declarative.
+        assistants: The stage's assistant attachments — a map of
+            :class:`WorkflowAssistant` keyed by assistant name, in authored
+            order (each entry a reference or an inline declaration), or
+            ``None`` when not specified (an empty map equals absence —
+            normalized to ``None`` by ``parse_workflow``). Declarative —
+            extracted here, consumed by the compiler to emit the stage's
+            assistants entries. This cell does not act on ``assistants`` —
+            it is declarative.
     """
 
     agent: str | None = None
@@ -100,4 +101,4 @@ class WorkflowStage:
     notes: dict[str, str] | None = None
     reflect: WorkflowReflect | None = None
     memory: bool | None = None
-    assistants: list[WorkflowAssistant] | None = None
+    assistants: dict[str, WorkflowAssistant] | None = None
