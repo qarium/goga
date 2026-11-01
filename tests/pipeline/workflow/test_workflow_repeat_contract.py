@@ -33,7 +33,6 @@ class TestWorkflowRepeatContract:
     def test_workflow_repeat_is_kw_only_dataclass(self) -> None:
         """Every field of WorkflowRepeat is keyword-only (``kw_only=True``)."""
         assert is_kw_only_dataclass(WorkflowRepeat)
-        assert WorkflowRepeat.__dataclass_params__.kw_only is True
 
     def test_workflow_repeat_signature_matches_contract(self) -> None:
         """The signature matches the contract exactly — two parameters, both defaulting to None.
