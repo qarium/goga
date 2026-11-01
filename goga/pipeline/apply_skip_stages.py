@@ -35,7 +35,7 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
           never checked or emitted, but its inline DECLARATIONS stay in the
           document-wide assistant namespace — a surviving stage's reference
           to a name declared on the skipped stage keeps resolving.
-        - The repeat block of the input workflow survive the rebuild
+        - The repeat block of the input workflow survives the rebuild
           verbatim — a rebuild that drops it would silently recompile an
           authored cycle bound as the scalar default for skip-driven runs.
         - Stage-name validation is NOT performed here — the compiler's strict
