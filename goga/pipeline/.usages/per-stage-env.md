@@ -70,3 +70,13 @@ the guarded block then vanishes cleanly when the profile omits it. An
 un-guarded iteration over a missing key raises at render time (nested
 access on a missing key), and a rendered-empty loop would leave `env:`
 with a null value — a structural error.
+
+## Assistant env
+
+Assistant declarations (`assistants:` catalog entries and inline stage
+declarations) carry their own `env` maps delivered through the same
+closure mechanism — but the closure path becomes the `command` of the
+generated `goga-<name>` helper profile in the afm configuration, not a
+flow-file stage patch. Assistant closures are regenerated on every
+launch, so the authored configuration survives the per-launch
+configuration rewrite by living in the workflow-file.

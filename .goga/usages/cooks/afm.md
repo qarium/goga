@@ -87,6 +87,106 @@ amended by the in-container `amend_config` delivery); a bare agent name is never
 | `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga in-container run coordination always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
 | `theme`         | str    | Dashboard theme name. The goga in-container run coordination always writes `theme: goga`. |
 
+## Collaboration (afm v2.x)
+
+afm offers a collaboration mechanism: helper agents attached to stages, run-level
+team agents, delegation bounds, and a per-run helper task budget. Facts below are
+recovered from the afm v2.x documentation (verified against the `v2.0.9` binary in
+the image).
+
+### Config layers and the kill-switch
+
+Roles (profiles) live in `collaboration:` blocks of global `~/.afm/config.yaml` or
+project `.afm/config.yaml`. Profiles with the same id in the project layer REPLACE
+the global ones (union otherwise). `AFM_COLLABORATION=0` disables collaboration and
+takes precedence over `collaboration.enabled` (default `true`); a flow CANNOT set
+`collaboration.enabled`. When collaboration is disabled, declared helpers and unknown
+profiles only produce warnings; `afm run`/`afm validate` proceed.
+
+### `collaboration:` keys (config.yaml)
+
+| Key | Type / values | Default | Notes |
+|-----|---------------|---------|-------|
+| `enabled` | bool | `true` | Overridden by `AFM_COLLABORATION=0`; flow cannot set it |
+| `mode` | `team` \| `assistants` | `team` | Precedence flow > project > global; invalid values stop config loading |
+| `max_depth` | int | `3` | `0` prevents helper creation; precedence flow > project > global; depth 1 = helper attached directly to a stage |
+| `limits.max_tasks` | int | `20` | Lifetime budget counting every task of the run: helpers, run agents, and their children |
+| `profiles` | map | — | Role definitions (below) |
+
+A flow may override ONLY `max_depth` and `mode` (as a top-level `collaboration:`
+block) — profiles and `limits` are config-layer-only.
+
+### Profiles
+
+Each profile requires its own `command` (it does NOT inherit `client.command`).
+Keys: `title` (str), `command` (required), `instructions` (str), `delegate`
+(bool, default `false`; `true` opts the role into child tasks, subject to depth and
+`max_tasks`). On a native host only the Codex read-only adapter
+(`codex-as-claude`) is accepted for helpers; inside a container any configured
+command works.
+
+### Stage helpers (flow-file `stages[].assistants`)
+
+Accepts a bare profile name, one object, or a mixed list (list order preserved).
+Object keys: `profile` (required) plus optional `title`, `instruction`, `mode`
+(`advisory` | `required`), `trigger` (`one_shot` | `checkpoints` | `on_completion`).
+Omitted `mode`/`trigger` default to `advisory`/`one_shot`. Helpers attach when the
+stage enters execution (after plan approval when planned). Valid on execution stages
+(including `[auto]`), NOT on `script:` or planning-only stages; each profile may
+appear only once per stage. An unknown profile stops `afm run` at preflight; a
+profile unavailable at attach time is logged and skipped. afm does not interpret a
+`skills` key on assistant entries yet (unknown keys pass silently); support is on
+the engine roadmap. Helpers, verify agents, and delegated tasks do NOT inherit the
+author's skills.
+
+### Verdict gating
+
+`advisory` — result does not block the stage. `required` — the verdict must be
+`pass` before the stage finishes; `needs_changes` and `inconclusive` do not pass the
+gate; a human may waive with a recorded reason. Helper output contract: one JSON
+object with `schema_version: 1` and `kind: "result"` (verdict + summary) or
+`kind: "delegate"` (child tasks, delegate roles only); invalid output after repair
+attempts yields `protocol_error`.
+
+### Dashboard triggers
+
+`one_shot` — runs once. `checkpoints` — observes the stage agent's output and can
+run again at each checkpoint. `on_completion` — may run early, gets a final turn
+when the result is ready. A helper attached while its stage is `pending` stays in
+`waiting_parent` (does not start; a required one in that state can block stage
+completion).
+
+### Team / run agents (flow-file top-level `team:`)
+
+Members are added in order before any stage starts (order decides `@name` suffixes
+like `@qa-2`). Keys: `id` (required; "names the declaration, not the agent"; used to
+recognize members on resume; must match `[A-Za-z0-9._-]`), `profile` (required when
+collaboration is enabled; unknown stops preflight), `title` (required; the `@name`
+derives from it; `@assistant` is reserved), optional `instruction`, `skills` (one
+name or a list), `skills_dir`. Resume reuses existing members by `id`; changed
+members keep their saved version with a warning; removed members persist until the
+run ends. Run agents are standing roles, idle between turns; an idle agent never
+keeps the run open.
+
+### Dashboard modes
+
+`team` — Team/Board views, People panel, "Add run agent", human task posting.
+`assistants` — hides those; helpers live under their stages; Attach helper,
+Assistant, stage Feed conversations, Message/Revise remain; `team:` agents still
+start and can message/board.
+
+### goga's stance (decided in `.goga/history/2026/support-afm-assistants/adr.md`)
+
+- goga authors collaboration in the workflow-file only and delivers: flow-file parts
+  (`collaboration: {mode: assistants}` always, `max_depth` when authored, `team`
+  list, stage `assistants` entries) plus global-config plumbing
+  (`collaboration.profiles.goga-<name>` = `{title, command, delegate}` only, and
+  `collaboration.limits.max_tasks` when `delegation:` is authored).
+- The compiled flow-file is the single source of truth for the config write —
+  profiles are materialized exactly for the ids the flow references.
+- goga never reads or writes `collaboration.enabled` / `AFM_COLLABORATION`; an
+  environment that disables collaboration gets engine warnings and skipped helpers.
+
 ## Lifecycle hooks (afm v1.2.17+)
 
 afm ships a lifecycle-hooks mechanism: observer commands afm launches on every flow

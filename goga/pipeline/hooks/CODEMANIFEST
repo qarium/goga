@@ -47,6 +47,27 @@ Annotations: |
   command's exit code is unaffected. Tools are mutually blind — every
   amendment view reads the original authored workflow, never a staged
   state.
+  The overlay merge preserves the collaboration instructions of the
+  workflow model. The merge maintains the assistant-namespace invariant
+  end to end: each name appears at most once across the merged catalog
+  and every inline declaration. The assistant catalog merges by name: an
+  authored entry wins under its name; a contributing entry adds a fresh
+  name; among contributing tools the later entry wins per name; a
+  contribution entry whose name appears anywhere in the evolving merged
+  assistant namespace — the authored catalog, an inline declaration of
+  an authored stage entry, or an entry of an earlier-accepted
+  contribution (catalog or inline declaration) — is dropped silently, so
+  the merged document never carries a duplicate assistant name. The
+  delegation block is whole: the authored block is unbeatable, and
+  with no authored block the later contributing block wins — no
+  field-level merging. The per-stage assistant lists append with
+  deduplication by name: the authored entries first in authored order,
+  then the contributing entries in enumeration order, each entry whose
+  name is already present on the stage dropped silently, and an appended
+  inline declaration whose name is already present anywhere in the merged
+  assistant namespace dropped silently the same way. The final
+  document assembly carries the merged collaboration fields like every
+  workflow-level field — they never vanish in the overlay.
   Use the `per-tool-delivery` practice for the staged delivery loop of
   the amendment checkpoint — its loop skeleton, primitives, and
   tool-grouped commit apply as written.
@@ -251,9 +272,9 @@ Annotations: |
         nothing until the delivery commits it
       - The replacement is whole — a later call replaces the earlier
         buffered document
-      - A document with no prompt, no stages, no extend, and no memory
-        is an empty contribution — the delivery discards it with a
-        warning
+      - A document with no prompt, no stages, no extend, no memory, no
+        assistants, and no delegation is an empty contribution — the
+        delivery discards it with a warning
 
       Constraints:
       - Do not cancel, redirect, or defer the operation — a
@@ -292,11 +313,33 @@ Annotations: |
        unset env takes the value of the later contributing tool that
        sets it. The merge is field-set-complete, never a named-subset
        copy — a new stage field flows through without touching this
-       cell again
+       cell again. The assistants field is the one append-merge stage
+       field — it follows 5a instead of the authored-value-wins rule;
+       every other stage field follows the field-set-complete merge
+       unchanged
+    4a. assistants (catalog): keep the authored entries — a contribution
+        entry under an authored name is not applied; among contributing
+        tools the later entry wins per name; a contribution entry whose
+        name appears anywhere in the evolving merged assistant namespace
+        (the authored catalog, an inline declaration of an authored stage
+        entry, or an entry of an earlier-accepted contribution — catalog
+        or inline declaration) is dropped silently — the merged namespace
+        carries each name exactly once
+    4b. delegation: keep the authored block when present — it is
+        unbeatable; otherwise the block of the later contributing tool
+        wins; no field-level merging
     5. skip is an ordinary stage field: an authored skip — from the
        workflow-file or the merged runner skip — is unbeatable; an
        unset skip takes a contributing skip; skip=False overrides
        nothing
+    5a. stage assistants: for each stage name the authored list is the
+        ground — the authored entries first, in authored order; the
+        contributing entries append in enumeration order, an entry whose
+        name is already present on the stage dropped silently, and an
+        appended inline declaration whose name is already present
+        anywhere in the merged assistant namespace dropped silently the
+        same way; a stage with no authored entry takes the appended
+        contributing list the same way
     6. extend: keep the authored entries; a contribution entry under an
        authored name is not applied; among contributing tools the later
        entry wins per name
@@ -316,11 +359,17 @@ Annotations: |
       separators, prefixes, or suffixes are added
     - Deterministic — the same inputs give the same overlay
     - The result stays declarative — it passes the same compilation
-      validation an authored workflow passes
+      validation an authored workflow passes, and the merged assistant
+      namespace (the catalog plus every inline declaration) never carries
+      a duplicate name
     - The rebuilt `WorkflowDocument` preserves every workflow-level field
       of the base (profile, build verbatim; memory as today) and
       the stage merge is over the complete WorkflowStage field set
       (including env)
+    - The rebuilt `WorkflowDocument` preserves the collaboration fields:
+      the merged catalog, the effective delegation block, and the
+      appended per-stage assistant lists — a rebuild that drops them
+      would silently disable collaboration for tool-amended runs
 
     Constraints:
     - Do not read or write the filesystem
@@ -601,9 +650,9 @@ Annotations: |
          naming the tool and the action stops the command at the first
          failure; the tool's contribution is discarded
       5. A tool whose buffered document is empty — no prompt, no
-         stages, no extend, no memory — is a content no-op: a warning
-         naming the tool, the action, and the reason, the contribution
-         discarded, the walk continues
+         stages, no extend, no memory, no assistants, no delegation — is
+         a content no-op: a warning naming the tool, the action, and the
+         reason, the contribution discarded, the walk continues
       6. Merge the committed contributions onto `workflow` via
          `merge_workflow_overlay` and return the overlay
 
@@ -720,5 +769,6 @@ Description: |
   workflow amendment with its overlay, the checkpoint surface over the
   hooks platform, and the bridged mid-run events with their passthrough
   contexts. The overlay merge preserves the full workflow model —
-  per-stage `env` instructions and the workflow-level `profile` and
-  `build` fields.
+  per-stage `env` instructions, the workflow-level `profile` and `build`
+  fields, and the collaboration instructions (assistant catalog,
+  delegation block, stage attachments).

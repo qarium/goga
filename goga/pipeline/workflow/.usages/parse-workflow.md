@@ -9,7 +9,8 @@ all of that is the compiler's job.
 
 ## Accepted structure
 
-Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`.
+Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
+`assistants`, `delegation`.
 
 - `profile` — optional top-level string default naming the workflow's default
   contributor profile (`profile: default`); a non-str value is a structural
@@ -18,6 +19,10 @@ Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`.
   load-time peek — a value that materializes only through template rendering
   does not participate in activation.
 - `build` — the strict six-field build block (see below).
+- `assistants` — the catalog list of named run-level helpers (see
+  `assistants`).
+- `delegation` — the delegation-bounds block (`depth`, `max_tasks`; see
+  `assistants`).
 
 ## The build block (workflow.build)
 
@@ -47,6 +52,7 @@ consisting of the `build:` block alone is valid.
 | notes | map[str]str | note buttons — map "note name → prompt text"; compiled into the stage's `buttons` field; stages block only; declarative |
 | reflect | map {file, mode?} | memory-reflection instruction — reflect method only; compiled into the stage's `reflect` field; stages block only; declarative |
 | memory | bool | memory-participation instruction — alignment method only; `true` participates, `false` equals absence; compiled into the stage's `memory_use` field; stages block only; declarative |
+| assistants | list | the stage's assistant attachments — bare name, reference with gate/when overrides, or full inline declaration; an empty list equals absence; stages block only; declarative |
 
 ## The notes field
 
@@ -102,6 +108,10 @@ stages block by the new stage's name.
 workflow.extend.<name>") — memory participation of a new stage is authored in
 the stages block by the new stage's name.
 
+`assistants` is forbidden in an extend-entry (structural error "assistants is
+forbidden in workflow.extend.<name>") — the attachments of a new stage are
+authored in the stages block by the new stage's name.
+
 ## The manual field
 
 `manual` is an optional per-stage instruction (stages block only) controlling the
@@ -129,14 +139,15 @@ there is nothing to cancel.
 
 - in the stages block it is an unknown key → structural error "unknown key in
   workflow.stages.<name>: trigger; valid keys: agent, env, prompt, loop, skills,
-  skip, approve, manual, notes, reflect, memory"
+  skip, approve, manual, notes, reflect, memory, assistants"
 - in an extend-entry body it is legal and passes through verbatim — the compiler
   validates its value (`on_success` | `manual`) at compilation time
 
 ## Empty-workflow rule
 
-A workflow is empty only when `prompt`, `stages`, `extend`, `memory`, AND
-`build` are ALL absent — `profile` never counts (activation is not content).
+A workflow is empty only when `prompt`, `stages`, `extend`, `memory`, `build`,
+`assistants`, AND `delegation` are ALL absent — `profile` never counts
+(activation is not content).
 The structural error "empty workflow" names the content options. A workflow
 consisting of the `build:` block alone is valid; a workflow carrying only
 `profile: name` is not.

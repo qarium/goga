@@ -10,8 +10,11 @@ declare per-stage **auto-approval** via `approve`, force or cancel a stage's
 `notes`, **declaratively add new stages** to the pipeline via `extend`,
 configure **project-memory participation** via the top-level `memory` block
 and the per-stage `reflect` / `memory` instructions (see
-[Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)), and
-adapt the whole file per contributor through **profile-driven rendering**
+[Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)),
+author **collaboration with helper agents** via the top-level `assistants`
+catalog, the `delegation` block, and the per-stage `assistants` instruction
+(see [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation)),
+and adapt the whole file per contributor through **profile-driven rendering**
 (see [Profiles](#profiles)) plus a `build:` block that configures nested
 `goga build` runs.
 
@@ -31,7 +34,7 @@ traversal via `..` or an absolute prefix is rejected.
 
 ## Document shape
 
-A workflow-file is a YAML mapping with up to six top-level keys (the whole
+A workflow-file is a YAML mapping with up to eight top-level keys (the whole
 file is first rendered as a Jinja2 template with the active profile's
 content as context — see [Profiles](#profiles)):
 
@@ -52,6 +55,16 @@ stages:
     reflect:                  # optional memory-reflection instruction (reflect method only)
       file: shared.md
     memory: true              # optional memory participation (alignment method only; never together with reflect)
+    assistants:               # optional stage assistant attachments (three entry forms)
+      - reviewer
+
+assistants:                   # optional catalog of run-level assistants
+  - name: reviewer
+    prompt: Review the stage changes.
+
+delegation:                   # optional delegation-bounds block
+  depth: 3
+  max_tasks: 50
 
 memory:                       # optional workflow-memory configuration block
   method: reflect             # reflect | alignment (the instruction vocabulary selector)
@@ -73,17 +86,20 @@ extend:
 | `memory` | map   | no*      | Workflow-memory configuration (see [Project memory](#project-memory-memory-reflect)). |
 | `profile` | string | no    | Default profile name activated when no `--profile`/`GOGA_PROFILE` channel provided one. Must be a literal (a templated default does not participate in activation). A `profile:`-only workflow is invalid — activation is not content. |
 | `build` | map   | no*      | Configuration layered onto the `build` section for nested `goga build` runs (see the [build documentation](../../build/configuration.md)). A `build:`-only workflow is valid. |
+| `assistants` | list | no*   | Catalog of run-level assistants (see [Collaboration](#collaboration-assistants-delegation)). An `assistants:`-only workflow is valid. |
+| `delegation` | map | no*   | Delegation bounds — `depth` and `max_tasks` (see [Collaboration](#collaboration-assistants-delegation)). A `delegation:`-only workflow is valid. |
 
 \* At least one of `prompt`, a non-empty `stages` block, a non-empty
-`extend` block, a `memory` block, `profile`, or a `build` block must be
+`extend` block, a `memory` block, `profile`, a `build` block, an
+`assistants` block, or a `delegation` block must be
 present; an empty workflow is rejected with a structural error.
 
 Unknown top-level keys are rejected with
-`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build`.
+`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation`.
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to eleven
+Each entry under `stages` is keyed by stage name and accepts up to twelve
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
@@ -99,12 +115,13 @@ fields:
 | `notes` | map of str→str | — | Note buttons — a map of "note name → prompt text" attached verbatim to the stage. Single-line texts serialize as plain scalars, multi-line texts as block literals. An empty map equals absence (no buttons emitted). Allowed ONLY in `stages` — it is a structural error under `extend` (an extend-stage receives its buttons through the `stages` block by name). Every `loop`-expanded copy carries the same buttons; `skip` wins over `notes`. How the buttons surface during the run is owned by the pipeline runtime — the compiler only assembles them. See [Note buttons (`notes`)](#note-buttons-notes). |
 | `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` naming which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `memory` | bool | — | Memory-participation instruction (alignment method): `true` marks the stage as participating in project memory. An explicit `false` equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
+| `assistants` | list | — | Stage assistant attachments — a bare name, a reference with `gate`/`when` overrides, or a full inline declaration; an empty list equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation). |
 
 Rules:
 
-- Only `agent`, `env`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory` are valid. An
+- Only `agent`, `env`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory`, `assistants` are valid. An
   unknown key is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory`.
+  agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory, assistants`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
@@ -437,6 +454,120 @@ Behavior rules:
 - The memory mechanism is executed by the pipeline runtime inside the
   container — goga authors and compiles the instructions. If your image
   predates the mechanism, refresh it with `--update`.
+
+### Collaboration (`assistants`, `delegation`)
+
+A workflow can attach **helper agents** to its stages and add **run-level
+team agents** through the runner's collaboration mechanism: a top-level
+`assistants` catalog declares the named assistants, a top-level
+`delegation` block bounds helper delegation, and the per-stage
+`assistants` instruction attaches assistants to stages.
+
+```yaml
+assistants:                     # the catalog — run-level assistants
+  - name: reviewer
+    agent: claude               # optional; defaults to the global pipeline agent
+    delegate: true              # optional; may create child tasks
+    skills: [code-audit]        # the assistant's own skills
+    prompt: |
+      Review the stage changes and report concrete findings.
+
+delegation:                     # optional delegation bounds
+  depth: 3                      # max delegation depth (>= 0); 0 forbids helpers
+  max_tasks: 50                 # whole-run helper task budget (>= 1)
+
+stages:
+  build:
+    assistants:
+      - reviewer                # 1) bare name — a catalog reference
+  accept:
+    assistants:
+      - name: reviewer          # 2) reference with attachment overrides
+        gate: true
+        when: finish
+      - name: security          # 3) full inline declaration
+        prompt: Audit the diff.
+        when: checkpoints
+```
+
+The top-level `assistants:` catalog accepts these keys per entry:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `name` | string | required | The assistant name. Must match `[A-Za-z0-9._-]`; `assistant` is reserved (its dashboard handle is). Unique across the catalog and every inline declaration. |
+| `prompt` | string | — | The assistant's instruction. At least one of `prompt` or `skills` is required. |
+| `skills` | list of strings | — | The assistant's own skills. At least one of `prompt` or `skills` is required. |
+| `agent` | string | global agent | A CLI agent name, resolved implicitly at delivery — no wrapper path is authored. |
+| `delegate` | bool | `false` | Whether the assistant may create child tasks. |
+| `env` | map of str→str | — | The assistant's environment variables, delivered through a generated closure that wraps the assistant's launch command (the same mechanism as per-stage `env`). An empty map equals absence. |
+
+`gate` and `when` are attachment parameters — authoring either in the
+catalog is a structural error.
+
+The top-level `delegation:` block accepts:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `depth` | int `>= 0` | not authored | Maximum delegation depth; `0` forbids helper creation entirely. Travels into the compiled flow as the collaboration depth. |
+| `max_tasks` | int `>= 1` | `50` | Whole-run helper task budget — every helper, run agent, and child task counts against it. Written into the engine configuration only when the block is authored. |
+
+Both keys are optional; an empty block is valid and materializes
+`max_tasks: 50`. A workflow consisting of the `delegation:` block alone —
+or of the `assistants:` catalog alone — is valid.
+
+The per-stage `assistants` instruction accepts three entry forms:
+
+1. **A bare name** — a reference to a catalog entry:
+   `- reviewer`.
+2. **A map reference** — a map carrying only `name`/`gate`/`when`,
+   overriding the attachment parameters of the catalog entry:
+   `- {name: reviewer, gate: true, when: finish}`.
+3. **A full inline declaration** — a map carrying any further key
+   (`prompt`, `skills`, `agent`, `delegate`, `env`, plus `gate`/`when`).
+   Independent of the catalog; `name` is required and at least one of
+   `prompt` or `skills` must be present.
+
+| Attachment key | Type | Default | Description |
+|----------------|------|---------|-------------|
+| `name` | string | required | Identifies the assistant (the catalog entry for a reference; the declaration itself for an inline entry). |
+| `gate` | bool | `false` | `true` — the assistant's verdict must pass (or be waived by a human) before the stage may finish; `false` is advisory. |
+| `when` | `start` \| `checkpoints` \| `finish` | `checkpoints` | When the assistant engages. |
+
+Behavior rules:
+
+- **Names form one namespace.** The catalog and every inline declaration
+  share a single namespace across the workflow-file; a repeated
+  declaration name is a structural error (`duplicate assistant name:
+  <NAME>`), and the name `assistant` is rejected (`assistant name is
+  reserved`).
+- **References resolve at compile time.** A reference naming no catalog
+  entry and no inline declaration of the effective document is a compile
+  error (`unknown assistant reference in workflow.stages.<NAME>`). The
+  same assistant attached twice to one stage is a compile error, as is an
+  attachment on a stage whose body carries `script` or whose agents value
+  is exactly `["planning"]` — helpers attach to execution stages only.
+- **Attachments live only under `stages.<name>`.** Authoring `assistants`
+  inside an `extend`-entry is a structural error — the attachments of a
+  new stage are authored in the `stages` block under its name. Authoring
+  an `assistants` key in a stage *body* is likewise a structural error.
+- **Defaults are materialized, never inherited.** `when`, `gate`,
+  `delegate`, and `max_tasks` always carry their materialized values into
+  the compiled output; the engine's own defaults (a `one_shot` trigger, a
+  20-task budget) are never relied upon.
+- **Every `loop`-expanded copy carries its stage's attachments; a skipped
+  stage attaches nothing.**
+- **No profile concept is user-visible.** The engine requires each helper
+  to reference a profile; goga generates and maintains that plumbing
+  (`goga-<name>` bindings and their launch commands) from the compiled
+  flow on every launch. There is nothing to author or manage, and a
+  user-authored profile with the same `goga-`-prefixed id deliberately
+  replaces goga's plumbing.
+- **Authored configuration applies on every launch.** The engine
+  configuration is rewritten per run and the helper plumbing (including
+  env closures) is regenerated with it — the workflow-file is the durable
+  source, so the same authoring takes effect on consecutive runs.
+- If the environment disables collaboration, declared helpers are skipped
+  with engine warnings and the run proceeds.
 
 ## Extending the pipeline with new stages
 
