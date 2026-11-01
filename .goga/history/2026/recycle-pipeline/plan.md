@@ -1037,20 +1037,20 @@ map wording are Task 5 (they need the dict model); the docstring "list" →
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 3 gates green
-- [ ] **STEP 1 (Contract tests)**: in `tests/pipeline/test_apply_skip_stages.py`:
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 3 gates green
+- [x] **STEP 1 (Contract tests)**: in `tests/pipeline/test_apply_skip_stages.py`:
       `apply_skip_stages(WorkflowDocument(repeat=WorkflowRepeat(
       max_cycles=3)), ["build"])` returns a document whose `repeat` is the
       SAME object; an empty `skip_stages` returns the input unchanged
       (existing). Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       construct the document, apply a skip, and assert `out.repeat is
       doc.repeat` interactively before writing the test; re-evaluate after
       each edit. Implement per the Contract Surface: the `repeat=`
       construction argument + the docstring bullet
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/test_apply_skip_stages.py -v` — all pass
-- [ ] **STEP 4 (Logic tests)**: `test_apply_skip_stages_carries_repeat`
+- [x] **STEP 4 (Logic tests)**: `test_apply_skip_stages_carries_repeat`
       (the repeat half of the design's skip-carry scenario; the map half
       lands in Task 5) — `WorkflowDocument(stages={"build":
       WorkflowStage()}, repeat=WorkflowRepeat(max_cycles=3))`; apply
@@ -1059,18 +1059,18 @@ never fix the contract.**
       `apply_skip_stages(None, ["build"])` still constructs the skip-only
       document with `repeat is None`; empty `skip_stages` is the input
       unchanged
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
       implementation code until all tests pass (do NOT fix test code
       to mask behavior; updating stale message/field-order expectations
       invalidated by this task's contract change — the files listed in
       the task's Test home — IS part of the task)
-- [ ] **STEP 6 (Contract re-verification)**: the input workflow and its
+- [x] **STEP 6 (Contract re-verification)**: the input workflow and its
       maps are NOT mutated; all nine fields survive the rebuild (prompt,
       stages, extend, memory, profile, build, assistants, delegation — and
       now repeat)
-- [ ] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
       `.venv/bin/ruff format --check goga/ tests/`; `goga lint` — 0 errors
-- [ ] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
+- [x] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
 
 ### Task 5: Map-form assistants — the hard transition across all four cells + the mechanical test migration (TDD coding)
 

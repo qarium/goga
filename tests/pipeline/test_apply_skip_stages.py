@@ -28,6 +28,7 @@ from goga.pipeline.workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
+    WorkflowRepeat,
     WorkflowStage,
 )
 
@@ -148,6 +149,25 @@ class TestApplySkipStagesContract:
         assert skip_only.assistants == {}
         assert skip_only.delegation is None
 
+    def test_apply_skip_stages_carries_repeat_verbatim(self) -> None:
+        """The rebuild carries the input's repeat block verbatim (the same object).
+
+        The SAME ``WorkflowRepeat`` object rides into the returned document —
+        a rebuild that dropped it would silently recompile an authored cycle
+        bound (``repeat: {max_cycles: N}``) as the scalar ``true`` default
+        for skip-driven runs. An empty ``skip_stages`` returns the input
+        unchanged (the existing no-op rule).
+        """
+        repeat = WorkflowRepeat(max_cycles=3)
+        workflow = WorkflowDocument(repeat=repeat)
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.repeat is repeat
+        # The no-op rule is unchanged — empty skip is identity.
+        assert apply_skip_stages(workflow, []) is workflow
+
     def test_apply_skip_stages_carries_skipped_stage_declarations(self) -> None:
         """A skipped stage's replacement carries its attachments — declarations stay resolvable.
 
@@ -175,6 +195,33 @@ class TestApplySkipStagesContract:
 
 class TestApplySkipStagesLogic:
     """Logic tests — the verbatim behavior from the design Test Stack Trace."""
+
+    def test_apply_skip_stages_carries_repeat(self) -> None:
+        """The authored repeat block survives the skip rebuild as the same object.
+
+        A dropped field would silently recompile an authored
+        ``repeat: {max_cycles: N}`` as the scalar ``true`` on every ``--skip``
+        run; the carry is verbatim (opaque, never rebuilt). A None workflow
+        with non-empty skip keeps the skip-only document repeat-free, and an
+        empty skip list is the input unchanged.
+        """
+        workflow = WorkflowDocument(
+            stages={"build": WorkflowStage()},
+            repeat=WorkflowRepeat(max_cycles=3),
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.repeat is workflow.repeat
+        assert result.stages["build"].skip is True
+        # The None-workflow skip-only document carries repeat=None.
+        skip_only = apply_skip_stages(None, ["build"])
+
+        assert skip_only is not None
+        assert skip_only.repeat is None
+        # Empty skip_stages is the input unchanged.
+        assert apply_skip_stages(workflow, []) is workflow
 
     def test_apply_skip_stages_empty_is_noop(self) -> None:
         """An empty skip_stages list returns the input unchanged (identity)."""
