@@ -1602,16 +1602,16 @@ trigger, skills` with the same instruction wrapping. NO new representer —
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 4 gates
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 4 gates
       green
-- [ ] **STEP 1 (Contract tests)**: in the new
+- [x] **STEP 1 (Contract tests)**: in the new
       `tests/pipeline/compiler/test_serialize_flow_collaboration.py`:
       `serialize_flow` on a `FlowDocument` with `collaboration=FlowCollaboration()`
       emits the `collaboration:` block and omits `max_depth` when `None`; a
       `team` list emits the `team:` block; `collaboration=None`/`team=None`/
       `team=[]` omit the keys entirely (byte-identity for old documents).
       Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       build the design's hand-built `FlowDocument` (a multi-line team
       instruction, an assistant with `skills=[]` and `instruction=""`) and
       render `yaml.dump(..., Dumper=_CanonicalDumper, sort_keys=False,
@@ -1622,11 +1622,11 @@ never fix the contract.**
       `team` arms in the top-level emission (between `memory` and
       `stages`), the private `_member_repr(m)`, and the `assistants` arm in
       `_build_stage_repr`
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/compiler/test_serialize_flow_collaboration.py
       tests/pipeline/compiler/test_serialize_flow.py -v` — pass (the
       existing serializer suites stay green: old documents are unchanged)
-- [ ] **STEP 4 (Logic tests)**:
+- [x] **STEP 4 (Logic tests)**:
       `test_serialize_collaboration_styles` (design, verbatim) — input: a
       hand-built `FlowDocument` with a multi-line team instruction and an
       assistant whose `skills` is `[]` and `instruction` is `""`; assertions
@@ -1637,16 +1637,16 @@ never fix the contract.**
       `profile → title → instruction → mode → trigger → skills`;
       `max_depth: 0` is KEPT (the `is None` omission rule — the falsy-zero
       trap); `team=[]` omits the `team:` key
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
       implementation code until all pass
-- [ ] **STEP 6 (Contract re-verification)**: emission order and key orders
+- [x] **STEP 6 (Contract re-verification)**: emission order and key orders
       match the CODEMANIFEST serialize annotations; no representer added;
       no reordering of existing keys; canonical output with a single
       trailing newline
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 6: `compile_flow` — collaboration emission, steps 4.10 / 5 / 6 (TDD coding)

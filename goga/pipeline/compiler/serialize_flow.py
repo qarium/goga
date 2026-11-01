@@ -6,8 +6,10 @@ import logging
 
 import yaml
 
+from .flow_assistant import FlowAssistant
 from .flow_document import FlowDocument
 from .flow_stage import FlowStage
+from .flow_team_member import FlowTeamMember
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,47 @@ _CanonicalDumper.add_representer(_BlockLiteralPrompt, _represent_block_literal_p
 _CanonicalDumper.add_representer(_BlockLiteralScript, _represent_block_literal_script)
 
 
+def _member_repr(member: FlowTeamMember) -> dict[str, object]:
+    """Build one team-member mapping in fixed key order (id, title, profile, instruction, skills).
+
+    Args:
+        member: One ``FlowTeamMember`` of the document's team list.
+
+    Returns:
+        The ordered mapping to feed to ``yaml.dump``: ``id``, ``title``,
+        ``profile``, ``instruction`` (wrapped in ``_BlockLiteralScript`` iff
+        it contains a newline), ``skills`` verbatim.
+    """
+    return {
+        "id": member.id,
+        "title": member.title,
+        "profile": member.profile,
+        "instruction": (_BlockLiteralScript(member.instruction) if "\n" in member.instruction else member.instruction),
+        "skills": member.skills,
+    }
+
+
+def _assistant_repr(entry: FlowAssistant) -> dict[str, object]:
+    """Build one stage-attachment mapping in fixed key order (profile, title, instruction, mode, trigger, skills).
+
+    Args:
+        entry: One ``FlowAssistant`` of a stage's ``assistants`` list.
+
+    Returns:
+        The ordered mapping to feed to ``yaml.dump``: ``profile``, ``title``,
+        ``instruction`` (wrapped in ``_BlockLiteralScript`` iff it contains a
+        newline), ``mode``, ``trigger``, ``skills`` verbatim.
+    """
+    return {
+        "profile": entry.profile,
+        "title": entry.title,
+        "instruction": (_BlockLiteralScript(entry.instruction) if "\n" in entry.instruction else entry.instruction),
+        "mode": entry.mode,
+        "trigger": entry.trigger,
+        "skills": entry.skills,
+    }
+
+
 def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
     """Build the per-stage dict in fixed order (id, name, canonical fields, depends_on).
 
@@ -91,7 +134,8 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
         ``fields`` verbatim (``agents`` wrapped in ``_FlowAgents``; multi-line
         ``script_*`` strings and multi-line ``buttons`` values wrapped in
         ``_BlockLiteralScript``; the ``buttons`` map rebuilt preserving its
-        insertion order), then ``depends_on`` only when not ``None``.
+        insertion order; the ``assistants`` list rebuilt as ordered
+        per-entry mappings), then ``depends_on`` only when not ``None``.
     """
     stage_repr: dict[str, object] = {"id": stage.id, "name": stage.name}
 
@@ -109,6 +153,8 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
                 note: (_BlockLiteralScript(text) if isinstance(text, str) and "\n" in text else text)
                 for note, text in value.items()
             }
+        elif key == "assistants" and isinstance(value, list):
+            stage_repr[key] = [_assistant_repr(entry) for entry in value]
         else:
             stage_repr[key] = value
 
@@ -133,10 +179,17 @@ def serialize_flow(doc: FlowDocument) -> str:
         one trailing newline. Top-level keys in fixed order: ``prompt``
         (block-literal; omitted when ``None``), ``root_dir`` (omitted when
         ``None``), ``name``, ``description``, ``memory`` (omitted when ``None``;
-        fixed key order with ``None`` fields dropped), ``stages`` — each stage
-        ``id``, ``name``, ``fields`` verbatim, then ``depends_on`` only when
-        not ``None``. ``agents`` serializes flow-style; multi-line
-        ``script_*`` and ``buttons`` values serialize block-literal.
+        fixed key order with ``None`` fields dropped), ``collaboration``
+        (omitted when ``None``; fixed key order ``mode, max_depth`` with
+        ``max_depth`` omitted when ``None`` — the omission rule is ``is None``,
+        never truthiness), ``team`` (omitted when ``None`` or empty; each
+        member ``id, title, profile, instruction, skills`` with a multi-line
+        ``instruction`` block-literal), ``stages`` — each stage ``id``,
+        ``name``, ``fields`` verbatim (the ``assistants`` list rebuilt as
+        ordered per-entry mappings ``profile, title, instruction, mode,
+        trigger, skills``), then ``depends_on`` only when not ``None``.
+        ``agents`` serializes flow-style; multi-line ``script_*`` and
+        ``buttons`` values serialize block-literal.
     """
     top: dict[str, object] = {}
 
@@ -160,6 +213,15 @@ def serialize_flow(doc: FlowDocument) -> str:
             )
             if value is not None
         }
+
+    if doc.collaboration is not None:
+        collaboration: dict[str, object] = {"mode": doc.collaboration.mode}
+        if doc.collaboration.max_depth is not None:
+            collaboration["max_depth"] = doc.collaboration.max_depth
+        top["collaboration"] = collaboration
+
+    if doc.team:
+        top["team"] = [_member_repr(member) for member in doc.team]
 
     top["stages"] = [_build_stage_repr(stage) for stage in doc.stages]
 
