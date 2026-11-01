@@ -1419,23 +1419,31 @@ result in the task notes; no permanent golden fixtures are added).>
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] Create `tests/integration/test_repeat_skip_end_to_end.py` with the
+- [x] Create `tests/integration/test_repeat_skip_end_to_end.py` with the
       project-dir fixture pattern (a `repeatable: true` pipeline, a
       workflow with `repeat: {max_cycles: 2}`, tmp dirs)
-- [ ] `test_run_pipeline_skip_path_compiles_authored_repeat` (design,
+- [x] `test_run_pipeline_skip_path_compiles_authored_repeat` (design,
       verbatim): drive the chain with `skip=["review"]` (or the direct
       `load_workflow → apply_skip_stages → compile_flow` chain); assert
       the flow-file carries `max_cycles: 2` AND omits the skipped stage
-- [ ] Byte-identity: capture the pre-change compiled outputs of the six
+- [x] Byte-identity: capture the pre-change compiled outputs of the six
       shipped assets + the project pipelines (base-commit worktree or git
       stash), recompile on this branch, `diff` — byte-identical; record
       the result; confirm `tests/pipeline/compiler/
       test_shipped_pipelines_compile.py` is green
-- [ ] Run validation: `.venv/bin/pytest tests/integration/ -v` then the
+- [x] Run validation: `.venv/bin/pytest tests/integration/ -v` then the
       full battery `.venv/bin/pytest tests/ -x`
-- [ ] Final gates: `.venv/bin/ruff check goga/ tests/`, `.venv/bin/ruff
+- [x] Final gates: `.venv/bin/ruff check goga/ tests/`, `.venv/bin/ruff
       format --check goga/ tests/`, `goga lint` (bare, from the repo
       root), and the facade checks — all green before the local commit
+
+> Byte-identity recorded (2026-11-01): base commit `2de10cc7` (the
+> pre-feature parent, via a detached git worktree) vs this branch — the six
+> shipped assets (`goga/assets/pipelines/*.yml`) plus the project pipeline
+> (`.goga/pipelines/editor.yml`) compiled with `compile_flow(workflow=None)`
+> on both sides (7 flow-files each); `diff -r` over the two output sets is
+> EMPTY and no output contains a `repeat` key. The permanent guard
+> `tests/pipeline/compiler/test_shipped_pipelines_compile.py` is green.
 
 ---
 
@@ -1464,58 +1472,58 @@ never fix the contract.**
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is implemented in the correct `location`
   (`workflow_repeat.py`, `flow_repeat.py`; the extended
   `workflow_document.py`, `workflow_stage.py`, `workflow_assistant.py`,
   `parse_workflow.py`, `pipeline_header.py`, `flow_document.py`,
   `parse_dsl.py`, `compile_flow.py`, `serialize_flow.py`, `overlay.py`,
   `events.py`, `apply_skip_stages.py`, `afm_config.py`)
-- [ ] Every contract entity is accessible from its facade (workflow 19,
+- [x] Every contract entity is accessible from its facade (workflow 19,
   compiler 20)
-- [ ] Properties and methods match the declared API (dataclass field sets
+- [x] Properties and methods match the declared API (dataclass field sets
   and orders exact — `max_cycles, keep_runs` twice; the nine-field
   `WorkflowDocument`; the four-field `PipelineHeader`; the `FlowDocument`
   order `prompt, root_dir, name, description, repeat, memory,
   collaboration, team, stages`)
-- [ ] Descriptions are reflected in behavior (authored-values-only carry
+- [x] Descriptions are reflected in behavior (authored-values-only carry
   with the zero-vs-None distinction; the always-emit rule; the 4.0
   cross-check precedence; the emission position and the three serializer
   arms; byte-identity for non-repeatable pipelines; the map grammars with
   required `when` and the rename errors; the whole-block overlay merge;
   the emptiness counts `repeat`; the verbatim skip carry; the
   `.values()` consumption)
-- [ ] Contract dependencies are met (workflow → compiler → hooks →
+- [x] Contract dependencies are met (workflow → compiler → hooks →
   pipeline order; imported usages applied where their annotations bind
   them)
-- [ ] Re-exports are accessible from the facade (none declared — the two
+- [x] Re-exports are accessible from the facade (none declared — the two
   new types are surfaced through their own facades)
-- [ ] Every coding task followed the TDD workflow (contract tests → REPL
+- [x] Every coding task followed the TDD workflow (contract tests → REPL
   probe + code → verification → logic tests → debugging →
   re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior
+- [x] Contract tests and logic tests cover facade, API, and behavior
   within each coding task — all 34 design test scenarios implemented
   (the model-contract and facade scenarios split across Tasks 1–2; the
   skip-carry scenario split across Tasks 4–5) plus the integration
   scenario and the byte-identity check
-- [ ] Integration tests exist where cross-entity scenarios require them
+- [x] Integration tests exist where cross-entity scenarios require them
   (the skip-path end-to-end repeat proof; the shipped-assets golden diff)
-- [ ] No package boundary was expanded (no new cells; private helpers
+- [x] No package boundary was expanded (no new cells; private helpers
   only; the deleted list-form helpers leave no trace)
-- [ ] `CODEMANIFEST` files were not modified; no `.usages/` file was
+- [x] `CODEMANIFEST` files were not modified; no `.usages/` file was
   created or edited (contract and practices are read-only)
-- [ ] All validation commands pass (battery, ruff check + format,
+- [x] All validation commands pass (battery, ruff check + format,
   `goga lint`, facade imports)
-- [ ] Every Usages entry is mentioned in at least one task (`convention`,
+- [x] Every Usages entry is mentioned in at least one task (`convention`,
   `beautiful_yaml`, `afm`, `jinja2`, `parse-workflow`, `memory`,
   `assistants`, `collaboration-emission`, `memory-emission`,
   `compile-flow`, `serialize-flow`, `parse-dsl`, `checkpoints`,
   `per-tool-delivery`, `declaring-actions`, `registering-hooks`)
-- [ ] The ADR's out-of-scope guardrails held: `.goga/workflows/
+- [x] The ADR's out-of-scope guardrails held: `.goga/workflows/
   refinement.yml` NOT converted; no shipped asset gained `repeatable:
   true`; no repeat surfacing in `goga pipeline card` /
   `describe_pipeline`; `run_pipeline` stays a single `afm run` invocation
   (no goga-side cycle logic — no counting, no stop conditions, no
   pruning)
-- [ ] The Mandatory Rules were enforced at every task boundary and every
+- [x] The Mandatory Rules were enforced at every task boundary and every
   local commit (style, tests, linters/formatters, REPL cycle; no
   `Co-Authored-By:` trailers)
