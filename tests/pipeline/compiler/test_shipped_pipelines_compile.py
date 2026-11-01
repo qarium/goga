@@ -13,9 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 import goga
+import yaml
 from goga.pipeline.compiler import compile_flow
 
 # The assets live inside the ``goga`` package directory, so resolve them from the

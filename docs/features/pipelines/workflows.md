@@ -97,9 +97,10 @@ extend:
 | `repeat` | map | no*   | Run-cycle tuning for a repeatable pipeline — `max_cycles` / `keep_runs` (see [Run cycles](#run-cycles-repeat)). A `repeat:`-only workflow is valid. |
 
 \* At least one of `prompt`, a non-empty `stages` block, a non-empty
-`extend` block, a `memory` block, `profile`, a `build` block, an
-`assistants` block, a `delegation` block, or a `repeat` block must be
-present; an empty workflow is rejected with a structural error.
+`extend` block, a `memory` block, a `build` block, an `assistants`
+block, a `delegation` block, or a `repeat` block must be present; an
+empty workflow is rejected with a structural error. `profile` does not
+count — a `profile:`-only workflow is invalid.
 
 Unknown top-level keys are rejected with
 `unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat`.
