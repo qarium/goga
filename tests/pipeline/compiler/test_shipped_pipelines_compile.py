@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 import goga
 from goga.pipeline.compiler import compile_flow
 
@@ -40,7 +42,9 @@ def test_every_shipped_pipeline_compiles(tmp_path: Path) -> None:
     Asserts each file parses, is reconstructed into canonical-key-order stages
     (authoring ``communication`` → output ``interactive``), and serializes — i.e.
     no authoring ``interactive``/legacy ``agents`` key slipped back into a
-    shipped asset.
+    shipped asset. Also pins the repeat guardrail: none of the shipped assets
+    declares ``repeatable`` (ADR decision 8), so every compiled output carries
+    no ``repeat`` key at all — the serializer's ``None`` arm omits it entirely.
     """
     assert _SHIPPED_PIPELINES, "no shipped pipeline-files found under goga/assets/pipelines"
 
@@ -53,3 +57,9 @@ def test_every_shipped_pipeline_compiles(tmp_path: Path) -> None:
         assert flow_path.exists()
         assert flow_doc.stages
         assert pipeline_doc.header.name
+
+        # Non-repeatable pipeline — no compiled `repeat` key, in the document
+        # model and in the written bytes alike.
+        assert pipeline_doc.header.repeatable is False
+        assert flow_doc.repeat is None
+        assert "repeat" not in yaml.safe_load(flow_path.read_text())

@@ -47,6 +47,18 @@ class _DuckDocument:
         self.memory = None
 
 
+class _DuckDocumentNoRepeat:
+    """A buffer carrying every fact except ``repeat`` — the ninth-fact guard probe."""
+
+    def __init__(self) -> None:
+        self.prompt = "duck"
+        self.stages: dict[str, WorkflowStage] = {}
+        self.extend: dict[str, object] = {}
+        self.memory = None
+        self.assistants: dict[str, WorkflowAssistant] = {}
+        self.delegation = None
+
+
 class TestOverlayAssistantsContract:
     def test_collaboration_fields_merge_base_with_contributions(self) -> None:
         """A base carrying ``assistants``/``delegation`` merges with contributions that do."""
@@ -126,6 +138,42 @@ class TestOverlayAssistantsContract:
         with pytest.raises(
             ValueError,
             match=r"pipeline\.amend_workflow: '_DuckDocument' object has no attribute 'assistants'",
+        ):
+            registry.amend_workflow(
+                pipeline=PipelineIdentity(name="deploy", display_name="Deploy", description="Ships", source="project"),
+                decision=WorkflowDecision(kind="auto-match", workflow_name="deploy"),
+                workflow=WorkflowDocument(prompt="authored"),
+                work=WorkIdentity(branch="feature-demo", slug="feature-demo", year="2026"),
+            )
+
+    def test_duck_buffer_missing_repeat_attribute_fails_that_hook_hard(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A buffer without ``repeat`` fails the guard inside the intercept, not after it.
+
+        The fact walk is the only place a duck-typed buffer missing the
+        ninth fact produces the pinned hard ``ValueError`` — the emptiness
+        check that also reads ``repeat`` runs OUTSIDE the try, so without
+        the walk term the same buffer would escape as a raw
+        ``AttributeError``.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_duck(hooks: object) -> None:
+            def duck(self: object, context: object) -> None:
+                context.contribute(_DuckDocumentNoRepeat())
+
+            hooks.subscribe("pipeline", "amend_workflow", "duck", duck)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_duck)
+
+        registry = PipelineHooks()
+
+        with pytest.raises(
+            ValueError,
+            match=r"pipeline\.amend_workflow: '_DuckDocumentNoRepeat' object has no attribute 'repeat'",
         ):
             registry.amend_workflow(
                 pipeline=PipelineIdentity(name="deploy", display_name="Deploy", description="Ships", source="project"),

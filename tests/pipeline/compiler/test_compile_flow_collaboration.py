@@ -47,6 +47,7 @@ from goga.pipeline.compiler.compile_flow import (
     _canonical_fields,
 )
 from goga.pipeline.workflow import (
+    WorkflowAssistant,
     WorkflowDocument,
     WorkflowStage,
     parse_workflow,
@@ -602,6 +603,33 @@ class TestAttachmentChecks:
             _compile(
                 tmp_path, _BASE_STAGES, "stages:\n  build:\n    assistants:\n      ghost:\n        when: checkpoints\n"
             )
+
+    def test_compile_duplicate_same_stage_name_raises_programmatic(self, tmp_path: Path) -> None:
+        """Two attachment-map keys sharing one name (a programmatic document) are rejected.
+
+        An authored map cannot repeat a key, so the duplicate-name guard is
+        reachable only through a programmatically built ``WorkflowDocument`` —
+        e.g. a tool contribution merged by the overlay, which deduplicates
+        by map key, not by the entry's ``name``.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(_BASE_STAGES)
+        workflow = WorkflowDocument(
+            stages={
+                "build": WorkflowStage(
+                    assistants={
+                        "first": WorkflowAssistant(name="reviewer", prompt="Review.", when="finish"),
+                        "second": WorkflowAssistant(name="reviewer", prompt="Review again.", when="finish"),
+                    }
+                )
+            }
+        )
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("duplicate assistant in workflow.stages.build: reviewer"),
+        ):
+            compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
 
     def test_compile_flow_map_form_output_equals_list_form_output(self, tmp_path: Path) -> None:
         """The map-form authoring compiles byte-identically to the retired list form.

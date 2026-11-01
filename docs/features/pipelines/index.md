@@ -44,6 +44,8 @@ The pipelines layer is split into two authoring surfaces:
   `assistants` catalog, the `delegation` block, and the per-stage
   `assistants` instruction (see
   [Workflows — Collaboration](workflows.md#collaboration-assistants-delegation)),
+  run-cycle tuning via the top-level `repeat` block (see
+  [Workflows — Run cycles](workflows.md#run-cycles-repeat)),
   profile-driven rendering (one file adapting per
   contributor — see [Workflows — Profiles](workflows.md#profiles)), and a
   `build:` block configuring nested `goga build` runs.
@@ -75,8 +77,8 @@ Each pipeline-file is compiled into a single deterministic pipeline
 definition in two stages:
 
 1. **Parse** — goga reads the pipeline-file, validates the header
-   (`name`, `description`, optional `roles`), and detects the body format
-   (phases list or stages map).
+   (`name`, `description`, optional `roles`, optional `repeatable`), and
+   detects the body format (phases list or stages map).
 2. **Serialize** — goga applies per-format `depends_on` rules,
    merges any workflow overrides, embeds any `extend` stages, performs loop
    expansion, resolves the agent mode for each stage, and writes the exact
@@ -101,6 +103,10 @@ authored), and a workflow declaring an `assistants` catalog adds a `team`
 list and per-stage `assistants` entries — the helper-agent plumbing
 delivered to the engine configuration on launch (see
 [Workflows — Collaboration](workflows.md#collaboration-assistants-delegation)).
+A repeatable pipeline (header `repeatable: true`) always compiles a
+top-level `repeat` key — a workflow `repeat` block's authored bounds, else
+the scalar `repeat: true` (see
+[Workflows — Run cycles](workflows.md#run-cycles-repeat)).
 Every stage is either an **agent stage** — a `prompt` for an AI agent,
 with optional `skills` and `roles` — or a **script stage** — a literal
 `script` executed without an agent (see

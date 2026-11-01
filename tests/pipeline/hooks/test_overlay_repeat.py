@@ -111,6 +111,25 @@ class TestMergeRepeat:
         assert authored.max_cycles == 2  # purity — the input block untouched
         assert authored.keep_runs == 5
 
+    def test_overlay_tool_repeat_survives_a_later_non_carrying_tool(self) -> None:
+        """A later tool without a block never clobbers an earlier tool's block.
+
+        The assignment into the slot happens only for a carrying
+        contribution — a later prompt-only tool must leave an earlier
+        tool's authored cycle bound intact, not reset the slot to ``None``.
+        """
+        overlay = merge_workflow_overlay(
+            WorkflowDocument(prompt="authored"),
+            [
+                ToolContribution(tool="t1", document=WorkflowDocument(repeat=WorkflowRepeat(max_cycles=4))),
+                ToolContribution(tool="t2", document=WorkflowDocument(prompt="two")),
+            ],
+        )
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.repeat is not None
+        assert overlay.workflow.repeat.max_cycles == 4
+
     def test_overlay_repeat_absent_when_no_one_authors_one(self) -> None:
         """Neither the base nor any contribution carries a block — the slot stays ``None``."""
         overlay = merge_workflow_overlay(
