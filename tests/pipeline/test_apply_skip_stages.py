@@ -22,7 +22,9 @@ import inspect
 
 from goga.pipeline import apply_skip_stages
 from goga.pipeline.workflow import (
+    WorkflowAssistant,
     WorkflowBuild,
+    WorkflowDelegation,
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
@@ -104,6 +106,45 @@ class TestApplySkipStagesContract:
         assert skip_only is not None
         assert skip_only.profile is None
         assert skip_only.build is None
+
+    def test_apply_skip_stages_carries_collaboration_verbatim(self) -> None:
+        """The rebuild carries the assistants catalog and the delegation block verbatim.
+
+        The SAME catalog dict and delegation object (not rebuilds) ride into
+        the returned document, and a surviving stage keeps its attachment
+        list — the memory/profile/build carry precedent extended to the
+        collaboration fields. A skipped stage's replacement entry carries
+        ``assistants=None`` (the constructor default): the compiler removes
+        the stage before any attachment resolution, so its attachments are
+        unreachable by design. A None workflow with non-empty skip
+        synthesizes the default empty catalog and no delegation block.
+        """
+        catalog = {"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")}
+        delegation = WorkflowDelegation(depth=2, max_tasks=7)
+        attachments = [WorkflowAssistant(name="reviewer", gate=True, when="finish")]
+        workflow = WorkflowDocument(
+            assistants=catalog,
+            delegation=delegation,
+            stages={"build": WorkflowStage(), "verify": WorkflowStage(assistants=attachments)},
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.assistants is catalog
+        assert result.delegation is delegation
+        # The surviving stage keeps its attachment list (the same object).
+        assert result.stages["verify"].assistants is attachments
+        # The skipped stage's wholesale replacement carries the constructor
+        # default — its attachments never reach the compiler.
+        assert result.stages["build"].skip is True
+        assert result.stages["build"].assistants is None
+        # The skip-only document over a None workflow starts collaboration-free.
+        skip_only = apply_skip_stages(None, ["build"])
+
+        assert skip_only is not None
+        assert skip_only.assistants == {}
+        assert skip_only.delegation is None
 
 
 class TestApplySkipStagesLogic:

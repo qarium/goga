@@ -11,9 +11,16 @@ import pytest
 from goga.config import PipelineConfig, ProjectConfig
 from goga.config.hooks import AppliedAmendment, ConfigHooks, ConfigOverlay
 from goga.docker import encode_extra_env, encode_home_profiles
-from goga.pipeline import run_pipeline
-from goga.pipeline.compiler import FlowDocument, PipelineDocument, PipelineRoles, StructuralError
+from goga.pipeline import run_pipeline, write_afm_config
+from goga.pipeline.compiler import (
+    FlowDocument,
+    FlowTeamMember,
+    PipelineDocument,
+    PipelineRoles,
+    StructuralError,
+)
 from goga.pipeline.hooks import WorkflowOverlay
+from goga.pipeline.workflow import WorkflowAssistant, WorkflowDelegation, WorkflowDocument
 
 from tests.pipeline.conftest import (
     PROMPT_STEMS,
@@ -1086,6 +1093,44 @@ class _RecordingPipelineHooks:
         self.completed.append(dict(kwargs))
 
 
+class _MergingPipelineHooks(_RecordingPipelineHooks):
+    """Amendment stand-in returning a MERGED overlay — the tool-contribution shape.
+
+    The base recording stand-in returns the passthrough of the authored
+    workflow (the no-tool-packages shape); this variant returns a distinct
+    merged document, so a threading assertion can prove the step-16 config
+    write receives the OVERLAY's workflow — never the pre-merge resolution.
+    """
+
+    def __init__(self, merged: WorkflowDocument, order: list[str] | None = None) -> None:
+        super().__init__(order)
+        self.merged = merged
+
+    def amend_workflow(self, **kwargs: object) -> WorkflowOverlay:
+        self.order.append("amend_workflow")
+        return WorkflowOverlay(workflow=self.merged, provenance=[])
+
+
+class _WriteAfmConfigSpy:
+    """Recording stand-in for the step-16 afm configuration write seam.
+
+    Wrapped into the module seam's ``MagicMock`` so the clean-error scenarios
+    keep their mock assertions (``call_count``, ``assert_not_called``, a
+    replaced ``side_effect``); records the threaded
+    ``(agent, flow, workflow)`` triplet of every call for the threading
+    assertions.
+    """
+
+    def __init__(self, order: list[str]) -> None:
+        self.order = order
+        self.calls: list[tuple[str | None, object, object]] = []
+
+    def __call__(self, agent: str | None, flow: object = None, workflow: object = None) -> Path:
+        self.order.append("write_afm_config")
+        self.calls.append((agent, flow, workflow))
+        return Path("/home/goga/.afm/config.yaml")
+
+
 class TestRunPipelineConfigAndLaunchLayer:
     """Steps 1-2 and 14/17/19 — the load-and-amend opening, the afm
     configuration write, the launch layer composition, and their clean-error
@@ -1110,8 +1155,9 @@ class TestRunPipelineConfigAndLaunchLayer:
         ``load_project_config`` records and returns the effective
         configuration as the authored one; ``amend_config`` records and
         returns the given overlay (the passthrough of its input when
-        omitted); ``write_afm_config`` and the pipeline hooks zone record
-        into the shared ``order`` list.
+        omitted); ``write_afm_config`` (the recording spy, wrapped in the
+        module seam's mock) and the pipeline hooks zone record into the
+        shared ``order`` list.
         """
 
         def _load() -> ProjectConfig:
@@ -1122,13 +1168,10 @@ class TestRunPipelineConfigAndLaunchLayer:
             order.append("amend")
             return overlay if overlay is not None else ConfigOverlay(config=config, applied=[])
 
-        def _write_afm_config(agent: str | None, flow: object = None, workflow: object = None) -> Path:
-            order.append("write_afm_config")
-            return Path("/home/goga/.afm/config.yaml")
-
+        write_spy = _WriteAfmConfigSpy(order)
         monkeypatch.setattr(_run_pipeline_module, "load_project_config", _load)
         monkeypatch.setattr(ConfigHooks, "amend_config", _amend)
-        monkeypatch.setattr(_run_pipeline_module, "write_afm_config", mock.MagicMock(side_effect=_write_afm_config))
+        monkeypatch.setattr(_run_pipeline_module, "write_afm_config", mock.MagicMock(side_effect=write_spy))
 
         hooks = _RecordingPipelineHooks(order)
         monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: hooks)
@@ -1160,13 +1203,14 @@ class TestRunPipelineConfigAndLaunchLayer:
 
         project_dir = tmp_path / "pipelines"
         write_pipeline(project_dir)
+        documents = fake_documents()
 
         def _run_flow(*args: object, **kwargs: object) -> int:
             order.append("run_flow")
             return 0
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=documents),
             mock.patch.object(_run_pipeline_module, "run_flow", side_effect=_run_flow) as mock_run_flow,
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 9000)
@@ -1179,10 +1223,12 @@ class TestRunPipelineConfigAndLaunchLayer:
         assert tracked == ["load", "amend", "write_afm_config", "emit_run_created", "run_flow"]
 
         # The afm configuration write receives the EFFECTIVE agent — the
-        # amendment's "opencode", never the authored "codex".
+        # amendment's "opencode", never the authored "codex" — with the
+        # compiled flow document and the overlay workflow threaded after it
+        # (no workflow resolved here, so the overlay workflow is None).
         mock_write_afm = _run_pipeline_module.write_afm_config
         assert mock_write_afm.call_count == 1
-        assert mock_write_afm.call_args == call("opencode")
+        assert mock_write_afm.call_args == call("opencode", documents[1], None)
 
         captured = capsys.readouterr()
         assert "config amendments: 1 applied" in captured.err
@@ -1190,6 +1236,91 @@ class TestRunPipelineConfigAndLaunchLayer:
 
         assert mock_run_flow.call_args.kwargs["env"] == {"T": "1"}
         assert mock_run_flow.call_args.kwargs["max_parallel"] is None
+
+    def test_run_pipeline_threads_flow_and_workflow_to_config_write(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Step 16 threads the compiled flow document and the overlay workflow.
+
+        The config write receives the very object ``compile_flow`` returned
+        (the document the flow-file was serialized from) and the very
+        document of the overlay (the MERGED workflow when a tool contributed
+        — never the pre-merge resolution), so the generated collaboration
+        profiles can never diverge from the compiled flow-file.
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig(agent="codex")))
+
+        merged = WorkflowDocument(
+            assistants={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")},
+            delegation=WorkflowDelegation(depth=2),
+        )
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: _MergingPipelineHooks(merged, order))
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+        documents = fake_documents()
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=documents),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        write_spy = _run_pipeline_module.write_afm_config.side_effect
+        assert isinstance(write_spy, _WriteAfmConfigSpy)
+
+        # The threaded objects are the compile output and the overlay
+        # workflow themselves — the same instances, no copies.
+        assert write_spy.calls == [("codex", documents[1], merged)]
+        assert write_spy.calls[0][1] is documents[1]
+        assert write_spy.calls[0][2] is merged
+        mock_run_flow.assert_called_once()
+
+    def test_run_pipeline_collaboration_error_fires_no_events(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A collaboration ValueError from the config write propagates — no events, no launch.
+
+        The workflow's assistant resolves no agent (no own agent, no global
+        agent) and the compiled flow references it, so the REAL config write
+        raises its pre-run error before any file is written — step 16
+        precedes the run-creation facts, so no events fire and afm never
+        launches.
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig()))
+        monkeypatch.setattr(_run_pipeline_module, "write_afm_config", write_afm_config)
+
+        merged = WorkflowDocument(assistants={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")})
+        merging_hooks = _MergingPipelineHooks(merged, order)
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: merging_hooks)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+        pipeline_doc, _ = fake_documents()
+        flow_doc = FlowDocument(
+            name="deploy",
+            description="d",
+            team=[FlowTeamMember(id="reviewer", title="reviewer", profile="goga-reviewer", instruction="", skills=[])],
+            stages=[],
+        )
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=(pipeline_doc, flow_doc)),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+            pytest.raises(ValueError, match=r"assistant reviewer at workflow\.assistants resolved no agent"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        # The pre-run error precedes the run-creation facts and the launch —
+        # the declared error semantics of step 16.
+        assert "emit_run_created" not in order
+        assert "run_flow" not in order
+        assert merging_hooks.created == []
+        assert merging_hooks.completed == []
+        mock_run_flow.assert_not_called()
 
     def test_run_pipeline_launch_layer_cli_entries_above_task_env_engine_keys_dropped(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch

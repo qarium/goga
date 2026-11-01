@@ -2097,15 +2097,15 @@ threaded three-argument call in the same change.>
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 8 gates
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 8 gates
       green
-- [ ] **STEP 1 (Contract tests)**: in `tests/pipeline/test_run_pipeline.py`
+- [x] **STEP 1 (Contract tests)**: in `tests/pipeline/test_run_pipeline.py`
       — the fake `_write_afm_config` accepts `(agent, flow=None,
       workflow=None)` and RECORDS `(agent, flow, workflow)`; in
       `tests/pipeline/test_apply_skip_stages.py` — a workflow with
       collaboration fields survives the skip rebuild. Expected to fail —
       correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       build a resolved workflow with `assistants`/`delegation`, run the
       rebuild, and confirm the carried objects are the VERY SAME instances
       (`is`); then implement the three source changes (A) (B) (C) exactly
@@ -2113,10 +2113,10 @@ never fix the contract.**
       description and `Raises:` entry (the collaboration `ValueError`
       propagates before any run event); update the fake + add the
       threading assertions
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/test_run_pipeline.py
       tests/pipeline/test_apply_skip_stages.py -v` — pass
-- [ ] **STEP 4 (Logic tests)**:
+- [x] **STEP 4 (Logic tests)**:
       `test_run_pipeline_threads_flow_and_workflow_to_config_write`
       (design, verbatim) — the existing run-pipeline wiring fakes; the
       updated fake spy-records `(agent, flow, workflow)`; assertions: the
@@ -2132,18 +2132,18 @@ never fix the contract.**
       agent and `config.pipeline.agent is None`; assertions: `ValueError`
       propagates, no `run_created` fact recorded, the launch function
       never called
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full
       battery stays green
-- [ ] **STEP 6 (Contract re-verification)**: the threading objects are the
+- [x] **STEP 6 (Contract re-verification)**: the threading objects are the
       compile input and output themselves (no copies, no re-derivation);
       the verbatim carry preserves identity; the anchor tuple keeps
       `command` before `assistants` in every patched flow-file (span
       detection and the `  command:` rewrite unaffected — assistant
       entries nest at ≥ 4 spaces)
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 10: Integration — end-to-end collaboration delivery + engine verification (integration tests)

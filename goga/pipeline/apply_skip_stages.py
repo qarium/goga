@@ -24,6 +24,14 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
           the input workflow survive the rebuild verbatim — a rebuild that
           dropped them would silently disable memory participation, change
           activation, or lose build instructions for skip-driven runs.
+        - The assistants catalog and the delegation block of the input
+          workflow survive the rebuild verbatim (the same objects, opaque) —
+          the same carry precedent: a rebuild that dropped them would strip
+          the collaboration plumbing of its declarations and task budget for
+          skip-driven runs. A skipped stage's replacement entry carries
+          ``assistants=None`` (the constructor default) — the compiler
+          removes the stage before any attachment resolution, so its
+          attachments are unreachable by design.
         - Stage-name validation is NOT performed here — the compiler's strict
           check raises a structural error on a name absent from the pipeline
           body; this Routine stays declarative.
@@ -55,8 +63,10 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
         new_stages[name] = WorkflowStage(skip=True)
 
     # Step 4 — return a NEW document; the input is NOT mutated. The memory
-    # configuration, the profile field, and the build block ride along
-    # verbatim (same objects, opaque — never rebuilt).
+    # configuration, the profile field, the build block, the assistants
+    # catalog, and the delegation block ride along verbatim (same objects,
+    # opaque — never rebuilt); a None workflow with non-empty skip
+    # synthesizes the default empty catalog and no delegation block.
     return WorkflowDocument(
         prompt=workflow.prompt if workflow is not None else None,
         stages=new_stages,
@@ -64,4 +74,6 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
         memory=workflow.memory if workflow is not None else None,
         profile=workflow.profile if workflow is not None else None,
         build=workflow.build if workflow is not None else None,
+        assistants=workflow.assistants if workflow is not None else {},
+        delegation=workflow.delegation if workflow is not None else None,
     )

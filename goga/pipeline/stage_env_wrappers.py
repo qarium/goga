@@ -24,9 +24,12 @@ _WRAPPER_BASE = Path("/tmp/goga-stage-env")
 
 # The serialized flow-file stage keys that follow ``command`` in the
 # compiler's canonical order — the insertion anchors when a claimed stage
-# carries no ``command`` line. ``depends_on`` serializes last (after every
-# canonical and unknown key), so it anchors the tail position; a block with
-# neither an anchor nor ``depends_on`` takes the insert at its end.
+# carries no ``command`` line. ``assistants`` is the canonical tail (the
+# compiler's stage assistant entries nest at four-plus spaces, so the
+# stage-block span detection and the ``  command:`` rewrite are unaffected);
+# ``depends_on`` serializes last (after every canonical and unknown key), so
+# it anchors the tail position; a block with neither an anchor nor
+# ``depends_on`` takes the insert at its end.
 _KEYS_AFTER_COMMAND = (
     "prompt",
     "description",
@@ -41,6 +44,7 @@ _KEYS_AFTER_COMMAND = (
     "script_timeout",
     "reflect",
     "memory_use",
+    "assistants",
 )
 
 # Stage ids that double as a safe file name are used verbatim; anything else
