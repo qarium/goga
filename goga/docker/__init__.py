@@ -9,10 +9,10 @@ from .builder import (
     docker_pull,
     docker_update,
 )
-from .env import ensure_in_docker
+from .env import ensure_in_docker, is_in_docker
 from .extra_env import decode_extra_env, encode_extra_env
 from .home_profiles import decode_home_profiles, encode_home_profiles, profile_carriage_lines
-from .runner import DockerRunner
+from .runner import DockerRunner, run_direct
 
 __all__ = [
     "DockerBuildError",
@@ -27,6 +27,8 @@ __all__ = [
     "encode_extra_env",
     "encode_home_profiles",
     "ensure_in_docker",
+    "is_in_docker",
     "profile_carriage_lines",
+    "run_direct",
     "translate_params",
 ]

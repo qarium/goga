@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import inspect
+import typing
+
 import pytest
-from goga.docker import ensure_in_docker
+from goga.docker import ensure_in_docker, is_in_docker
 
 
 class TestContract:
@@ -14,6 +17,67 @@ class TestContract:
         import goga.docker
 
         assert "ensure_in_docker" in goga.docker.__all__
+
+
+class TestIsInDockerContract:
+    """Contract-surface lock for the non-terminal marker query."""
+
+    def test_is_in_docker_facade_export(self) -> None:
+        import goga.docker
+        from goga.docker import is_in_docker
+
+        assert callable(is_in_docker)
+        assert goga.docker.is_in_docker is is_in_docker
+        assert "is_in_docker" in goga.docker.__all__
+
+    def test_is_in_docker_declared_signature(self) -> None:
+        from goga.docker import is_in_docker
+
+        parameters = inspect.signature(is_in_docker).parameters
+
+        assert list(parameters) == []
+        assert typing.get_type_hints(is_in_docker) == {"return": bool}
+
+
+class TestIsInDocker:
+    """Behavior coverage for both branches of the marker query."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [("1", True), (None, False), ("0", False), ("yes", False)],
+        ids=["marker-one", "unset", "marker-zero", "marker-word"],
+    )
+    def test_is_in_docker_branches(self, monkeypatch: pytest.MonkeyPatch, value: str | None, expected: bool) -> None:
+        """True only for the exact marker "1"; every other value including unset is False."""
+        if value is None:
+            monkeypatch.delenv("GOGA_DOCKER", raising=False)
+        else:
+            monkeypatch.setenv("GOGA_DOCKER", value)
+
+        assert is_in_docker() is expected
+
+    @pytest.mark.parametrize("value", ["1", "0", "yes"])
+    def test_is_in_docker_agrees_with_ensure_in_docker(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+        value: str,
+    ) -> None:
+        """The marker rule is shared: is_in_docker is True exactly where the guard does not refuse."""
+        monkeypatch.setenv("GOGA_DOCKER", value)
+
+        marker_seen = is_in_docker()
+
+        if value == "1":
+            ensure_in_docker()  # no refusal, no output
+            assert marker_seen is True
+        else:
+            with pytest.raises(SystemExit):
+                ensure_in_docker()
+
+            assert marker_seen is False
+
+        capsys.readouterr()
 
 
 class TestEnsureInDocker:

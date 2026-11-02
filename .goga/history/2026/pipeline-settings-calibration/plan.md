@@ -871,27 +871,27 @@ unwind owns that path. Export both from `goga/docker/__init__.py`
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: facade accessibility
+- [x] **Contract tests**: facade accessibility
   (`from goga.docker import is_in_docker, run_direct`; both present in
   `__all__`); signature shapes (`is_in_docker()` no parameters → `bool`;
   `run_direct(argv: list[str], env: dict[str, str] | None = None) -> int`).
   Expected to fail at this stage
-- [ ] **REPL probe**: in `.venv/bin/python` — drive `run_direct` with a
+- [x] **REPL probe**: in `.venv/bin/python` — drive `run_direct` with a
   real stub child (`python3 -c "import signal, time; signal.pause()"`);
   send SIGTERM to the launcher from a driver script; observe exit 143 and
   the child's termination; observe `env=None` inheritance vs the
   `{"MARKER": "set"}` layer reaching the child only. Migrate the observed
   scenarios into the tests
-- [ ] **Code**: implement `is_in_docker` in `goga/docker/env.py` (pure
+- [x] **Code**: implement `is_in_docker` in `goga/docker/env.py` (pure
   query; Google docstring documenting the shared marker rule)
-- [ ] **Code**: implement `run_direct` in `goga/docker/runner.py`
+- [x] **Code**: implement `run_direct` in `goga/docker/runner.py`
   (algorithm above; Google docstring: `Args` `argv`/`env`, `Returns`
   `exit_code`, `Raises` — the raw `OSError` propagation note)
-- [ ] **Code**: export both from `goga/docker/__init__.py` —
+- [x] **Code**: export both from `goga/docker/__init__.py` —
   `__all__` alphabetical
-- [ ] **Interface verification**: `.venv/bin/pytest tests/docker/ -v` —
+- [x] **Interface verification**: `.venv/bin/pytest tests/docker/ -v` —
   the contract tests pass
-- [ ] **Logic tests**:
+- [x] **Logic tests**:
   - in `tests/docker/test_env.py`:
     `test_is_in_docker_branches` — `@pytest.mark.parametrize`:
     `GOGA_DOCKER=1` → `True`; unset → `False`; `GOGA_DOCKER=0` → `False`;
@@ -910,12 +910,12 @@ unwind owns that path. Export both from `goga/docker/__init__.py`
     child only — secret safety and the run_flow-mirroring contract)
   - exit-code verbatim edge: a child stub exiting 7 → `run_direct`
     returns 7
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x` — fix implementation
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x` — fix implementation
   code until all tests pass
-- [ ] **Contract re-verification**: facade exports, marker-rule sharing
+- [x] **Contract re-verification**: facade exports, marker-rule sharing
   with `ensure_in_docker`, no caching, no docker-CLI gates inside
   `run_direct`
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
 
 ### Task 4: The two config loaders parse through `parse_env_yaml`
