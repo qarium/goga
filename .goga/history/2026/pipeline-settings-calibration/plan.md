@@ -1934,22 +1934,45 @@ runs on both). Host branch unchanged.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the build surface rejects each host-only
+- [x] **Contract tests**: the build surface rejects each host-only
   option on the direct path; the direct dry-run prints and exits 0.
   Expected to fail at this stage
-- [ ] **REPL probe**: in `.venv/bin/python` — `GOGA_DOCKER=1`,
+  (written first, red as expected — 14 tests across
+  `TestBuildDirectSubstrate` + `TestComposeEnvLines`
+  (tests/commands/build/test_build.py); green after the code)
+- [x] **REPL probe**: in `.venv/bin/python` — `GOGA_DOCKER=1`,
   `tmp_path` project with a build section, spawn monkeypatched;
   `goga build plan.md` → observe `argv == ["python3", "-m",
   "goga.build", "plan.md"]` and the overlay's `GOGA_EXTRA_ENV` payload;
   `--dry-run` → observe the stderr line and exit 0. Migrate into the
   tests
-- [ ] **Code**: step 1a (the four-entry rejection, before the docker
+  (observed live before — "docker not found in PATH" on the direct
+  path, `-e` silently unrejected — and after in a fresh process: argv
+  `['python3', '-m', 'goga.build', 'plan.md']`, payload `e30=`
+  (`encode_extra_env([])`), dry-run stderr `python3 -m goga.build
+  plan.md --dry-run` with exit 0 and zero spawns, all four rejections
+  verbatim with exit 1, child exit 7 propagating verbatim; every
+  scenario migrated. NB `shutil.rmtree` carries NO `missing_ok`
+  parameter even on 3.12 — observed via `inspect.signature`; the plan
+  sketch's `rmtree(..., missing_ok)` is realized as the file's
+  established `contextlib.suppress(FileNotFoundError)` idiom of
+  `_cleanup_ralphex_in_project`, keeping 3.10 compatibility)
+- [x] **Code**: step 1a (the four-entry rejection, before the docker
   check); `_compose_env_lines` extraction; the 14a direct branch with
   the clean wipe, dry-run print, `run_direct` spawn, and the shared
   finally cleanup
-- [ ] **Interface verification**: `.venv/bin/pytest
+  (step 1a opens the callback with `direct = is_in_docker()` and the
+  four verbatim `is host-only` ClickExceptions; step 1 becomes
+  `if not direct and not _check_docker()`; the home-bundle load moves
+  ahead of the single `lines = _compose_env_lines(home.env, git_env,
+  extra_env, resolved_proxy, home_profiles)` call — one composition
+  feeding `_write_env_file` (host) and `_env_overlay` (direct); the 14a
+  branch sits before the image guard and ends at `ctx.exit` through its
+  own try/finally running `_cleanup_ralphex_in_project(Path.cwd())`)
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/commands/build/ tests/commands/test_build.py -v`
-- [ ] **Logic tests**:
+  (160 passed — 145 pre-existing plus 15 new)
+- [x] **Logic tests**:
   - `test_build_direct_spawns_child_with_env_overlay` — `GOGA_DOCKER=1`;
     `tmp_path` project with a build section; monkeypatch the spawn to
     capture `(argv, env)`; git config absent; `goga build plan.md` via
@@ -1979,19 +2002,49 @@ runs on both). Host branch unchanged.
     record the directory contents at call time; `goga build plan.md
     --clean` → the spawn mock was called and the stale marker file does
     not exist after the run
-- [ ] **Migrate the affected existing tests**: the build suites
+  (all four added, plus three more: the ordering guard as its own
+  `test_build_direct_host_only_rejection_precedes_config_load` (both
+  `_check_docker` and `load_project_config` asserted never called),
+  `test_build_direct_child_exit_code_propagates_verbatim` (child exit 7
+  through `ctx.exit`), and
+  `test_build_direct_env_overlay_parses_the_same_ladder_lines` (both
+  substrates driven over the same project — every ladder key lands with
+  its composed value in the child env; run_direct merges the overlay
+  OVER the inherited environment); the `TestComposeEnvLines` class
+  covers the extracted composer: ladder order, no-proxy omission,
+  engine-skip, `_env_overlay` first-`=` last-write-wins)
+- [x] **Migrate the affected existing tests**: the build suites
   (`tests/commands/build/test_build.py`, `tests/commands/test_build.py`)
   — the env-ladder content assertions move to `_compose_env_lines`;
   dry-run expectations on the host path stay; new direct-path arms added
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: ordering (1a before the docker
+  (the migration inventory came out EMPTY: the existing env-ladder
+  suites capture lines through the `_write_env_file` mock, which the
+  wrapper still receives verbatim, and every host-path test passed
+  unchanged — the ladder-content assertions were additionally pinned at
+  the composer level in `TestComposeEnvLines`; no assertion weakened)
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (8009 passed, 8 skipped — +15 over Task 11's 7994, no existing test
+  edited)
+- [x] **Contract re-verification**: ordering (1a before the docker
   check); invariant parity (`.ralphex` cleanup in finally on both
   substrates); one composition two sinks
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+  (ordering pinned by the dedicated precede test; parity pinned by the
+  clean parametrize — the stale marker absent at spawn time with
+  `--clean`, present without it, gone after both arms — plus the
+  pre-existing host cleanup suites; the direct branch calls the SAME
+  `_compose_env_lines`/`_cli_flags_to_args` the host path uses, no
+  layer re-derived)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors;
   `goga schema` — the two `goga/config/yaml` edges and the
   `run_direct`/`is_in_docker`/`direct-runner` additions on both
   command-cell edges; no cycles
+  (ruff check clean after removing one stray unused variable in the new
+  test block; one `ruff format` pass reflowed it, re-run green; goga
+  lint: 92 cells, 0 errors; goga schema exit 0 — both
+  `goga/config/{project,tool} -> goga/config/yaml` edges, both
+  command-cell → `goga/docker` edges carrying
+  `run_direct`/`is_in_docker`/`direct-runner`, cycle-free)
 
 ### Task 13: Integration tests — the D5 chain and the D1 parity
 
