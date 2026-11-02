@@ -768,13 +768,13 @@ facade surface.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (new `tests/config/yaml/__init__.py` +
+- [x] **Contract tests** (new `tests/config/yaml/__init__.py` +
   `tests/config/yaml/test_loader.py`): facade accessibility
   (`from goga.config.yaml import parse_env_yaml`;
   `goga.config.yaml.__all__ == ["parse_env_yaml"]`); signature shape
   (`inspect.signature` — one required `text: str` parameter, return
   annotation `object`). Expected to fail at this stage
-- [ ] **REPL probe (before writing the module — observe, then freeze)**:
+- [x] **REPL probe (before writing the module — observe, then freeze)**:
   in `.venv/bin/python -c` — (a) confirm PyYAML dispatches a tagged
   non-scalar node to the registered constructor (`"a: !ENV [x, y]"` with
   the guard commented out degrades to a raw `TypeError` — the guard is
@@ -783,16 +783,16 @@ facade surface.
   `yaml.safe_load("a: !ENV X")` still fails with an unknown tag AFTER a
   `parse_env_yaml` call in the same process (subclass scoping). Migrate
   each observed scenario into the tests below
-- [ ] **Code**: create `goga/config/yaml/loader.py` — the algorithm above
+- [x] **Code**: create `goga/config/yaml/loader.py` — the algorithm above
   (module docstring; `_construct_env`; `_EnvLoader`; `parse_env_yaml`
   with a Google docstring: purpose, `Args` (`text`), `Returns` (`data`),
   `Raises` (`yaml.YAMLError` — the constructor errors of malformed `!ENV`
   use))
-- [ ] **Code**: create `goga/config/yaml/__init__.py` — the facade with
+- [x] **Code**: create `goga/config/yaml/__init__.py` — the facade with
   `__all__ = ["parse_env_yaml"]` (relative import)
-- [ ] **Interface verification**: `.venv/bin/pytest tests/config/yaml/ -v`
+- [x] **Interface verification**: `.venv/bin/pytest tests/config/yaml/ -v`
   — the contract tests pass
-- [ ] **Logic tests** (positive / negative / edge — in
+- [x] **Logic tests** (positive / negative / edge — in
   `tests/config/yaml/test_loader.py`):
   - `test_parse_env_yaml_resolves_env_reference` —
     `monkeypatch.setenv("PIPELINE_AGENT", "claude")`; input
@@ -819,11 +819,11 @@ facade surface.
     loader)
   - unset-variable edge: `monkeypatch.delenv(..., raising=False)` → the
     tagged scalar resolves to `""`
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x` — fix implementation
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x` — fix implementation
   code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade importable, `__all__` exact,
+- [x] **Contract re-verification**: facade importable, `__all__` exact,
   no global-loader registration, no logging of resolved values
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format goga/ tests/` — fix formatting if necessary;
   `goga lint` stays at 0 errors
 
