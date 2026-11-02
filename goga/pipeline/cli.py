@@ -86,6 +86,12 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         default=None,
         help="cap concurrently executing stages (threads to afm --max-parallel); omitted ⇒ afm runs unbounded.",
     )
+    run_parser.add_argument(
+        "--fail-on-error",
+        action="store_true",
+        default=False,
+        help="exit non-zero when a stage fails (threads to afm --exit-on-fail; run mode only).",
+    )
 
     subparsers.add_parser("hook", help="afm-facing machinery: bridge one lifecycle event")
 
@@ -199,7 +205,8 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
 
     Args:
         args: The parsed CLI arguments (``name``, ``port``, ``workflow``,
-            ``no_workflow``, ``profile``, ``skip``, ``parallel``).
+            ``no_workflow``, ``profile``, ``skip``, ``parallel``,
+            ``fail_on_error``).
         project_dir: Project-level pipelines directory.
         user_dir: User-level pipelines directory.
 
@@ -219,6 +226,7 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
             profile=args.profile,
             skip=args.skip,
             parallel=args.parallel,
+            fail_on_error=args.fail_on_error,
         )
     except WorkflowSyntaxError as exc:
         print(f"Error: pipeline '{args.name}' has a malformed workflow: {exc}", file=sys.stderr)

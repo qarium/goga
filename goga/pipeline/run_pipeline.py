@@ -214,6 +214,7 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
     profile: str | None = None,
     skip: list[str] | None = None,
     parallel: int | None = None,
+    fail_on_error: bool = False,
 ) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
 
@@ -249,6 +250,12 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
             receives ``--max-parallel <parallel>``). ``None`` (the default) is
             forwarded unchanged and the flag is omitted — compilation never
             depends on it.
+        fail_on_error: the CLI fail-fast decision from the ``--fail-on-error``
+            flag of the in-container run subcommand; forwarded to
+            :func:`goga.afm.run_flow` as its ``exit_on_fail`` argument (so afm
+            receives ``--exit-on-fail``) — a failed stage ends the run with
+            the engine's failure exit code. ``False`` (the default) changes
+            nothing: no flag, no env variable.
 
     Returns:
         ``0`` on success; ``1`` when the project configuration fails to load
@@ -535,8 +542,10 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
 
     # Step 21: launch. The composed layer applies to the afm subprocess only —
     # an empty layer passes as-is (run_flow treats it as pure inheritance).
+    # The CLI fail-fast decision rides the same call as exit_on_fail — False
+    # forwards unchanged and run_flow omits --exit-on-fail.
     # Spawn failures are return codes (126/127), not raises.
-    exit_code = run_flow(flow_path, port, max_parallel=parallel, env=launch_layer)
+    exit_code = run_flow(flow_path, port, max_parallel=parallel, exit_on_fail=fail_on_error, env=launch_layer)
 
     # Steps 22-23: on every return of run_flow — zero, non-zero, and spawn
     # failures alike — recompute the statuses at the completion moment (one

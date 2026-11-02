@@ -1608,21 +1608,37 @@ Docstrings gain the parameter descriptions per the manifest.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: `run_pipeline` signature — `fail_on_error`
+- [x] **Contract tests**: `run_pipeline` signature — `fail_on_error`
   last, default `False`; the parser accepts `--fail-on-error` (no
   argparse error) in both modes. Expected to fail at this stage
-- [ ] **REPL probe**: in `.venv/bin/python` — invoke
+  (observed red first — `assert 'parallel' == 'fail_on_error'` on the
+  last-position pin and SystemExit 2 on the flag-parse invocations —
+  then green; the parser-shape pin
+  `test_run_subparser_declares_fail_on_error_flag` asserts
+  StoreTrueAction/default False, the signature pins live in
+  `TestRunPipelineFailOnErrorContract`)
+- [x] **REPL probe**: in `.venv/bin/python` — invoke
   `pipeline_cli(["run", "x", "--info", "--fail-on-error"])` (fixture
   project) and observe exit without an argparse error; invoke the run
   mode with `run_pipeline` mocked and capture the forwarded kwargs.
   Migrate into the tests
-- [ ] **Code**: the argparse argument + help text; the
+  (observed live before — SystemExit 2 "unrecognized arguments:
+  --fail-on-error" in BOTH modes, and the parallel forward pattern
+  `{'workflow': None, 'no_workflow': False, 'profile': None, 'skip':
+  None, 'parallel': 4}` — and after in a fresh process: card form exit
+  0, run form forwards `fail_on_error=True` beside `parallel`,
+  `run_pipeline(..., fail_on_error=True)` → run_flow
+  `exit_on_fail=True`, default → `exit_on_fail=False`; every scenario
+  migrated)
+- [x] **Code**: the argparse argument + help text; the
   `_run_execution` forward; the `run_pipeline` parameter + step-21
   forward + docstring
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/pipeline/test_pipeline_cli.py tests/pipeline/test_run_pipeline.py
   -v`
-- [ ] **Logic tests**:
+  (146 passed across the four touched files incl. the contract file and
+  the materialization suite)
+- [x] **Logic tests**:
   - in `tests/pipeline/test_pipeline_cli.py`:
     `test_pipeline_cli_fail_on_error_flag_binds_in_both_modes` — the card
     invocation `["run", "deploy", "--info", "--fail-on-error"]` exits
@@ -1634,16 +1650,42 @@ Docstrings gain the parameter descriptions per the manifest.
     forwards `exit_on_fail=True` to `run_flow` when
     `fail_on_error=True` (mock `run_flow`, capture the call) and omits
     it (`False`) by default
-- [ ] **Migrate the affected existing tests**: argv/composition
+  (added as `test_pipeline_cli_fail_on_error_flag_binds_in_both_modes`
+  plus the inertness assert `run_pipeline.assert_not_called()` on the
+  card form, and the pair
+  `test_run_pipeline_threads_fail_on_error_to_run_flow` /
+  `test_run_pipeline_fail_on_error_false_default` mirroring the parallel
+  twins)
+- [x] **Migrate the affected existing tests**: argv/composition
   expectations in `tests/pipeline/test_pipeline_cli.py` and
   `test_run_pipeline*.py` that pin the old call shapes gain the new
   default-valued parameter (existing call sites stay valid — the default
   keeps them so)
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: every hop forwards only when set
+  (10 old-shape pins re-derived, none weakened: the three exact
+  `run_pipeline` forwards in the cli suite gain `fail_on_error=False`;
+  the four signature lists (test_run_pipeline.py + three in
+  test_run_pipeline_contract.py) gain `fail_on_error` last with the
+  default assert; the seven exact `run_flow` call pins (five in
+  test_run_pipeline.py incl. the `call(...)` comparison, two in
+  test_integration_materialization.py) gain `exit_on_fail=False` — the
+  observed red inventory exactly)
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (7970 passed, 8 skipped — +7 tests over Task 9's 7963; no
+  implementation fix needed beyond the planned delta)
+- [x] **Contract re-verification**: every hop forwards only when set
   (`False` ⇒ no flag); the step-22 status recompute unchanged
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+  (the argv-level when-set-only forward is pinned by Task 8's
+  `test_run_flow_appends_exit_on_fail_flag` /
+  `test_run_flow_omits_exit_on_fail_by_default`, green in the battery;
+  steps 22-23 byte-identical — the step-21 edit adds only the
+  `exit_on_fail=` kwarg; `AFM_EXIT_ON_FAIL` never read or set — the
+  four-`os.environ`-reads pin stayed green)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
+  (ruff check clean after one `ruff format` pass reflowed six 121-char
+  assertion lines in the two edited test files; 1037 files formatted;
+  goga lint: 92 cells, 0 errors; the 146 affected tests re-run green
+  post-format)
 
 ### Task 11: `goga/commands/pipeline` — the direct substrate on all three surfaces
 

@@ -23,10 +23,12 @@ class TestRunPipelineWorkflowContract:
     """Contract: run_pipeline forwards a ``workflow=`` kwarg to compile_flow.
 
     The public signature is ``(name, project_dir, user_dir, port, workflow,
-    no_workflow, skip, parallel)`` — the workflow decision and the skip names
-    arrive as explicit parameters (never from the environment; ``AFM_DIR`` is
-    the only environment read of run coordination), and ``parallel`` is an
-    optional concurrency cap threaded to ``run_flow``. compile_flow always
+    no_workflow, skip, parallel, fail_on_error)`` — the workflow decision and
+    the skip names arrive as explicit parameters (never from the environment;
+    ``AFM_DIR`` is the only environment read of run coordination),
+    ``parallel`` is an optional concurrency cap threaded to ``run_flow``, and
+    ``fail_on_error`` is the CLI fail-fast decision threaded as
+    ``exit_on_fail``. compile_flow always
     receives a ``workflow`` keyword argument (``None`` when nothing resolved, or
     a ``WorkflowDocument`` when a workflow-file resolved).
     """
@@ -52,12 +54,14 @@ class TestRunPipelineWorkflowContract:
             "profile",
             "skip",
             "parallel",
+            "fail_on_error",
         ]
         assert signature.parameters["workflow"].default is None
         assert signature.parameters["no_workflow"].default is False
         assert signature.parameters["profile"].default is None
         assert signature.parameters["skip"].default is None
         assert signature.parameters["parallel"].default is None
+        assert signature.parameters["fail_on_error"].default is False
 
     def test_run_pipeline_parameter_annotations_match_contract(self) -> None:
         """The inserted parameters carry the contract annotations verbatim."""
@@ -103,7 +107,7 @@ class TestRunPipelineDelegatesWorkflowResolution:
     """
 
     def test_run_pipeline_signature_unchanged(self) -> None:
-        """The public signature stays the 9-parameter contract (name … parallel)."""
+        """The public signature stays the 10-parameter contract (name … fail_on_error)."""
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
         assert parameters == [
@@ -116,8 +120,10 @@ class TestRunPipelineDelegatesWorkflowResolution:
             "profile",
             "skip",
             "parallel",
+            "fail_on_error",
         ]
         assert signature.parameters["parallel"].default is None
+        assert signature.parameters["fail_on_error"].default is False
 
     def test_run_pipeline_module_has_no_private_resolver(self) -> None:
         """The private _resolve_workflow helper no longer exists on the module."""
@@ -283,6 +289,43 @@ class TestRunPipelineActivationSurfaceContract:
         assert mock_compile.call_args.kwargs["workflow"] is None
 
 
+class TestRunPipelineFailOnErrorContract:
+    """Contract: run_pipeline threads the CLI fail-fast decision to ``run_flow``.
+
+    The public signature carries ``fail_on_error`` in the LAST position
+    (after ``parallel``) defaulting to ``False`` — the in-container
+    ``--fail-on-error`` decision arrives as an explicit parameter, never
+    from the environment, and forwards to ``run_flow`` as its
+    ``exit_on_fail`` argument (step 21).
+    """
+
+    def test_run_pipeline_signature_has_fail_on_error_last(self) -> None:
+        """run_pipeline exposes fail_on_error as the last parameter, default False."""
+        signature = inspect.signature(run_pipeline)
+        parameters = list(signature.parameters)
+
+        assert parameters[-1] == "fail_on_error"
+        assert parameters == [
+            "name",
+            "project_dir",
+            "user_dir",
+            "port",
+            "workflow",
+            "no_workflow",
+            "profile",
+            "skip",
+            "parallel",
+            "fail_on_error",
+        ]
+        assert signature.parameters["fail_on_error"].default is False
+
+    def test_run_pipeline_fail_on_error_annotation_is_bool(self) -> None:
+        """The fail_on_error parameter carries the plain bool annotation."""
+        hints = typing.get_type_hints(run_pipeline)
+
+        assert hints["fail_on_error"] is bool
+
+
 class TestRunPipelineProjectNameContract:
     """Contract: run_pipeline forwards a ``project_name=`` kwarg to compile_flow.
 
@@ -360,7 +403,8 @@ class TestRunPipelineConfigSurfaceContract:
     """Contract: run_pipeline opens with the in-container configuration load-and-amend.
 
     The signature is UNCHANGED — ``(name, project_dir, user_dir, port,
-    workflow, no_workflow, skip, parallel)`` — while the module surface
+    workflow, no_workflow, skip, parallel)`` with ``fail_on_error`` appended
+    last — while the module surface
     grows the load-and-amend names (``load_project_config`` from the config
     facade, ``ConfigHooks`` from the config hooks zone) and the launch-layer
     names (``decode_extra_env`` from the docker facade, ``write_afm_config``
@@ -370,7 +414,7 @@ class TestRunPipelineConfigSurfaceContract:
     """
 
     def test_run_pipeline_signature_unchanged_with_config_surface(self) -> None:
-        """The public signature stays the 9-parameter contract shape."""
+        """The public signature stays the 10-parameter contract shape."""
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
 
@@ -384,6 +428,7 @@ class TestRunPipelineConfigSurfaceContract:
             "profile",
             "skip",
             "parallel",
+            "fail_on_error",
         ]
 
     def test_run_pipeline_module_references_the_load_and_amend_surface(self) -> None:
