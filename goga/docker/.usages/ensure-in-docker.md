@@ -17,6 +17,10 @@ runpy entrypoints designed to run only inside the goga Docker container).
 - `ensure_in_docker() -> None` — read the `GOGA_DOCKER` env marker; when it is
   not exactly `"1"`, print a clear message to stderr and exit the process with
   code 1. Returns normally (no value) when the marker is present.
+- `is_in_docker() -> bool` — non-terminal query over the same marker:
+  True exactly when `GOGA_DOCKER == "1"`. For dual-surface launchers
+  that run BOTH on the host and inside the goga image and must branch
+  between substrates instead of refusing.
 
 ## Typical usage
 
@@ -61,12 +65,26 @@ From the host (no `GOGA_DOCKER` marker):
 The exact set of entrypoints that use this guard is defined by those
 entrypoints' own contracts, not by this practice.
 
+### Branching on the marker (dual-surface launcher)
+
+    from .docker import is_in_docker
+
+    if is_in_docker():
+        # direct in-container execution: spawn the composed
+        # in-container command as a child process
+        ...
+    else:
+        # host: docker run with the same composed command
+        ...
+
 ## Preconditions
 
 - The entrypoint that calls `ensure_in_docker()` MUST be an in-container
   entrypoint — one designed to run only inside the goga Docker image. Host-side
   launchers MUST NOT call this guard; they run on the host where `GOGA_DOCKER`
   is absent by design.
+- `is_in_docker()` is the marker surface dual-surface launchers use; it never
+  refuses.
 
 ## Side effects
 
@@ -87,3 +105,6 @@ entrypoints' own contracts, not by this practice.
   bypass the refusal — the guard is terminal by design.
 - Do NOT replace the env marker check with a softer signal (logging a warning
   and continuing). The whole point is to fail fast.
+- Do NOT use `is_in_docker()` to silently skip work — branch between two
+  complete substrates; an option the chosen substrate cannot honor must fail
+  with an error naming the option, not vanish.

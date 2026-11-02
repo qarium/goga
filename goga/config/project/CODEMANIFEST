@@ -1,8 +1,12 @@
+Imports:
+  - Types:
+      - parse_env_yaml
+    Usages:
+      - env-variables
+    From: goga/config/yaml
+
 Usages:
   convention: .goga/usages/conventions.md
-  yaml: |
-    Use yaml.safe_load() to parse .goga/config.yml.
-    Requires the PyYAML library.
 
 Annotations: |
   The `convention` practice is used for:
@@ -17,7 +21,11 @@ Annotations: |
   dataclasses module — NOT pydantic (pydantic is treated as tech debt in this
   project).
 
-  Use the `yaml` practice for parsing .goga/config.yml via yaml.safe_load().
+  Load .goga/config.yml through `parse_env_yaml` — the environment-aware
+  loader resolving !ENV NAME references at load time (per
+  `env-variables`). Field validation applies verbatim: a resolved value
+  is a plain string, and each field's established emptiness and type
+  semantics hold.
 
   The cell enforces structural validation only; semantic validation is
   deferred to the owning consumers.
@@ -42,7 +50,11 @@ Annotations: |
 
     Algorithm:
     1. Locate .goga/config.yml in the project root
-    2. Parse the YAML via the `yaml` practice
+    2. Parse the YAML via `parse_env_yaml` — the environment-aware
+       loader; !ENV NAME scalars resolve
+       to plain strings at load time (unset resolves to ""); yaml errors,
+       including constructor errors of malformed tag use, propagate
+       unchanged through the library's error machinery
     3. Validate the parsed document is a mapping; raise FileNotFoundError when
        the file is absent/empty, ValueError when it is not a mapping
     4. Extract and validate the top-level fields (language, image,
@@ -140,6 +152,12 @@ Annotations: |
       → ValueError); base_ref and the three sub-sections are structural
       string checks — the strategy whitelists, the template grammar, and
       the defaults belong to the consuming domain
+    - Environment references resolve at load time — a !ENV NAME scalar
+      yields the referenced variable's value as a string; an unset
+      variable yields "", which each field's own emptiness semantics
+      treats exactly like an authored empty string (the agent fields
+      resolve it to None; non-string fields reject it per their own
+      validation)
 
     Constraints:
     - Do not default image — None is a valid value, surface it to the caller
@@ -172,6 +190,8 @@ Annotations: |
       error — it passes through verbatim with no warning and no effect
     - The final `ProjectConfig` assembly MUST include topics
     - The final `ProjectConfig` assembly MUST include lint
+    - Do not resolve !ENV references in this cell — loading goes
+      through `parse_env_yaml`; no local tag handling exists
 
 "ProjectConfig(language: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None, topics: TopicsConfig | None = None)":
   location: config.py

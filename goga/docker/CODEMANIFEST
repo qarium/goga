@@ -25,6 +25,22 @@ Annotations: |
   `docker_build_if_not_exist`; the image-version probe `docker_image_goga_version`;
   and the stateful `DockerRunner` (container launching).
 
+  The in-image marker surface is two routines: the terminal guard
+  `ensure_in_docker` for entrypoints that run ONLY inside the goga image
+  (refusal exits the process), and the non-terminal predicate
+  `is_in_docker` for dual-surface launchers that BRANCH between the
+  docker substrate and direct in-container execution without refusing
+  anything. Both read the same marker — GOGA_DOCKER == "1" — and
+  nothing else; no further detection heuristics exist.
+
+  The execution-substrate surface is the same pairing from the executor
+  side: `DockerRunner` runs a composed command through docker run on the
+  host, and `run_direct` runs the SAME composed command as a child
+  process of the current environment inside the image. The two executors
+  share one contract shape — the caller composes argv and the env layer,
+  the executor streams output, forwards SIGTERM/SIGINT, and returns the
+  child's exit code verbatim; only the substrate differs.
+
   `docker_update` is the single --update decision point (force refresh — build
   when a Dockerfile is declared, else pull). `docker_build_if_not_exist` is its
   complement: a first-run safety net that builds the local image only when it is
@@ -124,6 +140,40 @@ Annotations: |
       the "GOGA_DOCKER" marker
     - Do NOT return an error value — the routine returns only in the in-container
       case; the host case terminates the process
+
+"is_in_docker() -> flag: bool":
+  location: env.py
+  annotations: |
+    Non-terminal in-image marker query: True only when the process runs
+    inside the goga Docker image (the "GOGA_DOCKER" marker equals "1").
+    The branching counterpart of the terminal guard `ensure_in_docker` —
+    dual-surface launchers call this to choose the execution substrate
+    (docker run on the host, direct child execution in the image)
+    without refusing to run.
+
+    `flag`: True when "GOGA_DOCKER" equals "1"; False for every other
+       value including unset
+
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Read the "GOGA_DOCKER" environment variable
+    2. Return True when the value is exactly "1"; False for every other
+       value including unset
+
+    Requirements:
+    - Pure query — no output, no process termination, no filesystem or
+      subprocess work
+    - The marker rule is shared with `ensure_in_docker`: exactly
+      GOGA_DOCKER == "1" means in-image; nothing else is consulted
+    - Both branches (True/False) are covered by tests
+
+    Constraints:
+    - Do not terminate the process or print — refusal belongs to
+      `ensure_in_docker`
+    - Do not read any environment variable besides "GOGA_DOCKER"
+    - Do not cache the value — callers may test the marker at any moment
 
 "encode_extra_env(entries: list[str]) -> value: str":
   location: extra_env.py
@@ -650,6 +700,59 @@ Annotations: |
         of the work container remains the only return value; a check
         refusal is an exceptional exit, not a return value
 
+"run_direct(argv: list[str], env: dict[str, str] | None = None) -> exit_code: int":
+  location: runner.py
+  annotations: |
+    Direct-execution substrate: spawn `argv` as a child process of the
+    current environment and return its exit code verbatim. The
+    in-container counterpart of the `DockerRunner` run method — a
+    dual-surface launcher that composed its command line and env
+    contract once executes them through this routine when `is_in_docker`
+    resolved True, instead of through docker run.
+
+    `argv`: the full child command line INCLUDING the program token
+            (e.g. ["python3", "-m", "goga.pipeline", "run", ...]) —
+            the same composed argv the docker substrate hands to the
+            image entrypoint, prefixed with the entrypoint program
+    `env`: optional env layer applied on top of the inherited process
+           environment for this child only — the caller composes it from
+           the SAME composition code that produces the env-file lines of
+           the docker substrate; None runs the child with the inherited
+           environment untouched
+    `exit_code`: the child's exit code, returned verbatim
+
+    Algorithm:
+    1. Compose the child environment: start from the inherited process
+       environment and apply the `env` layer on top for this child only
+       — the caller's own process environment stays untouched
+    2. Install a SIGTERM/SIGINT handler BEFORE the spawn: forward the
+       signal to the child (so it terminates) and exit the process with
+       128 + signum
+    3. Spawn `argv` as a child process with the composed environment,
+       streaming stdout/stderr (inherited stdio)
+    4. Wait for the child; in finally restore the previous signal
+       handlers
+    5. Return the child's exit code verbatim
+
+    Requirements:
+    - Output streams live — the child's stdout/stderr go to the
+      caller's stdio, byte-identical to what the docker substrate
+      streams from the container
+    - SIGTERM/SIGINT terminates the child (the signal is forwarded) and
+      exits the process with 128 + signum (130 SIGINT, 143 SIGTERM)
+    - The previous signal handlers are always restored
+    - The child's exit code is always returned when no signal arrived
+
+    Constraints:
+    - Do not perform the docker-CLI check, image acquisition, or the
+      version consistency check — those gate the DOCKER substrate only;
+      the direct path already runs inside the goga image
+    - Do not write the caller's process environment — the layer applies
+      to the child subprocess only
+    - Do not compose the env layer or the argv — the caller owns both
+      compositions (one composition, two substrates)
+    - Do not print or log any value of the `env` layer
+
 ---
 
 Author: Goga
@@ -662,14 +765,17 @@ Description: |
   engine-variable carriage of the CLI environment entries across the docker
   boundary, as well as the home-profiles bundle carriage across the same
   boundary (the GOGA_HOME_PROFILES engine variable). The body holds
-  the guard routine `ensure_in_docker`; the stateful `DockerBuilder` plus the
+  the guard routine `ensure_in_docker` and the non-terminal marker predicate
+  `is_in_docker`; the stateful `DockerBuilder` plus the
   `docker_pull`, `docker_update`, and `docker_build_if_not_exist` routines
   (image acquisition — `docker_update` refreshes under `--update`: build when a
   project Dockerfile is declared, else pull; `docker_build_if_not_exist` is the
   first-run safety net that builds the local image when it is absent and a
   Dockerfile is declared); the `docker_image_goga_version` probe (a short-lived
-  capture container reading the goga version inside an image); and the stateful
+  capture container reading the goga version inside an image); the stateful
   `DockerRunner` (container launching + lifecycle, gated before every launch by
-  the host-side version consistency check). The image-acquisition routines and
+  the host-side version consistency check); and `run_direct` — the
+  direct-execution substrate counterpart that runs the same composed command
+  as a child process inside the image. The image-acquisition routines and
   the probe take primitives; the runner applies the version check imported from
   goga/version.

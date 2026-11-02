@@ -11,7 +11,7 @@ composed launch layer, and emits the run-completion facts on its return.
 ## Signature
 
 run_pipeline(name, project_dir, user_dir, port, workflow=None, no_workflow=False, profile=None,
-skip=None, parallel=None) -> exit_code
+skip=None, parallel=None, fail_on_error=False) -> exit_code
 
 - `name: str` — pipeline name without extension
 - `project_dir: Path` / `user_dir: Path` — absolute project / user pipeline directories
@@ -24,6 +24,8 @@ skip=None, parallel=None) -> exit_code
   (`--profile` > `GOGA_PROFILE` > workflow default)
 - `skip: list[str] | None` — stage names to skip; None and empty both mean no skip
 - `parallel: int | None` — cap on concurrently executing stages; None means unbounded
+- `fail_on_error: bool` — fail-fast decision of the run; forwarded to `run_flow` as
+  `exit_on_fail`
 
 ## Configuration: load-and-amend
 
@@ -38,8 +40,9 @@ proxy, hosts) of the effective configuration are applied-but-unconsumed here —
 
 Before the launch the coordination writes the whole afm configuration file via `write_afm_config`: the client command
 resolved from the effective `pipeline.agent` — written only when an agent resolves, so per-stage workflow agents or
-afm's own defaults cover the absent global default — plus the four static fields (theme, open_browser, proxy.enabled,
-prompts_dir) at the fixed in-container home path (`/home/goga/.afm/config.yaml`, independent of `AFM_DIR`).
+afm's own defaults cover the absent global default — plus the five static fields (theme, open_browser, proxy.enabled,
+prompts_dir, add_stage.enabled=false — the dashboard stage-addition is off for goga-managed runs) at the fixed
+in-container home path (`/home/goga/.afm/config.yaml`, independent of `AFM_DIR`).
 
 The write also materializes the collaboration plumbing when the run
 carries collaboration authoring: generated `collaboration.profiles`
@@ -150,6 +153,13 @@ arrive as parameters from the CLI.
           → run_pipeline(…, parallel=N)
             → run_flow(…, max_parallel=N)
               → afm run --port PORT --max-parallel N <flow>
+
+    goga pipeline NAME --fail-on-error
+      → docker run|direct … -m goga.pipeline run NAME --port PORT --fail-on-error
+        → pipeline_cli: fail_on_error = True
+          → run_pipeline(…, fail_on_error=True)
+            → run_flow(…, exit_on_fail=True)
+              → afm run --port PORT --exit-on-fail <flow>
 
     goga pipeline NAME -e KEY=V
       → docker run … -m goga.pipeline run NAME --port PORT

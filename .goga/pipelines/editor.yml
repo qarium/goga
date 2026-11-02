@@ -1,5 +1,7 @@
 name: Editor
 description: "Make changes in the project by request"
+
+repetable: true
 ---
 
 - name: worker

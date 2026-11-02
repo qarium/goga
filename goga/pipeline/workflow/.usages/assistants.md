@@ -20,14 +20,28 @@ run start and reachable by name for the whole run:
 | `prompt` | str | — | the assistant's instruction |
 | `skills` | list[str] | — | the assistant's own skills |
 | `agent` | str | global agent | a goga agent name; resolved implicitly at delivery |
-| `delegate` | bool | `false` | permission to create child tasks |
+| `delegate` | bool | not authored | explicit false is an authored opt-out; omitted is inheritable |
 | `env` | map[str,str] | — | delivered through a generated closure |
 
-At least one of `prompt` or `skills` is required per entry. The entry key is
+An entry MAY carry neither `prompt` nor `skills` — an override-style
+entry that configures delivery fields (`agent`, `delegate`, `env`) and
+takes its content from a tool-delivered entry of the same name. The
+EFFECTIVE entry must resolve `prompt` or `skills` — enforced at
+compilation with an error naming the assistant and its authoring site;
+an override naming an assistant no tool delivers stops compilation.
+The entry key is
 the assistant name: it matches `[A-Za-z0-9._-]`, `assistant` is reserved,
 and it is unique across the catalog and every inline declaration. `name`,
 `gate`, and `when` never appear in a catalog entry value — `name` is the key
 itself, and `gate`/`when` are attachment parameters.
+
+## Explicit empty values (overrides)
+
+`skills: []` and `env: {}` are authored overrides that CLEAR the field —
+they are not absence. `delegate:` omitted is absence (the value may
+flow from a tool-delivered entry); `delegate: false` is an explicit
+opt-out. Absence vs empty decides what a tool delivery may still
+supply.
 
 ## The top-level `delegation:` block
 
@@ -74,8 +88,10 @@ stages:
 its engagement timing is authored explicitly. `gate` is optional.
 
 A value carrying any key beyond `gate`/`when` is a full inline declaration —
-it accepts the catalog field set plus `gate`/`when` and requires at least one
-of `prompt` or `skills`. A value carrying only `gate`/`when` is a reference:
+it accepts the catalog field set plus `gate`/`when` and may carry neither
+`prompt` nor `skills` — an override-style inline declaration (the
+effective-content requirement is enforced at compilation). A value
+carrying only `gate`/`when` is a reference:
 the agent, prompt, skills, delegate permission, and env come from the
 catalog entry; only `gate` and `when` are the attachment's own.
 
@@ -125,7 +141,6 @@ stages:
 | `assistants:` non-mapping (a list, a string, a scalar) | non-mapping assistants block in workflow; author the map form keyed by assistant name |
 | catalog entry value non-mapping | non-mapping assistant entry in workflow.assistants.NAME |
 | unknown catalog key (incl. `name`, `gate`, `when`) | unknown key in workflow.assistants.NAME: KEY; valid keys: prompt, skills, agent, delegate, env |
-| no `prompt` and no `skills` | assistant NAME requires at least one of prompt or skills |
 | `delegation:` non-mapping | non-mapping delegation block in workflow |
 | unknown `delegation:` key | unknown key in workflow.delegation: KEY; valid keys: depth, max_tasks |
 | `depth` not int / < 0 | a structural error |
@@ -141,7 +156,9 @@ stages:
 | `assistants` in an extend-entry | assistants is forbidden in workflow.extend.NAME |
 
 Compilation-time errors (raised by the compiler, not the parser): an
-unknown assistant reference; an attachment on a script-only or
+unknown assistant reference; an effective entry resolving no prompt and
+no skills (including an override naming an assistant no tool delivers);
+an attachment on a script-only or
 planning-only stage; the same assistant attached twice to one stage by a
 programmatic contribution.
 
@@ -154,10 +171,11 @@ programmatic contribution.
   authored.
 - Do not author `assistants` inside an extend-entry — the attachments of a
   new stage are authored in the stages block by its name.
-- Do not rely on engine defaults: `gate`, `delegate`, and `max_tasks` are
-  materialized by the parser, not silently inherited; `when` is authored on
-  every attachment and the compiled engagement value is always written
-  explicitly.
+- Do not rely on engine defaults: `gate` and `max_tasks` are materialized
+  by the parser; `delegate` omitted is None — inheritable from a delivered
+  base at the overlay merge, explicit false is an authored opt-out; `when`
+  is authored on every attachment and the compiled engagement value is
+  always written explicitly.
 - Do not expect the parser to resolve references — a name that matches no
   catalog entry and no inline declaration of the effective document is a
   compilation error, so a contributor may add catalog entries a workflow

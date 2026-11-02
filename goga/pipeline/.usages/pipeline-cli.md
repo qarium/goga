@@ -21,7 +21,7 @@ docker launcher through the runpy entrypoint in `__main__.py`.
 
 ### run
 
-`run NAME [--info] [-w WORKFLOW | --no-workflow] [-p PROFILE] [-s NAME]... [--port PORT] [--parallel N]`
+`run NAME [--info] [-w WORKFLOW | --no-workflow] [-p PROFILE] [-s NAME]... [--port PORT] [--parallel N] [--fail-on-error]`
 
 - NAME (positional, required) — pipeline name without extension.
 - `--info`/`-i` (flag) — print the card instead of running: `name:` and `description:` field
@@ -43,6 +43,9 @@ docker launcher through the runpy entrypoint in `__main__.py`.
 - `--port PORT` (int) — dashboard port, allocated by the host launcher. Required only when
   `--info` is absent; ignored in info mode.
 - `--parallel N` (int, optional) — max concurrently executing stages; run mode only.
+- `--fail-on-error` (flag) — fail-fast: a failed stage ends the run
+  with a non-zero engine exit; binds in both modes, effective in run
+  mode only (ignored with --info).
 
 Dispatch: run without `--info` → `run_pipeline(NAME, project_dir, user_dir, PORT,
 workflow=<WF or None>, no_workflow=<bool>, profile=<P or None>, skip=<names or None>,

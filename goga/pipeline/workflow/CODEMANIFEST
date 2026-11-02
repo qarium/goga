@@ -98,7 +98,7 @@ Annotations: |
   attachment, unknown keys, the assistant-name grammar, name uniqueness across
   the catalog and every inline declaration, assistants forbidden inside
   extend-entries) and extracts them into the document model with materialized
-  defaults (delegate false, gate false, max_tasks 50 whenever the delegation
+  defaults (delegate None, gate false, max_tasks 50 whenever the delegation
   block is authored). This cell performs NO collaboration logic — it resolves
   no attachment references, derives no profile ids, maps no gate or engagement
   values, and emits no team or stage-assistant entries; the consumers consume
@@ -108,8 +108,8 @@ Annotations: |
   declaration fields under the assistant's name, no gate/when), a full inline
   declaration on a stage (the catalog field set plus gate/when), and a
   reference (a value carrying only gate/when). An attachment value that
-  carries any key beyond gate/when is a full inline declaration and requires
-  at least one of prompt or skills; a value carrying only gate/when is a
+  carries any key beyond gate/when is a full inline declaration; a value
+  carrying only gate/when is a
   reference and requires nothing further — the reference resolves against the
   assistant names of the same document at compilation. The assistant name is
   the map key: an inner name key of an entry value is an unknown key, and a
@@ -119,11 +119,25 @@ Annotations: |
   optional on an attachment and materializes false; gate and when are unknown
   keys of the catalog.
 
+  A full declaration — catalog or inline — MAY carry no prompt and no
+  skills: an override-style entry that configures delivery fields
+  (agent, env, delegate) and inherits its content from a tool-delivered
+  entry of the same name at the overlay merge; the effective-content
+  requirement (prompt or skills) is enforced at COMPILATION, not here.
+
   Assistant names are globally unique across the workflow-file: the
   catalog and every inline declaration form one namespace, and a repeated
   declaration name is a structural error. Every authored name matches
   [A-Za-z0-9._-]; the name "assistant" is rejected — its dashboard handle
   is reserved by the engine.
+
+  The model preserves field presence for the override fields: an
+  explicitly authored empty skills list or env map is carried as an
+  explicit empty value (an override that clears), never normalized to
+  absence; delegate carries None when not authored and the authored
+  boolean otherwise. Per-stage env of WorkflowStage keeps its own
+  empty-equals-absence rule — the presence discipline applies to the
+  assistant fields only.
 
   This cell additionally owns the contributor-profile zone of the workflow
   path: profile resolution (project-then-home lookup, project wins on the
@@ -433,7 +447,7 @@ Annotations: |
       The project-memory access mode — one of "r", "w", "rw"; exists only for
       the "alignment" method, None for "reflect".
 
-"WorkflowAssistant(name: str, prompt: str | None = None, skills: list[str] | None = None, agent: str | None = None, delegate: bool = False, env: dict[str, str] | None = None, gate: bool = False, when: str = \"checkpoints\")":
+"WorkflowAssistant(name: str, prompt: str | None = None, skills: list[str] | None = None, agent: str | None = None, delegate: bool | None = None, env: dict[str, str] | None = None, gate: bool = False, when: str = \"checkpoints\")":
   location: workflow_assistant.py
   annotations: |
     Data model of one assistant authoring entry — a named helper
@@ -448,14 +462,19 @@ Annotations: |
              declaration of one workflow-file
     `prompt`: the assistant's instruction text, or None when not authored
     `skills`: list of the assistant's own skill names, or None when not
-              authored
+              authored — an authored empty list is carried as an
+              explicit override that clears, never normalized to absence
     `agent`: agent name the delivery resolves into the assistant's launch
              command, or None — None resolves to the effective global
              pipeline agent
-    `delegate`: whether the assistant may create child tasks; materialized
-                false when not authored
+    `delegate`: whether the assistant may create child tasks — None when
+                not authored (the value is inheritable: the overlay
+                merge lets a delivered base supply it), False when
+                explicitly authored off, True when authored on
     `env`: the assistant's environment instruction (string map, literal
-           and/or rendered); an empty map equals absence — None
+           and/or rendered); None when not authored — an authored empty
+           map is an explicit override that clears, never normalized
+           to absence
     `gate`: whether the assistant's verdict must pass before the stage may
             finish; materialized false (advisory) when not authored
     `when`: when the assistant engages — one of "start", "checkpoints",
@@ -474,6 +493,12 @@ Annotations: |
       construction paths that carry no attachment authoring (per the `when`
       parameter annotation); field order is fixed: name, prompt, skills,
       agent, delegate, env, gate, when
+    - delegate defaults to None (NOT False) — an absent key and an
+      explicit delegate: false are DIFFERENT instructions and must stay
+      distinguishable to the overlay merge
+    - An authored empty skills list and an authored empty env map are
+      carried as explicit empty values — never normalized to None at
+      parse time
 
     Constraints:
     - Do not validate the name grammar, types, or value domains here —
@@ -492,12 +517,16 @@ Annotations: |
     "agent -> str | None": |
       Agent name resolved at delivery into the launch command; None
       resolves to the effective global pipeline agent.
-    "delegate -> bool": |
-      Whether the assistant may create child tasks; false when not
-      authored.
+    "delegate -> bool | None": |
+      Whether the assistant may create child tasks. None when not
+      authored — an inheritable value the overlay merge resolves from a
+      delivered base; the explicit False is an authored opt-out; True is
+      the authored permission. Downstream consumers materialize False
+      when the effective value stays None.
     "env -> dict[str, str] | None": |
-      The assistant's environment instruction (string map); None when not
-      specified (an empty map equals absence).
+      The assistant's environment instruction (string map); None when
+      not authored — an authored empty map is an explicit override
+      that clears.
     "gate -> bool": |
       Whether the assistant's verdict holds stage completion; false
       (advisory) when not authored.
@@ -903,15 +932,18 @@ Annotations: |
         name, gate, and when) raises "unknown key in
         workflow.assistants.NAME: KEY; valid keys: prompt, skills, agent,
         delegate, env". prompt and agent (when present) are str; skills
-        (when present) is a list[str]; delegate (when present) is a bool;
-        env (when present) is a str→str map with an empty map equal to
-        absence. At least one of prompt or skills must be present —
-        otherwise "assistant NAME requires at least one of prompt or
-        skills". Every entry key must match [A-Za-z0-9._-] and must not be
-        "assistant" ("assistant name is reserved"); a key repeated across
-        the catalog and any inline declaration raises "duplicate assistant
-        name: NAME". Build a `WorkflowAssistant` per entry with the key as
-        name and delegate materialized false
+        (when present) is a list[str] (an authored empty list is carried
+        as an explicit empty value — an override that clears); delegate
+        (when present) is a bool (absent builds None — not False); env
+        (when present) is a str→str map (an authored empty map is
+        carried as an explicit empty value — NOT normalized to absence).
+        An entry may carry none of prompt/skills — an override-style
+        entry; the effective-content requirement is enforced at
+        compilation. Every entry key must match [A-Za-z0-9._-] and must
+        not be "assistant" ("assistant name is reserved"); a key repeated
+        across the catalog and any inline declaration raises "duplicate
+        assistant name: NAME". Build a `WorkflowAssistant` per entry
+        with the key as name
     6.6. For the delegation block (when present): the block must be a dict
         (otherwise "non-mapping delegation block in workflow"); the key set
         is depth, max_tasks — an unknown key raises "unknown key in
@@ -930,7 +962,11 @@ Annotations: |
         start/checkpoints/finish. gate (when present) must be a bool. A
         value whose keys are within {gate, when} is a reference; a value
         carrying any further key is a full inline declaration (the catalog
-        field set plus gate and when; at least one of prompt or skills).
+        field set plus gate and when) — it MAY carry no prompt and no
+        skills (an override-style inline declaration); the
+        effective-content requirement is enforced at compilation. The
+        empty-preservation and delegate rules of 6.5 apply verbatim to
+        the inline field values.
         The name rules of 6.5 apply to every entry key; the duplicate-name
         rule counts an inline declaration against the catalog and every
         other inline declaration. Build a `WorkflowAssistant` per entry
@@ -1036,9 +1072,9 @@ Annotations: |
       be present
     - A workflow consisting of the build block alone is valid
     - The assistants catalog grammar: a name-keyed mapping; each entry value
-      carries the key set prompt, skills, agent, delegate, env; at least one
-      of prompt or skills is present; delegate is a bool; env is a str→str
-      map (an empty map equals absence); gate and when are attachment keys —
+      carries the key set prompt, skills, agent, delegate, env; delegate is
+      a bool; env is a str→str map (an authored empty map is an explicit
+      override); gate and when are attachment keys —
       authoring either in the catalog is an unknown-key structural error;
       name is the map key — an inner name key is an unknown key
     - The delegation block grammar: the key set depth, max_tasks; depth is
@@ -1047,9 +1083,15 @@ Annotations: |
     - The stage attachment grammar: a name-keyed mapping; an empty map
       equals absence (None); each entry value is a mapping whose keys within
       {gate, when} form a reference and whose any further key forms a full
-      inline declaration (the catalog key set plus gate and when; at least
-      one of prompt or skills); when is required on every entry and is one
-      of start/checkpoints/finish; gate is a bool
+      inline declaration (the catalog key set plus gate and when); when is
+      required on every entry and is one of
+      start/checkpoints/finish; gate is a bool
+    - An assistant entry (catalog or full inline) without prompt and
+      without skills parses successfully — override-style authoring; the
+      requirement that the EFFECTIVE entry resolve content is the
+      compiler's structural check, not a parse rule
+    - For assistant fields, presence is preserved: skills [] and env {}
+      are explicit empty overrides; delegate absent is None
     - The repeat block grammar: a mapping whose key set is max_cycles,
       keep_runs; each value is an int >= 0 (a boolean is not an integer); a
       scalar block value is a structural error; an empty block equals

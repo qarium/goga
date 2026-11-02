@@ -90,8 +90,10 @@ Usages:
     Three subcommands: list (with an optional --info flag), run (a required
     name, an optional --info flag, the workflow flags -w/--workflow NAME and
     --no-workflow, the profile flag -p/--profile NAME, a repeatable
-    -s/--skip NAME — all four available with and without --info, --port
-    required only without --info, and an optional --parallel N), and hook
+    -s/--skip NAME, and a --fail-on-error flag — all five available with
+    and without --info (fail-on-error takes effect in run mode only),
+    --port required only without --info, and an optional --parallel N
+    (run mode only)), and hook
     (no options — the afm-facing machinery entry receiving the event through
     the process environment and stdin).
   cli_entrypoint: |
@@ -694,7 +696,7 @@ Annotations: |
       `parse_dsl` read of step 3 serves the amendment facts only
     - Do not reorder stages beyond `order_stages`
 
-"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, workflow: str | None = None, no_workflow: bool = False, profile: str | None = None, skip: list[str] | None = None, parallel: int | None = None) -> exit_code: int":
+"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, workflow: str | None = None, no_workflow: bool = False, profile: str | None = None, skip: list[str] | None = None, parallel: int | None = None, fail_on_error: bool = False) -> exit_code: int":
   location: run_pipeline.py
   annotations: |
     Load and amend the project configuration, resolve a pipeline name to an
@@ -738,6 +740,11 @@ Annotations: |
                 `run_flow` as its max_parallel argument. When None (default) —
                 afm runs unbounded (run_flow omits --max-parallel). Read from
                 the in-container CLI --parallel flag
+    `fail_on_error`: the CLI fail-fast decision from the --fail-on-error
+                flag of the in-container run subcommand; forwarded to
+                `run_flow` as its exit_on_fail argument — a failed stage
+                ends the run with the engine's failure exit code.
+                False (default) changes nothing
     `exit_code`: 0 on success, non-zero on error (missing pipeline, missing
                  binary, afm failure, structural DSL error, workflow parse
                  error, materialization error, configuration load or delivery
@@ -866,7 +873,8 @@ Annotations: |
         composition, the work identity, the statuses, and the runtime dir as
         a posix string
     21. Launch afm via `run_flow` with the compiled flow-file path, `port`,
-        max_parallel=`parallel`, and the composed layer as its env parameter
+        max_parallel=`parallel`, exit_on_fail=`fail_on_error`, and the
+        composed layer as its env parameter
         — the process environment of the container stays untouched
     22. On every return of `run_flow` — zero, non-zero, and spawn failures
         alike — recompute the work statuses at the completion moment and
@@ -899,6 +907,8 @@ Annotations: |
       bare name or the DSL path
     - Always forward `port` to `run_flow`; forward `parallel` (None
       propagates — no --max-parallel flag)
+    - Always forward fail_on_error to run_flow (exit_on_fail); False
+      propagates — no flag, no env variable
     - A configuration load failure and a configuration delivery failure fire
       no events — the return happens before the pipeline checkpoints; afm
       never launches on a delivery failure
@@ -994,7 +1004,7 @@ Annotations: |
   annotations: |
     Write the whole afm configuration file in-container before the afm
     launch: the agent client command resolved from the effective pipeline
-    agent, the four static launcher-side fields, goga's own observer hook
+    agent, the five static launcher-side fields, goga's own observer hook
     entry, and the collaboration plumbing — the generated helper profiles
     and the whole-run task budget.
 
@@ -1028,9 +1038,11 @@ Annotations: |
        absolute wrapper path (never a bare agent name) — written only when
        an agent resolved, omitted otherwise so per-stage workflow agents
        or the binary's own defaults cover the absent global default; the
-       four static fields — the dashboard theme, the disabled browser
-       launch, the disabled internal proxy provider, and the in-container
-       prompts directory; and the observer hook entry — the stable id
+       FIVE static fields — the dashboard theme, the disabled browser
+       launch, the disabled internal proxy provider, the in-container
+       prompts directory, and the disabled dashboard stage-addition
+       (add_stage.enabled false — the stage set presented to the engine
+       stays exactly the compiled pipeline); and the observer hook entry — the stable id
        goga, the in-container hook command of this package's CLI, the
        all-events subscription, the inherited environment, and the afm
        default timeout and retries
@@ -1042,8 +1054,9 @@ Annotations: |
        2. For each referenced id, locate the assistant declaration by
           name in the workflow's assistant namespace — the catalog plus
           every full inline declaration of the stages block
-       3. Resolve each profile's command: when the declaration carries an
-          env instruction — validate every declared key as a legal
+       3. Resolve each profile's command: when the declaration carries
+          a NON-EMPTY effective env map (not None and not empty — an
+          explicitly cleared env is no env) — validate every declared key as a legal
           environment variable name BEFORE writing any file (an illegal
           key is one strict pre-run error naming the assistant and the
           key), generate the sh closure in a container-local temp
@@ -1054,7 +1067,7 @@ Annotations: |
           no agent resolves at all — one strict pre-run error naming the
           assistant and its authoring site (the catalog or the stage
           whose attachment declares it), raised before the file is
-          written
+          written; the effective delegate materializes False when None
        4. Write collaboration.profiles.<id> = {title: <name>, command:
           <resolved>, delegate: <declaration delegate>} — nothing else in
           the profile
@@ -1074,8 +1087,14 @@ Annotations: |
     - A generated profile carries exactly title, command, and delegate
     - collaboration.limits.max_tasks is written only when the workflow
       carries a delegation block
-    - The four static fields and the hook entry are constants — never
+    - The five static fields and the hook entry are constants — never
       configurable through the project configuration or the CLI
+    - add_stage.enabled false is written unconditionally on every launch
+      — the dashboard of a goga-managed run accepts no out-of-model stage
+      addition
+    - Assistant env delivery keys on a non-empty effective map only —
+      None and {} both mean "no closure"; delegate materializes False
+      when the effective value is None
     - The hook entry declares no secret environment references of its own
     - The content is serialized programmatically — never hand-escaped as a
       string
@@ -1420,7 +1439,8 @@ Annotations: |
          --profile/-p NAME flag, and a repeatable
          --skip/-s NAME flag (all four available with and without --info);
          a --port PORT integer required only when --info is absent; an
-         optional --parallel N integer
+         optional --parallel N integer; and a --fail-on-error store-true
+         flag
        - hook: no options — the afm-facing machinery entry; the event
          arrives through the process environment and stdin
     2. Parse argv; on argparse error exit with code 2
@@ -1442,7 +1462,7 @@ Annotations: |
          indented "title:" field line; return 0
        - run without --info — call `run_pipeline` with name, port, the parsed
          workflow flags, the parsed profile value, the parsed skip names,
-         and parallel; return its exit
+         parallel, and the parsed fail_on_error value; return its exit
          code
        - hook — call `run_hook` and return its exit code
     5. Render an operation failure as a clean readable message to stderr (no
@@ -1453,6 +1473,9 @@ Annotations: |
       --no-workflow, --profile/-p NAME, the repeatable --skip/-s NAME, and
       --parallel N; the workflow, profile, and skip flags bind in both
       info and run modes
+    - The run subcommand accepts --fail-on-error; it binds in both info
+      and run modes (ignored in info mode) — the same surface pattern as
+      the workflow, profile, and skip flags
     - --port is an integer option required only when --info is absent; a
       missing --port without --info is an argparse-style error (exit 2);
       --port is ignored in info mode

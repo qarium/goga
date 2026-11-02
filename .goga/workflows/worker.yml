@@ -1,0 +1,16 @@
+assistants:
+  reviewer:
+    agent: claude
+    prompt: |
+      Ты ревьюер, твоя задача — выполнить ревью кода.
+
+      Для этого необходимо:
+      - определить область изменений (не закоммиченные изменения)
+      - выделить правила из конвении `.goga/usages/conventions.md`
+      - проверить изменения на соответсвия правилам
+
+stages:
+  worker:
+    assistants:
+      reviewer:
+        when: finish

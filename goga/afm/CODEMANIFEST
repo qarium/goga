@@ -29,7 +29,7 @@ Annotations: |
 
 ---
 
-"run_flow(flow_path: Path, port: int, max_parallel: int | None = None, env: dict[str, str] | None = None) -> exit_code: int":
+"run_flow(flow_path: Path, port: int, max_parallel: int | None = None, exit_on_fail: bool = False, env: dict[str, str] | None = None) -> exit_code: int":
   location: run_flow.py
   annotations: |
     Launch the external `afm` binary to run the pipeline file at the given
@@ -45,6 +45,16 @@ Annotations: |
                     When None — the "--max-parallel" flag is OMITTED and afm
                     applies its own default. Decided by
                     the caller; `run_flow` only passes it through.
+    `exit_on_fail`: when True, the launch argv carries the engine's
+                    explicit --exit-on-fail flag — a failed stage stops
+                    the run and the engine exits with code 1 (the
+                    engine's native capability, per the `afm` practice).
+                    When False (default), the flag is OMITTED and the
+                    engine's own failure semantics apply as without the
+                    flag. The
+                    flag is an argv flag — visible in the process
+                    listing — never the AFM_EXIT_ON_FAIL environment
+                    variable
     `env`: optional environment layer applied on top of the inherited process
            environment for the afm subprocess only — composed by the caller
            (the run coordination) as the effective task env layer with the CLI
@@ -57,13 +67,15 @@ Annotations: |
 
     Algorithm:
     1. Receive `flow_path` (absolute), `port` (integer), the optional
-       `max_parallel`, and the optional `env` layer
+       `max_parallel`, the optional `exit_on_fail`, and the optional `env`
+       layer
     2. Compose the afm subprocess environment: start from the inherited
        process environment and apply the `env` layer on top for this
        subprocess only — the caller's own process environment stays untouched
     3. Invoke "afm run" via the `afm` practice with --port <port>, the absolute
        `flow_path` as positional argument, — when `max_parallel` is not None —
-       the --max-parallel <max_parallel> flag, and the composed environment;
+       the --max-parallel <max_parallel> flag, — when `exit_on_fail` is
+       True — the --exit-on-fail flag, and the composed environment;
        resolve afm through PATH
     4. On binary-not-found (FileNotFoundError, per the `afm` practice) — return
        `exit_code` 127 with a clear message
@@ -82,6 +94,11 @@ Annotations: |
     - Forward `max_parallel` via --max-parallel ONLY when it is not None — None
       means "do not limit" and MUST omit the flag (never substitute a default
       such as 0)
+    - Forward exit_on_fail via the explicit --exit-on-fail argv flag ONLY
+      when True — False omits the flag, and the launch argv then carries
+      no fail-fast flag
+    - Exit-code propagation stays verbatim: with the flag set, a failed
+      stage surfaces as the engine's exit code 1 returned verbatim
     - Apply the `env` layer for the afm subprocess only — never write it into
       the caller's process environment
     - Never print or log any value of the `env` layer
@@ -94,6 +111,11 @@ Annotations: |
     - Do not allocate the port — the caller allocates it
     - Do not decide or default `max_parallel` — the caller decides; None ⇒ omit
       the flag, never infer a value
+    - Do not set the AFM_EXIT_ON_FAIL environment variable — the argv flag
+      is the single channel (visible in the process listing, per the
+      `afm` practice)
+    - Do not introduce new exit machinery — the engine's exit code
+      propagates verbatim
     - Do not compose the layer — the caller owns the layer composition; this
       routine only applies what it receives
     - Do not discover pipeline files — discovery is the caller's concern

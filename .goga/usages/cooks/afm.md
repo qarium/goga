@@ -53,6 +53,7 @@ Optional `run` flags:
 - `--max-parallel int` — maximum number of parallel stages (0 = no limit)
 - `--port int` — dashboard port (0 = use the value from `config.yaml`)
 - `--require-approval` — run in approval-required mode (each stage awaits explicit approval before executing)
+- `--exit-on-fail` — stop the run and exit with code 1 when a stage fails (verified on v2.0.9). The engine also honors the `AFM_EXIT_ON_FAIL` environment variable, but an integrator that wants the setting visible in the process listing passes the explicit argv flag instead.
 
 ### Key command — `list`
 
@@ -86,6 +87,7 @@ amended by the in-container `amend_config` delivery); a bare agent name is never
 | `server`        | str    | Server-side settings                                             |
 | `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga in-container run coordination always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
 | `theme`         | str    | Dashboard theme name. The goga in-container run coordination always writes `theme: goga`. |
+| `add_stage`     | map    | Governs the dashboard's stage-addition capability. A map with a single `enabled` (bool) key; `enabled: false` makes the run's stage set immutable from the dashboard (the "add stage" capability is off for the run). Verified on v2.0.9 (`yaml:"add_stage,omitempty"` with a nested `enabled` field). |
 
 ## Collaboration (afm v2.x)
 
