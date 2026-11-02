@@ -2062,9 +2062,9 @@ command (one composition, two sinks). These live in
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `tests/integration/test_direct_substrate_and_fail_on_error.py`
+- [x] Create `tests/integration/test_direct_substrate_and_fail_on_error.py`
   (the directory exists with `__init__.py`)
-- [ ] D5 chain end-to-end (mocked at the spawn boundary only):
+- [x] D5 chain end-to-end (mocked at the spawn boundary only):
   `GOGA_DOCKER=1`, a `tmp_path` project, the spawn monkeypatched;
   `goga pipeline deploy --fail-on-error` through CliRunner → the child
   argv carries `--fail-on-error` (the click flag reached the composed
@@ -2074,21 +2074,59 @@ command (one composition, two sinks). These live in
   then `run_flow` with the spawn mocked appends `--exit-on-fail` — each
   hop asserted in one test, proving the chain never silently drops the
   flag
-- [ ] D1 parity edge: the direct-path child argv equals
+  (`test_fail_on_error_threads_click_to_engine_argv` — four hops, each
+  fed the CAPTURED output of the previous hop: the exact child argv
+  `["python3", "-m", "goga.pipeline", "run", "deploy", "--port",
+  "50321", "--fail-on-error"]`, argv[3:] into `pipeline_cli`, the
+  forwarded call object into the real `run_pipeline`, the forwarded
+  `run_flow` call into the real `run_flow` with the spawn mocked — the
+  final engine argv exact-pinned
+  `["afm", "run", "--port", "50321", "--exit-on-fail", <flow path>]`;
+  two defects in the first draft observed live and fixed: the shadowed
+  submodules must resolve via `importlib.import_module` (a bare
+  `sys.modules` lookup KeyError'd at collection — the module was not yet
+  imported by the test's own import chain), and the Popen fake must be
+  SCOPED to the hop-1 invoke (`goga.docker.runner.subprocess` IS the
+  shared global subprocess module, so the hop-3 git-branch probe hit the
+  kwargs-less fake with a TypeError))
+- [x] D1 parity edge: the direct-path child argv equals
   `["python3", *_compose_run_args(...)]` and the direct-path env overlay
   equals the parse of the SAME `_compose_env_lines(...)` the host path
   writes — assert composition sharing, not re-derivation (the host-path
   env-file content test already pins the line set)
-- [ ] D3 chain (config → engine values): a `tmp_path` project whose
+  (`test_both_substrates_compose_the_same_argv_and_env_lines` — both
+  substrates driven over the SAME project with identical kwargs; the
+  direct argv equals `["python3", *_compose_run_args(...)]` computed
+  live in the assert AND equals the host arm's recorded DockerRunner
+  args; every key of `_env_overlay(host env-file lines)` lands in the
+  child env with its composed value (the overlay applies OVER the
+  inherited environment — PATH inherited verbatim); DockerRunner ran
+  exactly once — the host arm only)
+- [x] D3 chain (config → engine values): a `tmp_path` project whose
   `.goga/config.yml` carries `pipeline.agent: !ENV PIPELINE_AGENT` loads
   through `load_project_config` with the variable set — resolved into
   the effective config the run coordination consumes (the
   `parse_env_yaml` → validators → config chain)
-- [ ] Run validation: `.venv/bin/pytest tests/integration/ -v`, then the
+  (`test_env_referenced_agent_reaches_the_written_afm_config`,
+  parametrized set/unset: the loader resolves `"claude"`/`None`, and the
+  REAL `run_pipeline` (compile and launch mocked at their boundaries)
+  writes the afm config whose `client.command` carries
+  `/home/goga/bin/claude-as-claude.sh` — the resolved agent reached the
+  engine-configuration write; the unset arm asserts no `client` block)
+- [x] Run validation: `.venv/bin/pytest tests/integration/ -v`, then the
   full battery `.venv/bin/pytest tests/ -x`,
   `.venv/bin/ruff check goga/ tests/`,
   `.venv/bin/ruff format --check goga/ tests/`, `goga lint`,
   `goga schema`
+  (integration zone 327 passed 8 skipped; full battery 8013 passed 8
+  skipped — +4 over Task 12's 8009; ruff check clean and 1038 files
+  already formatted after one `--fix` reflow of the import block (the
+  `tests.*` first-party section) and one 121-char line split; goga lint
+  92 cells 0 errors; goga schema exit 0 with both
+  `goga/config/{project,tool} -> goga/config/yaml` edges (type
+  `parse_env_yaml`, usage `env-variables`) and both command-cell →
+  `goga/docker` edges carrying `is_in_docker`/`run_direct`/usage
+  `direct-runner`, no cycles)
 
 ---
 
@@ -2116,47 +2154,63 @@ command (one composition, two sinks). These live in
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is implemented in the correct `location`
   (the new `goga/config/yaml/loader.py` + `__init__.py`;
   `is_in_docker` in `goga/docker/env.py`; `run_direct` in
   `goga/docker/runner.py`; all changed entities in their files)
-- [ ] Every contract entity is accessible from its facade
+- [x] Every contract entity is accessible from its facade
   (`parse_env_yaml`, `is_in_docker`, `run_direct` in `__all__`,
   alphabetical)
-- [ ] Properties and methods match the declared API (the
+  (pinned by the facade/import contract tests of Tasks 2–3 and the
+  Validation Commands import probes)
+- [x] Properties and methods match the declared API (the
   `run_flow`/`run_pipeline`/`_compose_run_args`/container signatures
   gain their parameters with the declared defaults and positions)
-- [ ] Descriptions are reflected in behavior (presence discipline, the
+  (signature pins in the contract suites of Tasks 8, 10, 11 — exact
+  parameter order, defaults, annotations)
+- [x] Descriptions are reflected in behavior (presence discipline, the
   field-level override, position preservation, the content check, the
   substrate-scoped skips, the five-field discriminator in all four
   modules)
-- [ ] Contract dependencies are met (the two config cells import from
+  (the behavior suites of Tasks 5–7, 9, 11–12; the D5 chain, D1 parity,
+  and D3 chain pinned end-to-end by Task 13's integration tests)
+- [x] Contract dependencies are met (the two config cells import from
   `goga/config/yaml`; both command cells import `is_in_docker` /
   `run_direct` from `goga/docker`)
-- [ ] No re-export obligations exist (none declared)
-- [ ] Every coding task followed the TDD workflow (contract tests →
+  (observed in the Task-13 `goga schema` output: both
+  `goga/config/{project,tool} -> goga/config/yaml` edges and both
+  command-cell → `goga/docker` edges carrying the two routines and the
+  `direct-runner` usage)
+- [x] No re-export obligations exist (none declared)
+- [x] Every coding task followed the TDD workflow (contract tests →
   code → verification → logic tests → debugging → re-verification →
   lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior
+  (each task's checkboxes record the observed-red-first contract run)
+- [x] Contract tests and logic tests cover facade, API, and behavior
   within each coding task; all 33 design test scenarios exist (several
   parametrized — the boundary tables enumerate every boundary)
-- [ ] Integration tests exist for the cross-entity scenarios (Task 13:
+- [x] Integration tests exist for the cross-entity scenarios (Task 13:
   the D5 chain, D1 parity, D3 chain)
-- [ ] No package boundary was expanded (no new cells beyond the
+- [x] No package boundary was expanded (no new cells beyond the
   contracted `goga/config/yaml`; no cross-imports against the
   dependency order)
-- [ ] `CODEMANIFEST` files and `.usages/` files were not modified
+  (the Task-13 schema walk shows no cell edges beyond the contracted
+  set; `goga lint` counts exactly 92 cells — 91 plus the new yaml cell)
+- [x] `CODEMANIFEST` files and `.usages/` files were not modified
   (contract and practices are read-only for this plan)
-- [ ] All validation commands pass (the full battery green; `goga lint`
+  (git status at the Task-13 commit: only the new integration test file
+  and the plan file changed)
+- [x] All validation commands pass (the full battery green; `goga lint`
   0 errors; `goga schema` shows the new edges, no cycles)
-- [ ] Every Usages entry is mentioned in at least one task (`convention`
+  (8013 passed 8 skipped; lint 92/0; schema exit 0 — Task 13's run)
+- [x] Every Usages entry is mentioned in at least one task (`convention`
   — every task via the Mandatory Rules; `yaml_env` — Task 2; `afm` —
   Tasks 8, 9; `click` — Tasks 11, 12; `env-variables` — Task 4;
   `direct-runner` — Tasks 3, 11, 12, 13; the five unchanged
   docker-host practices — Tasks 11, 12)
-- [ ] The affected existing tests were migrated, not weakened (the
+- [x] The affected existing tests were migrated, not weakened (the
   per-task inventories; every re-derived assertion traceable to a
   contract)
-- [ ] The Mandatory Rules were enforced at every task boundary and every
+- [x] The Mandatory Rules were enforced at every task boundary and every
   local commit (style, tests, linters/formatters, REPL cycle; no
   `Co-Authored-By:` trailers)
