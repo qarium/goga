@@ -826,23 +826,32 @@ def _repeat_emission(header: PipelineHeader, workflow: WorkflowDocument | None) 
 
 
 def _is_assistant_declaration(entry: WorkflowAssistant) -> bool:
-    """Return ``True`` when ``entry`` is a declaration (a prompt or a skills list is authored).
+    """Return ``True`` when ``entry`` is a declaration (any of the five authoring fields is present).
 
     Args:
         entry: One attachment entry (or catalog entry) of the workflow. The
-            discriminator is PRESENCE, not truthiness — ``prompt: ""`` and
-            ``skills: []`` are authored values that make the entry a
-            declaration; a reference carries neither field.
+            discriminator is PRESENCE, not truthiness — ``prompt: ""``,
+            ``skills: []``, and ``env: {}`` are authored values that make
+            the entry a declaration; a reference carries none of the five
+            fields (``gate``/``when`` are attachment parameters, never
+            content).
 
     Returns:
-        ``True`` when ``entry.prompt is not None or entry.skills is not None``
-        — the one-line declaration rule shared by every consuming cell.
+        ``True`` when any of ``prompt``, ``skills``, ``agent``, ``delegate``,
+        ``env`` is not ``None`` — the five-field declaration rule shared by
+        every consuming cell.
     """
-    return entry.prompt is not None or entry.skills is not None
+    return (
+        entry.prompt is not None
+        or entry.skills is not None
+        or entry.agent is not None
+        or entry.delegate is not None
+        or entry.env is not None
+    )
 
 
-def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, WorkflowAssistant]:
-    """Build the assistant namespace — the catalog extended by every inline declaration.
+def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, tuple[WorkflowAssistant, str]]:
+    """Build the assistant namespace with each declaration's authoring site.
 
     Args:
         workflow: The declarative workflow instructions. The catalog comes
@@ -852,14 +861,19 @@ def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, WorkflowAssist
             shadow a catalog entry of the same name.
 
     Returns:
-        The name → declaration map every attachment reference resolves against.
+        The name → (declaration, site) map every attachment reference
+        resolves against — the site is ``workflow.assistants.<name>`` for a
+        catalog entry and ``workflow.stages.<stage>.assistants.<name>`` for
+        an inline declaration (the content check names it).
     """
-    namespace = dict(workflow.assistants)
+    namespace: dict[str, tuple[WorkflowAssistant, str]] = {
+        name: (entry, f"workflow.assistants.{name}") for name, entry in workflow.assistants.items()
+    }
 
-    for stage in workflow.stages.values():
+    for stage_name, stage in workflow.stages.items():
         for entry in (stage.assistants or {}).values():
             if _is_assistant_declaration(entry):
-                namespace[entry.name] = entry
+                namespace[entry.name] = (entry, f"workflow.stages.{stage_name}.assistants.{entry.name}")
 
     return namespace
 
@@ -968,8 +982,9 @@ def _assistants_by_id(
             are already removed, so their attachments are never checked.
         expanded_ids: The base-name → produced-ids map from ``_expand_loops``
             (every final id appears in exactly one produced-ids list).
-        namespace: The assistant namespace (from ``_assistant_namespace``) —
-            the resolution source of every reference.
+        namespace: The assistant namespace (from ``_assistant_namespace``,
+            unwrapped to its entries at this boundary) — the resolution
+            source of every reference.
         catalog: The workflow's assistant catalog (``workflow.assistants``) —
             the only source of team members, hence the only declarations
             whose ``skills`` reach the engine.
@@ -1104,6 +1119,12 @@ def _collaboration_emission(
         byte-stable — the only diagnostic is the WARNING logged for an
         emitted inline declaration whose authored ``skills`` have no engine
         channel (never an output-side key).
+
+    Raises:
+        StructuralError: When a namespace member resolves neither ``prompt``
+            nor ``skills`` — the content check over the (entry, site) pairs
+            of ``_assistant_namespace`` (an override-style entry naming an
+            assistant no tool delivered; a reference is never a member).
     """
     if workflow is None:
         return _CollaborationEmission(
@@ -1112,15 +1133,26 @@ def _collaboration_emission(
             assistants_by_id={},
         )
 
+    namespace = _assistant_namespace(workflow)
+
+    # The content check — every namespace member must resolve a prompt or a
+    # skills list after the overlay merge; an override-style entry naming an
+    # assistant no tool delivered stops compilation with a readable error
+    # naming it and its authoring site. A reference (``gate``/``when`` only)
+    # is never a namespace member and is never checked.
+    for name, (entry, site) in namespace.items():
+        if entry.prompt is None and entry.skills is None:
+            raise StructuralError(f"assistant {name} at {site} resolves neither prompt nor skills")
+
+    declarations = {name: entry for name, (entry, _site) in namespace.items()}
+
     return _CollaborationEmission(
         block=FlowCollaboration(
             mode="assistants",
             max_depth=(workflow.delegation.depth if workflow.delegation is not None else None),
         ),
         team=_team_members(workflow),
-        assistants_by_id=_assistants_by_id(
-            effective, expanded, expanded_ids, _assistant_namespace(workflow), workflow.assistants
-        ),
+        assistants_by_id=_assistants_by_id(effective, expanded, expanded_ids, declarations, workflow.assistants),
     )
 
 

@@ -1322,21 +1322,33 @@ being an inline declaration authoring skills).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the check raises `StructuralError` (a
+- [x] **Contract tests**: the check raises `StructuralError` (a
   `ValueError` subclass) through the public `compile_flow` surface.
   Expected to fail at this stage
-- [ ] **REPL probe**: in `.venv/bin/python` — compile a workflow whose
+  (observed red first — `DID NOT RAISE StructuralError` on the
+  `Ghost: {agent: a1}` catalog compile — then green)
+- [x] **REPL probe**: in `.venv/bin/python` — compile a workflow whose
   catalog carries `Ghost: {agent: a1}` with no delivery; observe the
   exact error string (both message fragments); then feed the same pair
   through `merge_workflow_overlay` first and observe the check pass.
   Migrate into the tests
-- [ ] **Code**: `_assistant_namespace` → `(entry, site)` values; the
+  (observed live: `"assistant Ghost at workflow.assistants.Ghost
+  resolves neither prompt nor skills"` and the inline twin naming
+  `workflow.stages.build.assistants.Ghost`; the merged pair compiles —
+  team id `X` instruction `tool-prompt`, stage profile `goga-X`; every
+  scenario migrated)
+- [x] **Code**: `_assistant_namespace` → `(entry, site)` values; the
   content-check loop before `_assistants_by_id`; the five-field
   `_is_assistant_declaration` + docstring; unwrap at the
   `_assistants_by_id` boundary
-- [ ] **Interface verification**: `.venv/bin/pytest
+  (the unwrap lands in `_collaboration_emission`, which now computes the
+  namespace once, runs the check over the `(entry, site)` pairs, and
+  passes the unwrapped declarations map into `_assistants_by_id`; the
+  emission docstring gains the `Raises` arm)
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/pipeline/compiler/ -v`
-- [ ] **Logic tests** (in
+  (623 passed)
+- [x] **Logic tests** (in
   `tests/pipeline/compiler/test_compile_flow_collaboration.py`):
   - `test_compile_flow_override_entry_with_base_compiles` — an effective
     workflow whose catalog carries the merged entry of a
@@ -1361,18 +1373,35 @@ being an inline declaration authoring skills).
     delivery → `StructuralError` message contains `Ghost` and
     `workflow.stages.<stage>.assistants.Ghost` (SC5's site-naming for
     the inline authoring surface)
-- [ ] **Migrate the affected existing tests**: in
+  (all three added in `TestEffectiveContentCheck`, the verbatim message
+  pinned via `match=re.escape` plus the two fragment asserts; the
+  contract test lives in `TestCompileFlowCollaborationContract`)
+- [x] **Migrate the affected existing tests**: in
   `tests/pipeline/compiler/test_compile_flow_collaboration.py` — any
   scenario asserting a content-less catalog/inline entry parses through
   compilation now expects `StructuralError`; namespace-shape helpers in
   the suite unwrap `(entry, site)`
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: "a workflow without same-name
+  (the inventory came out EMPTY: no test compiled a content-less entry
+  (unparseable before Task 5) and no suite helper touches
+  `_assistant_namespace` (its only test reference is the
+  not-on-facade assertion) — the full battery stayed green with zero
+  test edits beyond the additions)
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (7951 passed, 8 skipped — no implementation fix needed beyond the
+  planned delta)
+- [x] **Contract re-verification**: "a workflow without same-name
   collisions compiles exactly as the same workflow carrying no override
   entries"; the error channel renders clean in `pipeline_cli` / the
   Click wrapper
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+  (the golden-output and shipped-pipeline suites stayed green —
+  byte-identical compilation for collision-free workflows; the error
+  renders through the existing `except StructuralError` arm of
+  `pipeline_cli` and the `except ValueError` arm of the Click wrapper —
+  `StructuralError` subclasses `ValueError`)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
+  (ruff check clean; 1037 files formatted — the new test block
+  reformatted once; goga lint: 92 cells, 0 errors)
 
 ### Task 8: `goga/afm` — `run_flow` gains `exit_on_fail`
 
