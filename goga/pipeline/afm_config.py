@@ -152,7 +152,11 @@ def _resolve_profiles(
                 f"resolved no agent: set its agent or a global agent"
             )
 
-        resolved[name] = (declaration.delegate, declaration.env, resolve_wrapper_path(target_agent))
+        # The model's tri-state collapses to the engine's bool exactly once,
+        # here at the delivery boundary — None (not authored) is False.
+        delegate = declaration.delegate if declaration.delegate is not None else False
+
+        resolved[name] = (delegate, declaration.env, resolve_wrapper_path(target_agent))
 
     return resolved
 

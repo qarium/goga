@@ -4,10 +4,10 @@ Verifies the public API declared by the workflow-cell CODEMANIFEST:
 importability from the facade (including the ``__all__`` obligation), the
 eight declared properties in the fixed canonical order (``name``, ``prompt``,
 ``skills``, ``agent``, ``delegate``, ``env``, ``gate``, ``when``), the exact
-defaults (``name`` required; ``delegate=False``; ``gate=False``;
-``when="checkpoints"``; the four absence fields ``None``), and kw_only
-construction. These tests pin the contract surface — behavior lives in the
-logic test module.
+defaults (``name`` required; ``delegate=None`` — not authored, the inheritable
+tri-state value; ``gate=False``; ``when="checkpoints"``; the four absence
+fields ``None``), and kw_only construction. These tests pin the contract
+surface — behavior lives in the logic test module.
 """
 
 from __future__ import annotations
@@ -40,9 +40,8 @@ class TestWorkflowAssistantContract:
 
         name, prompt, skills, agent, delegate, env, gate, when in the declared
         order; ``name`` has no default (the model is nameless otherwise), the
-        absence fields default to ``None``, the empty defaults materialize
-        ``False``/``False``/``"checkpoints"``, and the annotations pin the
-        declared types.
+        absence fields default to ``None``, the materialized defaults carry
+        ``False``/``"checkpoints"``, and the annotations pin the declared types.
         """
         parameters = list(inspect.signature(WorkflowAssistant).parameters.values())
         empty = inspect.Parameter.empty
@@ -62,7 +61,7 @@ class TestWorkflowAssistantContract:
             None,
             None,
             None,
-            False,
+            None,
             None,
             False,
             "checkpoints",
@@ -72,7 +71,7 @@ class TestWorkflowAssistantContract:
             "str | None",
             "list[str] | None",
             "str | None",
-            "bool",
+            "bool | None",
             "dict[str, str] | None",
             "bool",
             "str",
@@ -92,6 +91,16 @@ class TestWorkflowAssistantContract:
             "gate",
             "when",
         ]
+
+    def test_workflow_assistant_delegate_defaults_to_none(self) -> None:
+        """Constructing with only ``name`` yields ``delegate=None`` — the not-authored tri-state.
+
+        ``None`` means the delegate value was not authored and stays
+        inheritable (the overlay merge lets a delivered base supply it); an
+        authored ``False`` is an opt-out and an authored ``True`` the
+        permission — the three states must stay distinguishable.
+        """
+        assert WorkflowAssistant(name="x").delegate is None
 
     def test_workflow_assistant_name_is_required(self) -> None:
         """Constructing without ``name`` raises TypeError — the one required field."""

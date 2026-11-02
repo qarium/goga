@@ -1048,26 +1048,39 @@ namespace unconditionally; stage-level `env: {}` STILL normalizes to
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: `WorkflowAssistant` field defaults — `delegate`
+- [x] **Contract tests**: `WorkflowAssistant` field defaults — `delegate`
   defaults to `None` (construct with only `name`); field order unchanged
   (name, prompt, skills, agent, delegate, env, gate, when); facade
   importable from `goga.pipeline.workflow`. Expected to fail at this
   stage
-- [ ] **REPL probe**: in `.venv/bin/python` — parse
+  (observed red first — the signature-default pin and the new
+  `test_workflow_assistant_delegate_defaults_to_none` — then green)
+- [x] **REPL probe**: in `.venv/bin/python` — parse
   `"assistants:\n  x: {}\nstages:\n  s1:\n    prompt: p\n"` and the
   five-field discriminator cases; observe `delegate is None`, preserved
   `skills == []` / `env == {}`, and the stage `env: {} → None` divergence;
   observe `"assistant r requires at least one of prompt or skills"` is
   GONE for `agent`-only entries. Migrate into the tests
-- [ ] **Code**: `workflow_assistant.py` — the `delegate` re-type +
+  (observed live both before — the at-least-one raises, `delegate False`,
+  assistant `env: {} → None` — and after in a fresh process: `x: {}`
+  all-`None`, tri-state `None`/`False`, the `{}` vs `None` divergence,
+  inline `{when, agent}` under a catalog name → `duplicate assistant name:
+  x`, references repeating freely, the non-bool message verbatim; every
+  scenario migrated)
+- [x] **Code**: `workflow_assistant.py` — the `delegate` re-type +
   docstring updates (field and property annotations per the manifest)
-- [ ] **Code**: `parse_workflow.py` — delete both at-least-one raises;
+- [x] **Code**: `parse_workflow.py` — delete both at-least-one raises;
   both `fields.get("delegate")`; add `_validate_assistant_env`; route
   `_validate_attachment_field` assistant env through it; the five-field
   `_is_declaration` + docstring
-- [ ] **Interface verification**: `.venv/bin/pytest
+  (the routing lands in `_validate_catalog_field`'s env arm, which
+  `_validate_attachment_field` already delegates to for the five shared
+  keys — one arm covers both surfaces; the builder/validator docstrings
+  re-derived alongside)
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/pipeline/workflow/ -v` — the contract tests pass
-- [ ] **Logic tests** (in `tests/pipeline/workflow/
+  (573 passed)
+- [x] **Logic tests** (in `tests/pipeline/workflow/
   test_parse_workflow_assistants.py` unless noted):
   - `test_parse_workflow_preserves_explicit_empty_env_and_skills` —
     catalog `X: {prompt: p, skills: [], env: {}}`; a stage with `env: {}`;
@@ -1095,7 +1108,9 @@ namespace unconditionally; stage-level `env: {}` STILL normalizes to
     five-field discriminator: the inline entry counts as a declaration
     via `agent is not None`; under the OLD rule it parsed as a reference
     and its `agent` was silently dropped)
-- [ ] **Migrate the affected existing tests** (they pin the OLD semantics
+  (all five added, plus the agent-only parse re-derivation of the removed
+  catalog parametrize row)
+- [x] **Migrate the affected existing tests** (they pin the OLD semantics
   — re-derive from the contracts, never weaken): in
   `tests/pipeline/workflow/test_parse_workflow_assistants.py` — the
   at-least-one error parametrizations (e.g. the
@@ -1106,12 +1121,18 @@ namespace unconditionally; stage-level `env: {}` STILL normalizes to
   `delegate=False` default expectations (e.g. `assert entry.delegate is
   False` at line ~374) flip to `is None`; env-empty→`None` expectations
   for ASSISTANT fields flip to `{}` preserved
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: the type rules are untouched by the
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (7940 passed, 8 skipped — one implementation fix required beyond the
+  cell: `afm_config._resolve_profiles` materializes `delegate` `False`
+  when `None` at the delivery boundary — Task 9's contract state — so the
+  three collaboration tests constructing assistants without `delegate`
+  keep asserting the written `delegate: False`; no test was weakened)
+- [x] **Contract re-verification**: the type rules are untouched by the
   relaxation (non-bool delegate, unknown keys, name grammar, reserved
   name); stage env rule unchanged
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
+  (ruff check clean; 1037 files formatted; goga lint: 92 cells, 0 errors)
 
 ### Task 6: `goga/pipeline/hooks` — the field-level override merge
 

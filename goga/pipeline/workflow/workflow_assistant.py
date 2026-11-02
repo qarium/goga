@@ -24,14 +24,20 @@ class WorkflowAssistant:
         prompt: The assistant's instruction text, or ``None`` when not
             authored.
         skills: List of the assistant's own skill names, or ``None`` when
-            not authored.
+            not authored — an authored empty list is an explicit override
+            that clears, never normalized to absence.
         agent: Agent name the delivery resolves into the assistant's launch
             command, or ``None`` — ``None`` resolves to the effective global
             pipeline agent.
-        delegate: Whether the assistant may create child tasks;
-            materialized ``False`` when not authored.
+        delegate: Whether the assistant may create child tasks — ``None``
+            when not authored (the value is inheritable: the overlay merge
+            lets a delivered base supply it), ``False`` when explicitly
+            authored off, ``True`` when authored on; downstream materializes
+            ``False`` when the effective value stays ``None``.
         env: The assistant's environment instruction (string map, literal
-            and/or rendered); an empty map equals absence — ``None``.
+            and/or rendered); ``None`` when not authored — an authored empty
+            map is an explicit override that clears, never normalized to
+            absence.
         gate: Whether the assistant's verdict must pass before the stage may
             finish; materialized ``False`` (advisory) when not authored.
             Authored only on a stage attachment; the catalog rejects the key.
@@ -50,7 +56,7 @@ class WorkflowAssistant:
     prompt: str | None = None
     skills: list[str] | None = None
     agent: str | None = None
-    delegate: bool = False
+    delegate: bool | None = None
     env: dict[str, str] | None = None
     gate: bool = False
     when: str = "checkpoints"
