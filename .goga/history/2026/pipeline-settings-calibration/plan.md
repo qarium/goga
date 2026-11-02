@@ -1429,16 +1429,25 @@ process listing — never the `AFM_EXIT_ON_FAIL` environment variable).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: signature shape — `exit_on_fail` present with
+- [x] **Contract tests**: signature shape — `exit_on_fail` present with
   default `False`, positioned after `max_parallel`, before `env`.
   Expected to fail at this stage
-- [ ] **REPL probe**: in `.venv/bin/python` — monkeypatch
+  (observed red first — the signature pin failed with `At index 3 diff:
+  'env' != 'exit_on_fail'` — then green)
+- [x] **REPL probe**: in `.venv/bin/python` — monkeypatch
   `goga.afm.run_flow.subprocess.run` capturing `cmd`; call both variants;
   observe the exact argv lists. Migrate into the tests
-- [ ] **Code**: the parameter + the conditional append + the docstring
+  (observed live: with the flag
+  `[afm, run, --port, 5000, --max-parallel, 2, --exit-on-fail, <path>]`,
+  default `[afm, run, --port, 5000, <path>]`, flag-without-parallel
+  `[afm, run, --port, 5000, --exit-on-fail, <path>]`, explicit `False`
+  omits, engine exit 1 propagates verbatim, `AFM_EXIT_ON_FAIL` never in
+  `os.environ`; every scenario migrated)
+- [x] **Code**: the parameter + the conditional append + the docstring
   Arg
-- [ ] **Interface verification**: `.venv/bin/pytest tests/afm/ -v`
-- [ ] **Logic tests** (in `tests/afm/test_run_flow.py`):
+- [x] **Interface verification**: `.venv/bin/pytest tests/afm/ -v`
+  (22 passed)
+- [x] **Logic tests** (in `tests/afm/test_run_flow.py`):
   - `test_run_flow_appends_exit_on_fail_flag` — `monkeypatch` of
     `goga.afm.run_flow.subprocess.run` capturing `cmd`, returning
     `returncode=0`; a `tmp_path` flow file;
@@ -1450,15 +1459,30 @@ process listing — never the `AFM_EXIT_ON_FAIL` environment variable).
     `run_flow(path, 5000)` → `"--exit-on-fail" not in captured_cmd` and
     `"AFM_EXIT_ON_FAIL" not in (the captured env or os.environ)` (R5.3 —
     without the flag, exit behavior is unchanged)
-- [ ] **Migrate the affected existing tests**: in
+  (both added, plus the flag-without-parallel, explicit-`False`, and
+  engine-exit-1-propagation edges)
+- [x] **Migrate the affected existing tests**: in
   `tests/afm/test_run_flow.py` — argv-order expectations that append the
   positional right after `--max-parallel` gain the conditional flag slot
   (only-when-True); no assertion is weakened
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: flag order matches the contract
+  (the signature contract pin re-derived to the five-parameter shape with
+  the `exit_on_fail` position/default/annotation asserts; the existing
+  exact-argv expectations stay as the omitted-flag slot — none pass
+  `exit_on_fail`; the only source caller `run_pipeline.py:539` uses
+  keyword args and stays valid)
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (7957 passed, 8 skipped — one transient external-URL fetch timeout in
+  `tests/ast/test_ast_integration.py` on the first run, green on retry,
+  the same flake Tasks 1 and 6 documented; no implementation fix needed)
+- [x] **Contract re-verification**: flag order matches the contract
   step 3; exit-code propagation verbatim
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+  (`--exit-on-fail` after `--max-parallel`, before the positional —
+  pinned by exact-list asserts; `AFM_EXIT_ON_FAIL` absent from every
+  goga/ and tests/ code path — the docstring wording only)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
+  (ruff check clean; 1037 files formatted — one new-test def line
+  collapsed; goga lint: 92 cells, 0 errors)
 
 ### Task 9: `goga/pipeline` — `write_afm_config` (add_stage, env keying, delegate materialization)
 

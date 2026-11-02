@@ -25,16 +25,28 @@ class TestRunFlowContract:
         assert run_flow is not None
 
     def test_run_flow_signature_matches_contract(self) -> None:
-        """run_flow exposes the (flow_path, port, max_parallel, env) signature."""
+        """run_flow exposes the (flow_path, port, max_parallel, exit_on_fail, env) signature."""
         signature = inspect.signature(run_flow)
         parameters = list(signature.parameters)
 
-        assert parameters == ["flow_path", "port", "max_parallel", "env"]
+        assert parameters == ["flow_path", "port", "max_parallel", "exit_on_fail", "env"]
 
         env_annotation = signature.parameters["env"].annotation
         assert env_annotation == "dict[str, str] | None" or env_annotation == dict[str, str] | None
         assert signature.parameters["env"].default is None
         assert signature.parameters["max_parallel"].default is None
+        assert signature.parameters["exit_on_fail"].default is False
+        assert signature.parameters["exit_on_fail"].annotation is bool or (
+            signature.parameters["exit_on_fail"].annotation == "bool"
+        )
+
+    def test_run_flow_exit_on_fail_positioned_between_max_parallel_and_env(self) -> None:
+        """exit_on_fail sits after max_parallel and before env in the signature."""
+        signature = inspect.signature(run_flow)
+        parameters = list(signature.parameters)
+
+        assert parameters.index("exit_on_fail") == parameters.index("max_parallel") + 1
+        assert parameters.index("exit_on_fail") == parameters.index("env") - 1
 
     def test_run_flow_max_parallel_inserted_after_port_before_path(self, tmp_path: Path) -> None:
         """max_parallel materializes as `--max-parallel <N>` after --port, before the path."""
@@ -129,6 +141,113 @@ class TestRunFlowLogic:
         called_args = mock_subprocess.call_args.args[0]
         assert "--max-parallel" not in called_args
         assert called_args == ["afm", "run", "--port", "50321", str(flow_path)]
+
+    def test_run_flow_appends_exit_on_fail_flag(self, tmp_path: Path) -> None:
+        """exit_on_fail=True appends --exit-on-fail after --max-parallel, before the path."""
+        flow_path = tmp_path / "deploy.yml"
+        flow_path.write_text("flow")
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            exit_code = run_flow(flow_path, 5000, max_parallel=2, exit_on_fail=True)
+
+        assert exit_code == 0
+        called_args = mock_subprocess.call_args.args[0]
+        assert called_args == [
+            "afm",
+            "run",
+            "--port",
+            "5000",
+            "--max-parallel",
+            "2",
+            "--exit-on-fail",
+            str(flow_path),
+        ]
+
+    def test_run_flow_omits_exit_on_fail_by_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Default exit_on_fail=False omits the flag and never touches AFM_EXIT_ON_FAIL."""
+        flow_path = tmp_path / "deploy.yml"
+        flow_path.write_text("flow")
+        monkeypatch.delenv("AFM_EXIT_ON_FAIL", raising=False)
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            exit_code = run_flow(flow_path, 5000)
+
+        assert exit_code == 0
+        called_args = mock_subprocess.call_args.args[0]
+        assert called_args == ["afm", "run", "--port", "5000", str(flow_path)]
+        assert "--exit-on-fail" not in called_args
+        # The argv flag is the single channel — the environment variable is
+        # neither read (no env kwarg composed from it) nor set.
+        assert "env" not in mock_subprocess.call_args.kwargs
+        assert "AFM_EXIT_ON_FAIL" not in os.environ
+
+    def test_run_flow_exit_on_fail_without_max_parallel(self, tmp_path: Path) -> None:
+        """exit_on_fail=True with max_parallel=None places the flag right after --port."""
+        flow_path = tmp_path / "deploy.yml"
+        flow_path.write_text("flow")
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            run_flow(flow_path, 5000, exit_on_fail=True)
+
+        called_args = mock_subprocess.call_args.args[0]
+        assert called_args == [
+            "afm",
+            "run",
+            "--port",
+            "5000",
+            "--exit-on-fail",
+            str(flow_path),
+        ]
+
+    def test_run_flow_explicit_false_exit_on_fail_omits_flag(self, tmp_path: Path) -> None:
+        """An explicit exit_on_fail=False omits the flag exactly like the default."""
+        flow_path = tmp_path / "deploy.yml"
+        flow_path.write_text("flow")
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            run_flow(flow_path, 5000, max_parallel=2, exit_on_fail=False)
+
+        called_args = mock_subprocess.call_args.args[0]
+        assert called_args == [
+            "afm",
+            "run",
+            "--port",
+            "5000",
+            "--max-parallel",
+            "2",
+            str(flow_path),
+        ]
+        assert "--exit-on-fail" not in called_args
+
+    def test_run_flow_exit_on_fail_propagates_engine_exit_code(self, tmp_path: Path) -> None:
+        """With the flag set, a failed stage surfaces as the engine's exit 1 verbatim."""
+        flow_path = tmp_path / "deploy.yml"
+        flow_path.write_text("flow")
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=1),
+        ):
+            exit_code = run_flow(flow_path, 5000, exit_on_fail=True)
+
+        assert exit_code == 1
 
     def test_run_flow_returns_127_when_afm_missing(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """A missing afm binary (FileNotFoundError) yields exit code 127 and a clear message."""
