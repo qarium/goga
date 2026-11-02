@@ -1,7 +1,6 @@
 from pathlib import Path, PurePath
 
-import yaml
-
+from ..yaml import parse_env_yaml
 from .config import (
     AdditionalReviewConfig,
     BuildConfig,
@@ -755,7 +754,7 @@ def load_project_config() -> ProjectConfig:
         FileNotFoundError: if .goga/config.yml does not exist or is empty.
         OSError: if .goga/config.yml exists but cannot be read (e.g. it is a
             directory, or the file is unreadable due to permissions). These are
-            raised by ``config_path.open()``.
+            raised by ``config_path.read_text()``.
         ValueError: if .goga/config.yml is not a YAML mapping or invalid field values.
         KeyError: if required sections are missing (language).
         yaml.YAMLError: if YAML parsing fails.
@@ -765,8 +764,7 @@ def load_project_config() -> ProjectConfig:
     if not config_path.exists():
         raise FileNotFoundError(".goga/config.yml not found in project root")
 
-    with config_path.open() as f:
-        data = yaml.safe_load(f)
+    data = parse_env_yaml(config_path.read_text())
 
     if data is None:
         raise FileNotFoundError(".goga/config.yml not found in project root")

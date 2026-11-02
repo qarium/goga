@@ -949,22 +949,29 @@ HOME configuration loader is explicitly NOT migrated (stays
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: both modules import `parse_env_yaml` from the
+- [x] **Contract tests**: both modules import `parse_env_yaml` from the
   yaml cell; neither module imports `yaml` at code level anymore (assert
   via `inspect`/module attributes — the docstrings keep the exception
   names); `load_project_config()` / `load_tool_config(...)` signatures
   unchanged. Expected to fail at this stage
-- [ ] **REPL probe**: in `.venv/bin/python` — build a `tmp_path` project
+  (TestLoadConfigEnvParseContract / TestLoadToolConfigEnvParseContract —
+  observed red, then green)
+- [x] **REPL probe**: in `.venv/bin/python` — build a `tmp_path` project
   with `language: python\npipeline:\n  agent: !ENV PIPELINE_AGENT\n`,
   chdir, call `load_project_config()` with the variable unset and set;
   observe `agent is None` and `"claude"`; observe the `ConstructorError`
   rendering for `"a: !ENV\n"`. Migrate into the tests
-- [ ] **Code**: `goga/config/project/loader.py` — text read +
+  (observed: unset→None, set→"claude" str, malformed→
+  yaml.constructor.ConstructorError "expected a variable name in !ENV",
+  home safe_load still rejects the tag in-process, tool→{"threshold":
+  "85"}; every scenario migrated)
+- [x] **Code**: `goga/config/project/loader.py` — text read +
   `parse_env_yaml`; remove `import yaml`
-- [ ] **Code**: `goga/config/tool/loader.py` — the swap; remove
+- [x] **Code**: `goga/config/tool/loader.py` — the swap; remove
   `import yaml`
-- [ ] **Interface verification**: `.venv/bin/pytest tests/config/ -v`
-- [ ] **Logic tests**:
+- [x] **Interface verification**: `.venv/bin/pytest tests/config/ -v`
+  (784 passed)
+- [x] **Logic tests**:
   - in `tests/config/project/test_loader.py`:
     `test_load_project_config_env_agent_unset_resolves_absent` — `tmp_path`
     with `.goga/config.yml` containing
@@ -987,12 +994,14 @@ HOME configuration loader is explicitly NOT migrated (stays
     `config.yml` containing `env: !ENV X`; `load_home_config()` raises
     `yaml.YAMLError` (unknown tag under `safe_load`) (C3 — accidental
     migration would make this pass silently)
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: raw passthrough preserved in the tool
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (7935 passed, 8 skipped — no implementation fix needed beyond the swap)
+- [x] **Contract re-verification**: raw passthrough preserved in the tool
   loader; the `FileNotFoundError`/`ValueError` branches intact; the home
   loader untouched
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
+  (ruff check clean; 1037 files formatted; goga lint: 92 cells, 0 errors)
 
 ### Task 5: `goga/pipeline/workflow` — presence-preserving assistant parse
 

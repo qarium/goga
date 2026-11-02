@@ -10,6 +10,8 @@ import goga.config.tool as tool_module
 import pytest
 import yaml
 from goga.config.tool import load_tool_config
+from goga.config.tool import loader as tool_loader
+from goga.config.yaml import parse_env_yaml
 
 # --- Helpers ---
 
@@ -45,6 +47,22 @@ class TestLoadToolConfigContract:
             "root": Path | None,
             "return": object | None,
         }
+
+
+class TestLoadToolConfigEnvParseContract:
+    def test_tool_loader_parses_through_the_yaml_cell(self):
+        """The loader's parse step routes through parse_env_yaml of goga/config/yaml."""
+        assert tool_loader.parse_env_yaml is parse_env_yaml
+
+    def test_tool_loader_carries_no_code_level_yaml_import(self):
+        """The yaml module is no longer bound in the loader (docstrings keep the exception names)."""
+        assert not hasattr(tool_loader, "yaml")
+
+    def test_tool_loader_signature_unchanged(self):
+        """load_tool_config still declares (tool, filename, root=None) -> object | None."""
+        parameters = inspect.signature(load_tool_config).parameters
+        assert list(parameters) == ["tool", "filename", "root"]
+        assert parameters["root"].default is None
 
 
 # --- Logic tests ---
@@ -171,3 +189,30 @@ class TestLoadToolConfigLogic:
 
         with pytest.raises(UnicodeDecodeError):
             load_tool_config("coverage", "config.yml", root=tmp_path)
+
+
+class TestLoadToolConfigEnvReferences:
+    def test_load_tool_config_resolves_env_reference(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A !ENV NAME scalar resolves at load time into the raw passthrough value (SC6).
+
+        A regression back to ``yaml.safe_load`` fails on the unknown tag; the
+        resolved string must arrive in the raw passthrough value.
+        """
+        monkeypatch.setenv("RUFF_THRESHOLD", "85")
+        _write_tool_file(tmp_path, "ruff", "settings.yml", "threshold: !ENV RUFF_THRESHOLD\n")
+
+        result = load_tool_config("ruff", "settings.yml", root=tmp_path)
+
+        assert result == {"threshold": "85"}
+        assert isinstance(result["threshold"], str)
+
+    def test_load_tool_config_unset_env_reference_resolves_empty_string(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unset !ENV variable resolves to the empty string — no field semantics apply here."""
+        monkeypatch.delenv("RUFF_THRESHOLD", raising=False)
+        _write_tool_file(tmp_path, "ruff", "settings.yml", "threshold: !ENV RUFF_THRESHOLD\n")
+
+        result = load_tool_config("ruff", "settings.yml", root=tmp_path)
+
+        assert result == {"threshold": ""}
