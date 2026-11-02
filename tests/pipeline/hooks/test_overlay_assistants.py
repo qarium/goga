@@ -16,6 +16,7 @@ merged document stays declarative (compilable through ``compile_flow``).
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 
 import pytest
@@ -244,6 +245,76 @@ class TestOverlayAssistantsContract:
         assert overlay.workflow.assistants["qa"].prompt == "QA."
         assert not [record for record in caplog.records if "discarded" in record.message]
 
+    def test_catalog_override_is_field_level_not_displacement(self) -> None:
+        """A same-name delivered entry merges field by field under the authored entry."""
+        base = WorkflowDocument(
+            prompt="authored",
+            assistants={"x": WorkflowAssistant(name="x", agent="my-agent")},
+        )
+        contributions = [
+            ToolContribution(
+                tool="t1",
+                document=WorkflowDocument(
+                    assistants={
+                        "x": WorkflowAssistant(
+                            name="x",
+                            prompt="tool-prompt",
+                            skills=["s1"],
+                            agent="tool-agent",
+                            delegate=True,
+                            env={"K": "V"},
+                        ),
+                    },
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        merged = overlay.workflow.assistants["x"]
+        assert merged is not base.assistants["x"]  # a fresh composition, never displacement
+        assert merged.agent == "my-agent"  # the authored field wins
+        assert merged.prompt == "tool-prompt"  # the omitted field flows from the delivered base
+
+    def test_merge_inputs_survive_the_call_unchanged(self) -> None:
+        """The merge is pure — every input document field survives the call (deep comparison)."""
+        base = WorkflowDocument(
+            prompt="authored",
+            assistants={"x": WorkflowAssistant(name="x", agent="my-agent")},
+            stages={
+                "build": WorkflowStage(
+                    agent="a",
+                    assistants={"y": WorkflowAssistant(name="y", when="start", agent="my-agent")},
+                ),
+            },
+        )
+        document = WorkflowDocument(
+            assistants={
+                "x": WorkflowAssistant(
+                    name="x",
+                    prompt="tool-prompt",
+                    skills=["s1"],
+                    agent="tool-agent",
+                    delegate=True,
+                    env={"K": "V"},
+                ),
+                "y": WorkflowAssistant(name="y", prompt="Watch the build."),
+            },
+            stages={
+                "build": WorkflowStage(agent="a", assistants={"z": WorkflowAssistant(name="z", prompt="Late.")}),
+            },
+        )
+        contributions = [ToolContribution(tool="t1", document=document)]
+        base_snapshot = dataclasses.asdict(base)
+        tool_snapshot = dataclasses.asdict(document)
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert dataclasses.asdict(base) == base_snapshot  # deep — no input field mutated
+        assert dataclasses.asdict(document) == tool_snapshot
+        assert overlay.workflow is not None
+
 
 def _declaration_names(document: WorkflowDocument) -> list[str]:
     """Every declaration-source name of a document — catalog then stage declarations."""
@@ -251,7 +322,13 @@ def _declaration_names(document: WorkflowDocument) -> list[str]:
 
     for stage in document.stages.values():
         for entry in (stage.assistants or {}).values():
-            if entry.prompt is not None or entry.skills is not None:
+            if (
+                entry.prompt is not None
+                or entry.skills is not None
+                or entry.agent is not None
+                or entry.delegate is not None
+                or entry.env is not None
+            ):
                 names.append(entry.name)
 
     return names
@@ -261,8 +338,8 @@ def _declaration_names(document: WorkflowDocument) -> list[str]:
 
 
 class TestOverlayAssistants:
-    def test_overlay_catalog_merge_later_tool_wins_and_namespace_drop(self) -> None:
-        """Authored names are unbeatable via the seed; fresh names take the later tool's entry."""
+    def test_overlay_catalog_merge_authored_fields_win_fresh_names_later_tool(self) -> None:
+        """Authored catalog fields override the delivered base; fresh names take the later tool's entry."""
         reviewer_base = WorkflowAssistant(name="reviewer", prompt="Review (authored).")
         base = WorkflowDocument(prompt="authored", assistants={"reviewer": reviewer_base})
         contributions = [
@@ -270,7 +347,7 @@ class TestOverlayAssistants:
                 tool="t1",
                 document=WorkflowDocument(
                     assistants={
-                        "reviewer": WorkflowAssistant(name="reviewer", prompt="Review (t1)."),
+                        "reviewer": WorkflowAssistant(name="reviewer", prompt="Review (t1).", agent="agent (t1)."),
                         "qa": WorkflowAssistant(name="qa", prompt="QA (t1)."),
                     },
                 ),
@@ -279,7 +356,7 @@ class TestOverlayAssistants:
                 tool="t2",
                 document=WorkflowDocument(
                     assistants={
-                        "reviewer": WorkflowAssistant(name="reviewer", prompt="Review (t2)."),
+                        "reviewer": WorkflowAssistant(name="reviewer", prompt="Review (t2).", agent="agent (t2)."),
                         "qa": WorkflowAssistant(name="qa", prompt="QA (t2)."),
                         "ops": WorkflowAssistant(name="ops", prompt="Ops (t2)."),
                     },
@@ -291,7 +368,10 @@ class TestOverlayAssistants:
 
         assert overlay.workflow is not None
         assert list(overlay.workflow.assistants) == ["reviewer", "qa", "ops"]
-        assert overlay.workflow.assistants["reviewer"] is reviewer_base  # the seed drops tool entries
+        reviewer = overlay.workflow.assistants["reviewer"]
+        assert reviewer is not reviewer_base  # the override composes a fresh entry
+        assert reviewer.prompt == "Review (authored)."  # the authored field wins
+        assert reviewer.agent == "agent (t2)."  # omitted fields flow from the winning base (t2's whole entry)
         assert overlay.workflow.assistants["qa"].prompt == "QA (t2)."  # later tool wins per fresh name
         assert overlay.workflow.assistants["ops"].prompt == "Ops (t2)."
         assert base.assistants == {"reviewer": reviewer_base}  # purity — input untouched
@@ -486,3 +566,147 @@ class TestOverlayAssistants:
         assert workflow.assistants == {}
         assert workflow.delegation is None
         assert workflow.stages["build"].assistants is None
+
+    def test_merge_overlay_catalog_entry_overrides_agent_only(self) -> None:
+        """SC4 — an agent-only authored entry overrides the agent, inherits the rest."""
+        base = WorkflowDocument(
+            prompt="authored",
+            assistants={"X": WorkflowAssistant(name="X", agent="my-agent")},
+        )
+        contributions = [
+            ToolContribution(
+                tool="t",
+                document=WorkflowDocument(
+                    assistants={
+                        "X": WorkflowAssistant(
+                            name="X",
+                            prompt="tool-prompt",
+                            skills=["s1"],
+                            agent="tool-agent",
+                            delegate=True,
+                            env={"K": "V"},
+                        ),
+                    },
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        merged = overlay.workflow.assistants["X"]
+        assert merged.prompt == "tool-prompt"
+        assert merged.skills == ["s1"]
+        assert merged.agent == "my-agent"  # authored
+        assert merged.delegate is True  # inherited
+        assert merged.env == {"K": "V"}
+
+    def test_merge_override_authored_empty_env_clears_tool_env(self) -> None:
+        """R2.1 — an authored ``env: {}`` is a clear, not an absence."""
+        base = WorkflowDocument(
+            prompt="authored",
+            assistants={"X": WorkflowAssistant(name="X", agent="a", env={})},
+        )
+        contributions = [
+            ToolContribution(
+                tool="t",
+                document=WorkflowDocument(
+                    assistants={"X": WorkflowAssistant(name="X", prompt="p", env={"K": "V"})},
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        merged = overlay.workflow.assistants["X"]
+        assert merged.env == {}  # the clear wins
+        assert merged.prompt == "p"  # omitted fields flow
+
+    def test_merge_override_delegate_false_opts_out_and_none_inherits(self) -> None:
+        """The tri-state discipline end to end — authored False opts out, absent inherits."""
+        base = WorkflowDocument(
+            prompt="authored",
+            assistants={
+                "A": WorkflowAssistant(name="A", prompt="q", delegate=False),
+                "B": WorkflowAssistant(name="B", prompt="q"),
+            },
+        )
+        contributions = [
+            ToolContribution(
+                tool="t",
+                document=WorkflowDocument(
+                    assistants={
+                        "A": WorkflowAssistant(name="A", delegate=True),
+                        "B": WorkflowAssistant(name="B", delegate=True),
+                    },
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.assistants["A"].delegate is False  # the authored opt-out wins
+        assert overlay.workflow.assistants["B"].delegate is True  # absent delegates inherit
+
+    def test_merge_no_collision_passthrough_verbatim(self) -> None:
+        """C8 — collision-free authoring: authored entries survive verbatim, tools still commit."""
+        reviewer = WorkflowAssistant(name="reviewer", prompt="Review.")
+        sec = WorkflowAssistant(name="sec", prompt="Audit.", when="start")
+        base = WorkflowDocument(
+            prompt="authored",
+            assistants={"reviewer": reviewer},
+            stages={"build": WorkflowStage(agent="a", assistants={"sec": sec})},
+        )
+        contributions = [
+            ToolContribution(
+                tool="t1",
+                document=WorkflowDocument(assistants={"qa": WorkflowAssistant(name="qa", prompt="QA.")}),
+            ),
+            ToolContribution(
+                tool="t2",
+                document=WorkflowDocument(
+                    stages={
+                        "build": WorkflowStage(
+                            agent="a", assistants={"ops": WorkflowAssistant(name="ops", prompt="Ops.")}
+                        ),
+                    },
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        workflow = overlay.workflow
+        assert workflow is not None
+        assert workflow.assistants["reviewer"] is reviewer  # field-equal and instance-reused
+        build = workflow.stages["build"].assistants
+        assert build is not None
+        assert build["sec"] is sec  # no delivered entry under the name — verbatim
+        assert overlay.provenance == ["t1", "t2"]
+
+    def test_merge_inline_override_stays_on_stage(self) -> None:
+        """Position preservation — an inline override lands on its stage, never in the catalog."""
+        inline = WorkflowAssistant(name="X", when="start", agent="my-agent")
+        base = WorkflowDocument(
+            prompt="authored",
+            stages={"s1": WorkflowStage(agent="a", assistants={"X": inline})},
+        )
+        contributions = [
+            ToolContribution(
+                tool="t",
+                document=WorkflowDocument(assistants={"X": WorkflowAssistant(name="X", prompt="p", skills=["s"])}),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        workflow = overlay.workflow
+        assert workflow is not None
+        assert "X" not in workflow.assistants  # the catalog does not own the name
+        merged = workflow.stages["s1"].assistants
+        assert merged is not None
+        assert merged["X"].prompt == "p"  # inherited content
+        assert merged["X"].when == "start"  # the attachment parameter is kept
+        assert merged["X"].agent == "my-agent"  # the authored override

@@ -1199,23 +1199,35 @@ content-less (the compile check names it).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: `_override_entry` semantics via the public merge
+- [x] **Contract tests**: `_override_entry` semantics via the public merge
   (field-level override observable); the merge stays pure (input
   documents unchanged after the call — deep field comparisons).
   Expected to fail at this stage
-- [ ] **REPL probe**: in `.venv/bin/python` — construct the authored
+  (observed red — `test_catalog_override_is_field_level_not_displacement`
+  failed on the `is not` identity assertion against the old
+  displacement code, then green)
+- [x] **REPL probe**: in `.venv/bin/python` — construct the authored
   catalog `{X: {agent: my-agent}}` + a tool contribution catalog
   `{X: {prompt: tool-prompt, skills: [s1], agent: tool-agent, delegate:
   true, env: {K: V}}}`; run `merge_workflow_overlay`; observe every
   merged field; then the `env: {}`-clear and `delegate: false`-opt-out
   cases. Migrate into the tests
-- [ ] **Code**: `_override_entry`; the `_merge_catalog` field-override
+  (observed live before — displacement: the authored entry standing
+  alone, the catalog stealing an inline name, no field flow — and after
+  in a fresh process: prompt/skills/env flow with agent authored,
+  inline stays stage-attached, env `{}` clears, delegate
+  False/True/inherit, skills `[]` clears; every scenario migrated)
+- [x] **Code**: `_override_entry`; the `_merge_catalog` field-override
   arms; thread `winning` into `_merge_stage_assistants` with the
   in-place replacement; the five-field
   `_is_assistant_declaration` + docstring
-- [ ] **Interface verification**: `.venv/bin/pytest tests/pipeline/hooks/
+  (`_merge_catalog` returns `(merged, winning)`; `winning` threads
+  `merge_workflow_overlay` → `_merge_stages` → `_merge_stage` →
+  `_merge_stage_assistants`)
+- [x] **Interface verification**: `.venv/bin/pytest tests/pipeline/hooks/
   -v`
-- [ ] **Logic tests** (in `tests/pipeline/hooks/test_overlay_assistants.py`):
+  (122 passed)
+- [x] **Logic tests** (in `tests/pipeline/hooks/test_overlay_assistants.py`):
   - `test_merge_overlay_catalog_entry_overrides_agent_only` — authored
     catalog `assistants: {X: {agent: my-agent}}`; tool contribution with
     catalog `assistants: {X: {prompt: tool-prompt, skills: [s1], agent:
@@ -1251,18 +1263,31 @@ content-less (the compile check names it).
     `.agent == "my-agent"` (override) (pins position preservation —
     prevents a future "move to catalog" regression silently changing
     team membership)
-- [ ] **Migrate the affected existing tests**: in
+- [x] **Migrate the affected existing tests**: in
   `tests/pipeline/hooks/test_overlay_assistants.py` — the
   displacement-semantics expectations (same-name tool entries replacing
   authored entries wholesale) re-derive to the field-level override
   outcomes; the namespace-seed expectations now count override-style
   inline declarations
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: purity (no input mutation), the
+  (`test_overlay_catalog_merge_later_tool_wins_and_namespace_drop`
+  re-derived as `..._authored_fields_win_fresh_names_later_tool` (the
+  authored prompt wins, the agent flows from the WINNING later tool's
+  whole entry); `_declaration_names` helper flipped to the five-field
+  rule; no assertion weakened)
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (7947 passed, 8 skipped — one transient external-URL fetch timeout in
+  `tests/ast/test_ast_integration.py::test_ast_rules` on the first run,
+  37/37 green on retry, the same flake Task 1 documented; no
+  implementation fix needed)
+- [x] **Contract re-verification**: purity (no input mutation), the
   namespace-once invariant, verbatim passthrough for collision-free
   workflows, no content-field partial merge
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
+  (ruff check clean; 1037 files formatted — 2 reformatted; goga lint:
+  92 cells, 0 errors; `goga schema` exit 0, both `goga/config/yaml`
+  edges and both command-cell → `goga/docker` edges present, no cycles —
+  this task adds no cell edges)
 
 ### Task 7: `goga/pipeline/compiler` — the effective-content check
 

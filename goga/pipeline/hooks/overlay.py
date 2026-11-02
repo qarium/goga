@@ -84,19 +84,59 @@ def _is_set(field: str, value: object) -> bool:
 
 
 def _is_assistant_declaration(entry: WorkflowAssistant) -> bool:
-    """Report whether ``entry`` is a declaration (a prompt or a skills list is authored).
+    """Report whether ``entry`` authors declaration content (the entry-form discriminator).
 
     Args:
         entry: One attachment entry (or catalog entry) of the workflow. The
             discriminator is PRESENCE, not truthiness — ``prompt: ""`` and
-            ``skills: []`` are authored values that make the entry a
-            declaration; a reference carries neither field.
+            ``skills: []``/``env: {}`` are authored values that make the
+            entry a declaration; a reference carries none of the five
+            declaration fields.
 
     Returns:
-        ``True`` when ``entry.prompt is not None or entry.skills is not None``
-        — the one-line declaration rule shared by every consuming cell.
+        ``True`` when any of the five declaration fields is authored —
+        ``prompt``, ``skills``, ``agent``, ``delegate``, or ``env``. With
+        the presence discipline every authored declaration key leaves a
+        non-``None`` value, so this is exactly the parse-time key-set
+        discrimination (keys within ``{gate, when}`` ⇔ reference) — the
+        one-line declaration rule shared by every consuming cell.
     """
-    return entry.prompt is not None or entry.skills is not None
+    return (
+        entry.prompt is not None
+        or entry.skills is not None
+        or entry.agent is not None
+        or entry.delegate is not None
+        or entry.env is not None
+    )
+
+
+def _override_entry(authored: WorkflowAssistant, base: WorkflowAssistant) -> WorkflowAssistant:
+    """Compose one override entry — the authored fields over the delivered base.
+
+    Args:
+        authored: The authored entry — the override layer; every field it
+            carries wins (presence decides, never truthiness).
+        base: The winning delivered entry — every field the author left
+            unset flows from it.
+
+    Returns:
+        A fresh :class:`WorkflowAssistant` — ``prompt``/``skills``/
+        ``agent``/``delegate``/``env`` take the authored value when not
+        ``None``, else the base value; ``gate``/``when`` are always the
+        authored ones (attachment parameters). The inputs are never
+        mutated and no content field merges partially — a field replaces
+        whole (the field unit is the merge unit).
+    """
+    return WorkflowAssistant(
+        name=authored.name,
+        prompt=authored.prompt if authored.prompt is not None else base.prompt,
+        skills=authored.skills if authored.skills is not None else base.skills,
+        agent=authored.agent if authored.agent is not None else base.agent,
+        delegate=authored.delegate if authored.delegate is not None else base.delegate,
+        env=authored.env if authored.env is not None else base.env,
+        gate=authored.gate,
+        when=authored.when,
+    )
 
 
 def _fill_unset_env_keys(
@@ -127,6 +167,7 @@ def _merge_stage(
     name: str,
     contributions: list[ToolContribution],
     namespace: set[str],
+    winning: dict[str, WorkflowAssistant],
 ) -> WorkflowStage:
     """Merge one stage name over the authored entry and every contribution.
 
@@ -137,14 +178,16 @@ def _merge_stage(
         namespace: the evolving assistant namespace — the authored seed grown
             by the catalog merge; accepted appended declarations join it so
             later stages see them.
+        winning: the winning delivered catalog entry per name — threaded to
+            :func:`_merge_stage_assistants` for the in-place overrides.
 
     Returns:
         The merged stage for ``name`` — a fresh :class:`WorkflowStage`; the
         inputs are never mutated. Authored env entries are unbeatable per
         key; a tool fills only the keys the author left unset. The
         ``assistants`` field is the contract carve-out: it merges through
-        :func:`_merge_stage_assistants` (append-with-dedup), never through
-        the authored-wins field loop.
+        :func:`_merge_stage_assistants` (override-in-place plus
+        append-with-dedup), never through the authored-wins field loop.
     """
     authored = base.stages.get(name) if base is not None else None
 
@@ -176,7 +219,7 @@ def _merge_stage(
             elif field == "env":
                 values["env"] = _fill_unset_env_keys(values["env"], tool_value, authored_env)
 
-    values["assistants"] = _merge_stage_assistants(values["assistants"], name, contributions, namespace)
+    values["assistants"] = _merge_stage_assistants(values["assistants"], name, contributions, namespace, winning)
 
     return WorkflowStage(**values)  # type: ignore[arg-type]
 
@@ -186,8 +229,9 @@ def _merge_stage_assistants(
     stage_name: str,
     contributions: list[ToolContribution],
     namespace: set[str],
+    winning: dict[str, WorkflowAssistant],
 ) -> dict[str, WorkflowAssistant] | None:
-    """Merge one stage's assistant attachments — map append-with-dedup, authored order first.
+    """Merge one stage's assistant attachments — in-place overrides, then append-with-dedup.
 
     Args:
         authored_map: the authored attachment map, or ``None`` when the
@@ -197,16 +241,27 @@ def _merge_stage_assistants(
         namespace: the evolving assistant namespace — an appended
             DECLARATION whose name is already in it is dropped (the
             document-wide invariant); accepted declarations join it.
+        winning: the winning delivered catalog entry per name (the later
+            tool's whole entry among the contributions).
 
     Returns:
-        The merged attachment map — the authored entries verbatim, then the
-        accepted contribution entries in first-appearance enumeration
-        order — or ``None`` when nothing survives. Every collision is a
-        silent drop: a name already on the stage drops every entry kind;
-        the namespace drops appended declarations only (references never
-        collide across stages).
+        The merged attachment map — the authored entries in authored
+        order, then the accepted contribution entries in first-appearance
+        enumeration order — or ``None`` when nothing survives. An authored
+        DECLARATION whose name carries a winning delivered entry is
+        replaced in place with its :func:`_override_entry` composition —
+        position preservation: the authored stage keeps the landing, the
+        delivered entry contributes field values only. Every append
+        collision is a silent drop: a name already on the stage drops
+        every entry kind; the namespace drops appended declarations only
+        (references never collide across stages).
     """
     result: dict[str, WorkflowAssistant] = dict(authored_map) if authored_map is not None else {}
+
+    for name, entry in list(result.items()):
+        if _is_assistant_declaration(entry) and name in winning:
+            result[name] = _override_entry(entry, winning[name])
+
     present_on_stage = set(result)
 
     for contribution in contributions:
@@ -330,8 +385,10 @@ def _authored_namespace(base: WorkflowDocument | None) -> set[str]:
 
     Returns:
         The seed name set — every authored catalog name plus the name of
-        every inline declaration on an authored stage; the catalog pass
-        treats these names as unbeatable.
+        every inline declaration on an authored stage (the five-field
+        declaration rule); the authored surface owns these names, so a
+        delivered catalog entry under one never lands as a fresh catalog
+        name — it merges beneath the authored entry instead.
     """
     namespace = set(base.assistants) if base is not None else set()
 
@@ -348,41 +405,59 @@ def _merge_catalog(
     base: WorkflowDocument | None,
     contributions: list[ToolContribution],
     namespace: set[str],
-) -> dict[str, WorkflowAssistant]:
-    """Merge the assistant catalogs — the seed unbeatable, else later tool wins per name.
+) -> tuple[dict[str, WorkflowAssistant], dict[str, WorkflowAssistant]]:
+    """Merge the assistant catalogs — authored fields override, fresh names arrive verbatim.
 
     Args:
         base: the authored workflow, or ``None`` when no workflow resolved.
         contributions: the committed contributions, in enumeration order.
-        namespace: the authored seed (mutated in place): every merged name
-            joins it, so the stage pass that follows sees the whole catalog.
+        namespace: the authored seed — every authored catalog name plus the
+            authored inline-declaration names (mutated in place): every
+            merged name joins it, so the stage pass that follows sees the
+            whole catalog.
 
     Returns:
-        The merged catalog — the authored entries verbatim in authored
-        order, then the fresh contribution names in first-appearance order;
-        a later contribution overwrites an earlier one per fresh name. The
-        pass consults only the authored seed, so a later tool's catalog
-        entry displaces an earlier tool's inline declaration of the same
-        name (the stage pass drops the declaration by the namespace rule).
+        The pair ``(merged, winning)``. ``winning`` is the winning
+        delivered entry per name — the later tool's WHOLE entry among the
+        contributions (no field-level merging between tools); the stage
+        pass threads it to its in-place overrides. ``merged`` is the
+        merged catalog: the authored names in authored order, each
+        composed through :func:`_override_entry` over the winning entry
+        when one is delivered under the name (an authored field replaces
+        whole, an omitted field flows from the base), else verbatim; then
+        the fresh delivered names verbatim (the winning entry) in
+        first-appearance order. A delivered name under an authored inline
+        declaration stays off the catalog — the authored surface owns the
+        landing (the stage pass overrides in place).
     """
-    merged = dict(base.assistants) if base is not None else {}
+    winning: dict[str, WorkflowAssistant] = {}
 
     for contribution in contributions:
         for name, entry in contribution.document.assistants.items():
-            if name in namespace:
-                continue
+            winning[name] = entry
 
-            merged[name] = entry
+    authored_seed = set(namespace)
+    merged: dict[str, WorkflowAssistant] = {}
+
+    if base is not None:
+        for name, entry in base.assistants.items():
+            merged[name] = _override_entry(entry, winning[name]) if name in winning else entry
+
+    for contribution in contributions:
+        for name in contribution.document.assistants:
+            if name in winning and name not in authored_seed and name not in merged:
+                merged[name] = winning[name]
 
     namespace.update(merged)
 
-    return merged
+    return merged, winning
 
 
 def _merge_stages(
     base: WorkflowDocument | None,
     contributions: list[ToolContribution],
     namespace: set[str],
+    winning: dict[str, WorkflowAssistant],
 ) -> dict[str, WorkflowStage]:
     """Merge every stage name — authored names first, then fresh names.
 
@@ -393,6 +468,8 @@ def _merge_stages(
             by the catalog pass and by every accepted appended declaration,
             so a name declared on an earlier stage blocks the same-name
             declaration on a later one.
+        winning: the winning delivered catalog entry per name — threaded to
+            every stage's in-place assistant overrides.
 
     Returns:
         The merged stages map — the authored names in their map order, then
@@ -405,7 +482,7 @@ def _merge_stages(
             if name not in names:
                 names.append(name)
 
-    return {name: _merge_stage(base, name, contributions, namespace) for name in names}
+    return {name: _merge_stage(base, name, contributions, namespace, winning) for name in names}
 
 
 def _merge_extend(
@@ -464,15 +541,20 @@ def merge_workflow_overlay(
         The rebuilt document carries the base ``profile``/``build`` verbatim;
         the stage merge covers the complete :class:`WorkflowStage` field set
         (including ``env`` — authored entries unbeatable, tools fill the
-        unset keys). The collaboration arms: the catalog merge keeps every
-        authored namespace name unbeatable (a later tool wins per fresh
-        name), the delegation block merges whole like memory, and the
-        per-stage attachments append with the on-stage and namespace dedup
-        — the merged document holds every assistant name exactly once, so
-        it stays compilable. The repeat block merges whole the same way —
-        the authored block is unbeatable, otherwise the later contributing
-        tool's block wins — and rides the rebuild verbatim, so a
-        tool-amended run never loses an authored cycle bound.
+        unset keys). The collaboration arms: the catalog merge composes an
+        authored entry field by field over the winning delivered entry
+        (an authored field replaces whole, an omitted field flows from the
+        base; fresh delivered names arrive verbatim, the later tool winning
+        among tools), an authored inline declaration overrides the same way
+        in place on its stage (position preservation — the authored surface
+        owns the landing), the delegation block merges whole like memory,
+        and the per-stage attachments append with the on-stage and
+        namespace dedup — the merged document holds every assistant name
+        exactly once, so it stays compilable. The repeat block merges whole
+        the same way — the authored block is unbeatable, otherwise the
+        later contributing tool's block wins — and rides the rebuild
+        verbatim, so a tool-amended run never loses an authored cycle
+        bound.
     """
 
     # Step 1 — empty contributions: the passthrough. The passed workflow
@@ -483,13 +565,14 @@ def merge_workflow_overlay(
     # Step 2 — the namespace seed: the authored catalog names plus the
     # inline-declaration names of the authored stages. The catalog pass
     # grows it before any stage append is considered — the cross-kind
-    # collision outcome (a later catalog entry displacing an earlier
-    # declaration) depends on this order.
+    # collision outcome (a delivered catalog entry under an authored
+    # inline declaration staying off the catalog) depends on this order.
     namespace = _authored_namespace(base)
 
     # Step 4a — the catalog merge first (it owns the namespace until it
-    # returns), then the whole-block delegation and repeat (4b, 4c).
-    assistants = _merge_catalog(base, contributions, namespace)
+    # returns and hands the winning entries to the stage pass), then the
+    # whole-block delegation and repeat (4b, 4c).
+    assistants, winning = _merge_catalog(base, contributions, namespace)
     delegation = _merge_delegation(base, contributions)
     repeat = _merge_repeat(base, contributions)
 
@@ -501,7 +584,7 @@ def merge_workflow_overlay(
     return WorkflowOverlay(
         workflow=WorkflowDocument(
             prompt=_merge_prompt(base, contributions),
-            stages=_merge_stages(base, contributions, namespace),
+            stages=_merge_stages(base, contributions, namespace, winning),
             extend=_merge_extend(base, contributions),
             memory=_merge_memory(base, contributions),
             profile=base.profile if base is not None else None,
