@@ -1509,19 +1509,35 @@ check (the fourth copy of the shared rule).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the written config parses as YAML and carries
+- [x] **Contract tests**: the written config parses as YAML and carries
   the five static fields; the profile dict shape `{title, command,
   delegate}` unchanged. Expected to fail at this stage
-- [ ] **REPL probe**: in `.venv/bin/python` — monkeypatch
+  (observed red first — `KeyError: 'add_stage'` on the five-statics
+  parse — then green; the profile-shape pin
+  (`test_generated_profile_shape_is_exactly_title_command_delegate`)
+  passed throughout: the shape is unchanged)
+- [x] **REPL probe**: in `.venv/bin/python` — monkeypatch
   `_AFM_CONFIG_PATH` into a scratch dir; call `write_afm_config(None)`;
   `yaml.safe_load` the result; observe `add_stage` beside the four
   existing statics. Migrate into the tests
-- [ ] **Code**: the fifth static field; the non-empty env keying
+  (observed live before — four statics, no `add_stage`; the nested map
+  round-trips `enabled: false → False` through the same `safe_dump` —
+  and after in a fresh process: five statics, `env: {}` over a codex
+  agent leaves no closure and the wrapper command, the no-agent message
+  for `env: {}` carries no "declares env but" clause, delegate
+  None/True/False → False/True/False; every scenario migrated)
+- [x] **Code**: the fifth static field; the non-empty env keying
   (validation + no-agent clause + closure creation); the delegate
   materialization; the five-field `_is_assistant_declaration` + docstring
-- [ ] **Interface verification**: `.venv/bin/pytest tests/pipeline/
+  (the delegate materialization already landed with Task 5's delivery
+  boundary fix — verified in place; the fourth discriminator copy shares
+  the compile_flow/overlay docstring phrasing; the `write_afm_config` /
+  `_resolve_profiles` / `_collaboration_section` docstrings re-derived:
+  five statics, non-empty env maps)
+- [x] **Interface verification**: `.venv/bin/pytest tests/pipeline/
   test_afm_config*.py -v`
-- [ ] **Logic tests** (in `tests/pipeline/test_afm_config_collaboration.py`):
+  (32 passed)
+- [x] **Logic tests** (in `tests/pipeline/test_afm_config_collaboration.py`):
   - `test_write_afm_config_add_stage_disabled` — `tmp_path`;
     `monkeypatch` of the `_AFM_CONFIG_PATH` module constant into
     `tmp_path`; `write_afm_config(None)` with `flow=None,
@@ -1536,17 +1552,40 @@ check (the fourth copy of the shared rule).
   - delegate materialization: effective `None` → the written profile
     carries `delegate: False`; authored `True` → `True`; authored
     `False` → `False`
-- [ ] **Migrate the affected existing tests**: in
+  (all four added: `test_write_afm_config_add_stage_disabled`,
+  `test_afm_config_env_delivery_keys_on_nonempty_map` (the `env: {}`
+  clear and the `env: {"K": "V"}` closure in one contrast),
+  `test_afm_config_empty_env_no_agent_error_without_clause`,
+  `test_afm_config_delegate_materializes_false_when_none`)
+- [x] **Migrate the affected existing tests**: in
   `tests/pipeline/test_afm_config_collaboration.py` (and
   `test_afm_config.py` where relevant) — env-declaring expectations
   keyed on `is not None` re-derive to the non-empty keying; delegate
   expectations re-derive to the materialized values
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: the five statics are constants (never
+  (the three static-set assertions in `tests/pipeline/test_afm_config.py`
+  gain `add_stage` — the full-document equality of the with-agent test
+  and both `set(data)` pins; the collaboration suite needed no edit: its
+  env-declaring scenarios already use non-empty maps and its delegate
+  expectations were re-derived to the materialized values with Task 5's
+  boundary fix; no assertion weakened)
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (7963 passed, 8 skipped — no implementation fix needed beyond the
+  planned delta)
+- [x] **Contract re-verification**: the five statics are constants (never
   configurable); the file lands only at the fixed path; profiles exactly
   for the referenced ids
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+  (the five statics are literals inside `write_afm_config`; the file
+  lands only at `_AFM_CONFIG_PATH`; profiles-exactly-for-referenced-ids
+  pinned by the existing `test_afm_config_profiles_exactly_for_referenced_ids`;
+  namespace parity with the compiler's five-field rule observed live — an
+  agent-only inline entry joins at its stage site in both modules, a
+  gate/when reference joins in neither)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
+  (ruff check clean; 1037 files formatted — none changed; goga lint: 92
+  cells, 0 errors — one transient external-URL fetch timeout on the
+  first run, clean on retry and stable on a third run, the same flake
+  Tasks 1, 6, and 8 documented)
 
 ### Task 10: `goga/pipeline` — `run_pipeline` + `pipeline_cli` thread `fail_on_error`
 

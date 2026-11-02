@@ -51,12 +51,31 @@ class TestWriteAfmConfigContract:
         return_annotation = signature.return_annotation
         assert return_annotation == "Path" or return_annotation is Path
 
+    def test_write_afm_config_static_fields_carry_five_entries(self, config_path: Path) -> None:
+        """The written config parses as YAML carrying the FIVE static fields.
+
+        ``add_stage.enabled false`` — the disabled dashboard stage-addition —
+        joins the four pre-existing statics, written unconditionally on every
+        launch (the stage set presented to the engine stays exactly the
+        compiled pipeline).
+        """
+        write_afm_config(None)
+
+        data = yaml.safe_load(config_path.read_text())
+
+        assert data["theme"] == "goga"
+        assert data["open_browser"] is False
+        assert data["proxy"] == {"enabled": False}
+        assert data["prompts_dir"] == "/home/goga/pipeline/prompts"
+        assert data["add_stage"] == {"enabled": False}
+        assert set(data) == {"theme", "open_browser", "proxy", "prompts_dir", "add_stage", "hooks"}
+
 
 class TestWriteAfmConfigLogic:
     """Logic: the authored document, the agent optionality, and the failure mode."""
 
     def test_write_afm_config_with_agent_writes_resolved_wrapper_and_static_fields(self, config_path: Path) -> None:
-        """A resolved agent yields client.command plus the four static fields."""
+        """A resolved agent yields client.command plus the five static fields."""
         written = write_afm_config("codex")
 
         assert written == config_path
@@ -68,6 +87,7 @@ class TestWriteAfmConfigLogic:
             "open_browser": False,
             "proxy": {"enabled": False},
             "prompts_dir": "/home/goga/pipeline/prompts",
+            "add_stage": {"enabled": False},
             "hooks": [_OBSERVER_HOOK],
         }
         assert "/home/goga/bin/" in data["client"]["command"]
@@ -79,7 +99,7 @@ class TestWriteAfmConfigLogic:
         data = yaml.safe_load(config_path.read_text())
 
         assert "client" not in data
-        assert set(data) == {"theme", "open_browser", "proxy", "prompts_dir", "hooks"}
+        assert set(data) == {"theme", "open_browser", "proxy", "prompts_dir", "add_stage", "hooks"}
 
     def test_write_afm_config_rewrites_whole_file_idempotently(self, config_path: Path) -> None:
         """Each invocation rewrites the whole document — stale keys disappear."""
@@ -94,7 +114,7 @@ class TestWriteAfmConfigLogic:
         second = yaml.safe_load(config_path.read_text())
 
         assert second == first
-        assert set(second) == {"client", "theme", "open_browser", "proxy", "prompts_dir", "hooks"}
+        assert set(second) == {"client", "theme", "open_browser", "proxy", "prompts_dir", "add_stage", "hooks"}
 
     def test_write_afm_config_registers_the_observer_hook(self, config_path: Path) -> None:
         """The composed content carries goga's observer hook entry in the hooks layer.

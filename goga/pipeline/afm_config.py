@@ -36,19 +36,28 @@ _PROFILE_PREFIX = "goga-"
 
 
 def _is_assistant_declaration(entry: WorkflowAssistant) -> bool:
-    """Report whether ``entry`` is a declaration (a prompt or a skills list is authored).
+    """Return ``True`` when ``entry`` is a declaration (any of the five authoring fields is present).
 
     Args:
         entry: One catalog entry or attachment entry of the workflow. The
-            discriminator is PRESENCE, not truthiness — ``prompt: ""`` and
-            ``skills: []`` are authored values that make the entry a
-            declaration; a reference carries neither field.
+            discriminator is PRESENCE, not truthiness — ``prompt: ""``,
+            ``skills: []``, and ``env: {}`` are authored values that make
+            the entry a declaration; a reference carries none of the five
+            fields (``gate``/``when`` are attachment parameters, never
+            content).
 
     Returns:
-        ``True`` when ``entry.prompt is not None or entry.skills is not None``
-        — the one-line declaration rule shared by every consuming cell.
+        ``True`` when any of ``prompt``, ``skills``, ``agent``, ``delegate``,
+        ``env`` is not ``None`` — the five-field declaration rule shared by
+        every consuming cell.
     """
-    return entry.prompt is not None or entry.skills is not None
+    return (
+        entry.prompt is not None
+        or entry.skills is not None
+        or entry.agent is not None
+        or entry.delegate is not None
+        or entry.env is not None
+    )
 
 
 def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, tuple[WorkflowAssistant, str]]:
@@ -124,9 +133,10 @@ def _resolve_profiles(
 
     Raises:
         ValueError: When the flow references a name the workflow does not
-            declare (the defensive branch), when a declared env key is not a
-            legal environment variable name, or when an assistant resolves no
-            agent at all — every check fires before any file is written.
+            declare (the defensive branch), when an env key of a NON-EMPTY
+            effective env map is not a legal environment variable name, or
+            when an assistant resolves no agent at all — every check fires
+            before any file is written.
     """
     resolved: dict[str, tuple[bool, dict[str, str] | None, str]] = {}
 
@@ -138,7 +148,9 @@ def _resolve_profiles(
 
         declaration, site = entry_site
 
-        if declaration.env is not None:
+        # None and {} both mean "no closure" — the env delivery keys on a
+        # non-empty effective map only (an explicitly cleared env is no env).
+        if declaration.env:
             for key in declaration.env:
                 if _LEGAL_ENV_NAME_PATTERN.fullmatch(key) is None:
                     raise ValueError(f"invalid environment variable name in the {name} assistant env: {key!r}")
@@ -148,7 +160,7 @@ def _resolve_profiles(
         if target_agent is None:
             raise ValueError(
                 f"assistant {name} at {site} "
-                f"{'declares env but ' if declaration.env is not None else ''}"
+                f"{'declares env but ' if declaration.env else ''}"
                 f"resolved no agent: set its agent or a global agent"
             )
 
@@ -216,9 +228,9 @@ def _collaboration_section(
     Returns:
         The ``collaboration`` section: ``profiles`` (one
         ``goga-<name>`` entry per referenced id, each exactly
-        ``{title, command, delegate}`` — an env-declaring assistant's command
-        is its generated closure path) and ``limits`` (only when the workflow
-        carries a delegation block).
+        ``{title, command, delegate}`` — an assistant carrying a non-empty
+        effective env map gets a generated closure path as its command) and
+        ``limits`` (only when the workflow carries a delegation block).
 
     Raises:
         ValueError: Every resolution error of ``_resolve_profiles`` — all of
@@ -236,7 +248,9 @@ def _collaboration_section(
     for name, (delegate, env, target) in resolved.items():
         command = target
 
-        if env is not None:
+        # None and {} both mean "no closure" — the closure materializes on a
+        # non-empty effective env map only (an explicitly cleared env is no env).
+        if env:
             path = _CLOSURE_BASE / f"{_PROFILE_PREFIX}{name}"
             _write_owner_only(path, _render_closure(env, target))
             command = str(path)
@@ -275,20 +289,23 @@ def write_afm_config(
         (``/home/goga/.afm/config.yaml``), independent of ``AFM_DIR``. The
         content serializes the optional ``client`` block first (the
         ``client.command`` default for stages without a per-stage ``command:``
-        override), then the four static launcher fields — ``theme: goga``,
-        ``open_browser: false``, ``proxy.enabled: false``, and ``prompts_dir:
-        /home/goga/pipeline/prompts`` — never configurable through the project
-        configuration or the CLI — goga's observer hook registration: a
+        override), then the five static launcher fields — ``theme: goga``,
+        ``open_browser: false``, ``proxy.enabled: false``, ``prompts_dir:
+        /home/goga/pipeline/prompts``, and ``add_stage.enabled: false`` (the
+        disabled dashboard stage-addition — the stage set presented to the
+        engine stays exactly the compiled pipeline) — never configurable
+        through the project configuration or the CLI — goga's observer hook
+        registration: a
         ``hooks`` list carrying the single ``goga`` entry (``events: all``,
         the bridge command ``python3 -m goga.pipeline hook``,
         ``inherit_env: true``; ``timeout`` / ``retries`` omitted — the afm
         ``omitempty`` defaults 30 s / 0 — and no ``env`` map); and finally the
         ``collaboration`` section when both ``flow`` and ``workflow`` are
         given — one generated ``goga-<name>`` profile per flow-referenced id
-        (exactly ``{title, command, delegate}``; an env-declaring assistant's
-        command is its generated owner-only closure path) and
-        ``limits.max_tasks`` only when the workflow carries a delegation
-        block.
+        (exactly ``{title, command, delegate}``; an assistant carrying a
+        non-empty effective env map gets a generated owner-only closure path
+        as its command) and ``limits.max_tasks`` only when the workflow
+        carries a delegation block.
 
     Raises:
         ValueError: When a referenced assistant's declared env carries an
@@ -313,6 +330,7 @@ def write_afm_config(
             "open_browser": False,
             "proxy": {"enabled": False},
             "prompts_dir": _PROMPTS_DIR,
+            "add_stage": {"enabled": False},
         }
     )
     content["hooks"] = [
