@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
@@ -97,3 +98,31 @@ def apply_run_mode_common_mocks(tmp_path: Path, monkeypatch: Any) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     return runtime_dir
+
+
+class DirectSpawnPopen:
+    """A fake ``subprocess.Popen`` recording the direct-substrate spawns.
+
+    The direct-substrate counterpart of the runner mocks above (same shape
+    as the ``run_direct`` fakes of ``tests/docker/test_runner.py``): install
+    with ``monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", fake)``
+    so every ``run_direct`` child is captured — each call records the
+    ``(argv, env)`` pair and returns a fake child whose ``wait()`` yields
+    ``returncode`` — and no real process is ever spawned.
+    """
+
+    def __init__(self, returncode: int = 0) -> None:
+        self._returncode = returncode
+        self.calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+    def __call__(self, argv: list[str], env: dict[str, str] | None = None) -> mock.Mock:
+        self.calls.append((list(argv), dict(env) if env is not None else None))
+
+        child = mock.Mock()
+        child.poll.return_value = self._returncode
+        child.wait.return_value = self._returncode
+        return child
+
+    @property
+    def called(self) -> bool:
+        return bool(self.calls)

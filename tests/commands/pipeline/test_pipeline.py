@@ -122,6 +122,7 @@ class TestPipelineLogic:
             skip=(),
             parallel=None,
             home_profiles=None,
+            fail_on_error=False,
         )
 
     def test_pipeline_passes_extra_env_to_run_pipeline_container(self) -> None:
@@ -152,6 +153,7 @@ class TestPipelineLogic:
             skip=(),
             parallel=None,
             home_profiles=None,
+            fail_on_error=False,
         )
 
     def test_pipeline_accepts_long_env_option(self) -> None:
@@ -179,6 +181,7 @@ class TestPipelineLogic:
             skip=(),
             parallel=None,
             home_profiles=None,
+            fail_on_error=False,
         )
 
     def test_pipeline_accepts_skip_and_clean_short_aliases(self) -> None:

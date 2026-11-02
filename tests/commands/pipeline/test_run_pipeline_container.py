@@ -19,6 +19,7 @@ from goga.config import (
 )
 from goga.docker import decode_extra_env
 
+from tests.commands.pipeline.conftest import DirectSpawnPopen
 from tests.commands.pipeline.conftest import apply_run_mode_common_mocks as _apply_run_mode_common_mocks
 from tests.commands.pipeline.conftest import make_config as _make_config
 
@@ -39,7 +40,7 @@ class TestRunPipelineContainerContract:
         assert run_pipeline_container is rpc
 
     def test_signature_name_config_extra_env(self) -> None:
-        """Signature exposes the full declared order ending in home_profiles."""
+        """Signature exposes the full declared order ending in fail_on_error."""
         import inspect
 
         params = list(inspect.signature(rpc).parameters)
@@ -57,6 +58,7 @@ class TestRunPipelineContainerContract:
             "skip",
             "parallel",
             "home_profiles",
+            "fail_on_error",
         ]
 
     def test_extra_env_has_empty_tuple_default(self) -> None:
@@ -1076,3 +1078,157 @@ class TestRunModeCallerHandlerD7:
         # the only secret file was written; the caller handler (2 installs) ran first
         assert [name for name, _ in writes] == ["env"]
         assert all(n >= 2 for _name, n in writes)
+
+
+# --- Direct substrate (12a) ---
+
+
+class TestDirectSubstrateComposition:
+    """The direct-substrate arm: the SAME composers, a child-process sink.
+
+    One composition, two sinks: the shared ``_compose_env_lines`` ladder and
+    ``_compose_run_args`` argv serve both substrates — the host path writes
+    the lines into the env-file, the direct path parses them into the child
+    env layer of ``run_direct``.
+    """
+
+    def test_env_overlay_splits_on_first_equals_last_write_wins(self) -> None:
+        """``_env_overlay`` parses KEY=VALUE lines like docker --env-file."""
+        overlay = _rpc_mod._env_overlay(["A=1", "B=x=y", "A=2"])
+
+        # Split on the FIRST '=' only (the value may carry '='), applied in
+        # order so a later line of the same key wins (last-write-wins).
+        assert overlay == {"A": "2", "B": "x=y"}
+
+    def test_build_env_file_is_a_thin_wrapper_of_compose_env_lines(self, tmp_path: Path, monkeypatch) -> None:
+        """The host sink writes exactly the shared composition's lines."""
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        compose_kwargs = {
+            "home_env": {"BASE": "1"},
+            "docker_run_tokens": [],
+            "extra_env": ("K=V",),
+            "proxy": "http://p",
+            "ambient_profile": "",
+            "home_profiles": None,
+            "workflow_name": None,
+        }
+
+        env_file = _rpc_mod._build_env_file(**compose_kwargs)
+
+        assert env_file.read_text().splitlines() == _rpc_mod._compose_env_lines(**compose_kwargs)
+
+    @pytest.mark.parametrize(
+        ("fail_on_error", "expected_tail"),
+        [(True, ["--parallel", "2", "--fail-on-error"]), (False, ["--parallel", "2"])],
+        ids=["true-appends-flag", "false-omits-flag"],
+    )
+    def test_compose_run_args_appends_fail_on_error_only_when_true(
+        self, fail_on_error: bool, expected_tail: list[str]
+    ) -> None:
+        """``--fail-on-error`` joins the argv after ``--parallel`` only when True."""
+        args = _rpc_mod._compose_run_args("deploy", 50321, None, False, None, (), 2, fail_on_error)
+
+        assert args == ["-m", "goga.pipeline", "run", "deploy", "--port", "50321", *expected_tail]
+
+
+class TestDirectSubstrateLaunch:
+    """The 12a branch: direct child execution with the docker substrate fully bypassed."""
+
+    def _install_direct(self, tmp_path: Path, monkeypatch, returncode: int = 0):
+        """Common direct-substrate install: plumbing mocks, the marker, the spawn fake."""
+        import goga.docker.runner
+
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        spawn = DirectSpawnPopen(returncode=returncode)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        docker_mocks = {
+            "runner_cls": mock.Mock(),
+            "build": mock.Mock(),
+            "update": mock.Mock(),
+        }
+        monkeypatch.setattr(_rpc_mod, "DockerRunner", docker_mocks["runner_cls"])
+        monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", docker_mocks["build"])
+        monkeypatch.setattr(_rpc_mod, "docker_update", docker_mocks["update"])
+        return spawn, docker_mocks
+
+    def test_direct_run_spawns_composed_child_and_returns_exit_code_verbatim(self, tmp_path: Path, monkeypatch) -> None:
+        """The direct branch spawns the composed argv; the child's exit code returns verbatim."""
+        spawn, docker_mocks = self._install_direct(tmp_path, monkeypatch, returncode=7)
+        config = _make_config()
+
+        result = run_pipeline_container("deploy", config, extra_env=("K=V",), fail_on_error=True)
+
+        assert result == 7
+        assert len(spawn.calls) == 1
+        argv, env = spawn.calls[0]
+        # The SAME argv composition as the host substrate, prefixed with the
+        # python3 program token — the port (allocated on both substrates,
+        # pinned to 50321) and the fail-fast flag included.
+        assert argv == [
+            "python3",
+            "-m",
+            "goga.pipeline",
+            "run",
+            "deploy",
+            "--port",
+            "50321",
+            "--fail-on-error",
+        ]
+        # The composed env lines reached the child env layer (overlay parsed
+        # over the inherited environment by run_direct).
+        assert env["K"] == "V"
+        assert env["AFM_DIR"] == "/home/goga/pipeline"
+        assert "GOGA_EXTRA_ENV" in env
+        # No docker machinery ran — runner, image build, image refresh.
+        docker_mocks["runner_cls"].assert_not_called()
+        docker_mocks["build"].assert_not_called()
+        docker_mocks["update"].assert_not_called()
+
+    def test_direct_skips_docker_check_and_image_guard(self, tmp_path: Path, monkeypatch) -> None:
+        """A failing docker-CLI check and an unset image both pass on the direct substrate."""
+        spawn, _ = self._install_direct(tmp_path, monkeypatch)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: False)
+
+        result = run_pipeline_container("deploy", _make_config(image=None))
+
+        assert result == 0
+        assert spawn.called
+
+    def test_direct_clean_wipes_before_launch(self, tmp_path: Path, monkeypatch) -> None:
+        """``--clean`` wipes the in-container AFM_DIR strictly before the child launches."""
+        import goga.docker.runner
+
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        afm_state = tmp_path / "afm-state"
+        afm_state.mkdir()
+        (afm_state / "stale.marker").write_text("stale")
+        monkeypatch.setattr(_rpc_mod, "_IN_CONTAINER_AFM_DIR", str(afm_state))
+
+        snapshots: list[list[str]] = []
+
+        class _SnapshotPopen(DirectSpawnPopen):
+            def __call__(self, argv: list[str], env: dict[str, str] | None = None) -> mock.Mock:
+                snapshots.append(sorted(path.name for path in afm_state.rglob("*")))
+                return super().__call__(argv, env)
+
+        monkeypatch.setattr(
+            goga.docker.runner.subprocess,
+            "Popen",
+            _SnapshotPopen(returncode=0),
+        )
+
+        result = run_pipeline_container("deploy", _make_config(), clean=True)
+
+        assert result == 0
+        # The launch happened, and at spawn time the directory was already
+        # wiped AND recreated — empty, never deleted.
+        assert snapshots == [[]]
+        assert afm_state.is_dir()
+        assert not (afm_state / "stale.marker").exists()

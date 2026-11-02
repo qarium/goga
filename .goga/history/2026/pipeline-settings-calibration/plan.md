@@ -1780,26 +1780,46 @@ persistent state, no env-file, no caller-side signal handler.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the click surface exposes `--fail-on-error`
+- [x] **Contract tests**: the click surface exposes `--fail-on-error`
   (CliRunner `--help` or a flag-parse invocation);
   `run_pipeline_container` signature gains `fail_on_error` default
   `False`; `_compose_run_args` accepts `fail_on_error` (default `False`
   — every existing call site stays valid). Expected to fail at this
   stage
-- [ ] **REPL probe**: in `.venv/bin/python` — with
+  (written first, red as expected: 4 tests in
+  `TestPipelineFailOnErrorOptionContract` (test_pipeline_dispatch.py)
+  + 3 in `TestRunPipelineContainerFailOnErrorContract`
+  (test_run_pipeline_container_contract.py); green after the code)
+- [x] **REPL probe**: in `.venv/bin/python` — with
   `monkeypatch.setenv("GOGA_DOCKER", "1")` and a `tmp_path` project, run
   the Click command through `CliRunner` with the spawn monkeypatched;
   observe the composed argv (including `--fail-on-error`), the parsed
   env overlay, and each rejection message. Migrate into the tests
-- [ ] **Code**: the click option + dispatch forward; step 1a (the
+  (fresh-process probe: run argv `['python3', '-m', 'goga.pipeline',
+  'run', 'deploy', '--port', '50321', '--parallel', '2',
+  '--fail-on-error']`, overlay carrying AFM_DIR=/home/goga/pipeline +
+  GOGA_EXTRA_ENV, all six host-only rejections exit 1 with the verbatim
+  message and zero spawns; card argv
+  `['python3', '-m', 'goga.pipeline', 'run', 'deploy', '--info']`;
+  migrated as TestPipelineDirectSubstrate / TestDirectSubstrateLaunch /
+  TestDirectSubstrate)
+- [x] **Code**: the click option + dispatch forward; step 1a (the
   six-entry rejection)
-- [ ] **Code**: `_compose_env_lines` extraction + `_build_env_file`
+  (option after `--parallel`, run-form dispatch forwards
+  `fail_on_error=fail_on_error`; step 1a after the config load, before
+  form validation — the six verbatim `is host-only` ClickExceptions)
+- [x] **Code**: `_compose_env_lines` extraction + `_build_env_file`
   wrapper + `_env_overlay`; `_compose_run_args` `fail_on_error`; the
   `fail_on_error` signature parameter; the 12a direct branch
-- [ ] **Code**: the 7a direct branch in the info container
-- [ ] **Interface verification**: `.venv/bin/pytest
+  (12a preserves the host error precedence: docker check → home load →
+  direct branch → image guard; `_allocate_port` on both substrates;
+  `--clean` rmtree-if-exists + mkdir of `_IN_CONTAINER_AFM_DIR`)
+- [x] **Code**: the 7a direct branch in the info container
+  (cargo via `_compose_profile_carriage`, `env=None` without cargo)
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/commands/pipeline/ -v`
-- [ ] **Logic tests**:
+  (348 passed — 331 pre-existing+migrated plus 17 new)
+- [x] **Logic tests**:
   - in `tests/commands/pipeline/test_pipeline_command.py` (or the file
     owning the click surface):
     `test_pipeline_direct_run_spawns_child_and_forwards_flag` —
@@ -1836,18 +1856,37 @@ persistent state, no env-file, no caller-side signal handler.
   - in `tests/commands/pipeline/test_run_pipeline_info_container.py`:
     the direct branch spawns `python3 -m goga.pipeline ...` with the
     cargo overlay (and `env=None` when no cargo); no docker calls
-- [ ] **Migrate the affected existing tests**: the dispatch/composition
+- [x] **Migrate the affected existing tests**: the dispatch/composition
   suites in `tests/commands/pipeline/` (test_pipeline_dispatch.py,
   test_run_pipeline_container*.py, test_run_pipeline_info_container.py)
   — call-shape expectations gain the default-valued parameter; env-file
   composition tests move to the extracted `_compose_env_lines` where
   they assert line content (the wrapper keeps the file-write tests)
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x`
-- [ ] **Contract re-verification**: one composition two sinks (no
+  (10 migration failures, all expected: 5 exact assert_called_once_with
+  forwards gained `fail_on_error=False`, 3 signature param-list pins
+  gained the final `fail_on_error`, the home_profiles-is-final pin
+  re-derived to "just before the final fail_on_error", and the
+  option-help GOGA guard re-derived to iterate `pipeline.params` helps
+  — the command docstring legitimately names the GOGA_DOCKER marker per
+  the direct-substrate contract; the env-file line-content tests pass
+  unchanged over the shared composition)
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x`
+  (7994 passed, 8 skipped)
+- [x] **Contract re-verification**: one composition two sinks (no
   independent re-derivation of the layers for the direct path);
   substrate-scoped skips only; the host paths byte-identical
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` +
+  (12a calls the SAME `_compose_env_lines`/`_compose_run_args` as
+  `_run_named`, 7a the SAME `_compose_argv`/`_compose_profile_carriage`
+  as the docker path — no layer re-derived; skips exactly: docker-CLI
+  check, image guard, runtime-dir machinery, env-file, image
+  acquisition, DockerRunner, caller-side D7 handler; host path
+  unchanged apart from threading `fail_on_error` through the existing
+  composers — error precedence byte-identical, the merged
+  `not is_in_docker() and not _check_docker()` short-circuits
+  equivalently)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` +
   `.venv/bin/ruff format goga/ tests/`; `goga lint` 0 errors
+  (both clean — 2 test files reformatted; goga lint: 92 cells, 0 errors)
 
 ### Task 12: `goga/commands/build` — the direct substrate and its dry-run
 

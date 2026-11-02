@@ -23,7 +23,9 @@ from ...docker import (
     docker_build_if_not_exist,
     docker_update,
     encode_extra_env,
+    is_in_docker,
     profile_carriage_lines,
+    run_direct,
 )
 from ...runtime import resolve_runtime_dir
 from .file_roots import collect_file_roots, encode_file_roots
@@ -235,7 +237,7 @@ def _resolve_workflow_env_name(
     return None
 
 
-def _build_env_file(  # noqa: PLR0913, PLR0917
+def _compose_env_lines(  # noqa: PLR0913, PLR0917
     home_env: dict[str, str],
     docker_run_tokens: list[str],
     extra_env: tuple[str, ...],
@@ -243,8 +245,13 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     ambient_profile: str = "",
     home_profiles: dict[str, dict[str, Any]] | None = None,
     workflow_name: str | None = None,
-) -> Path:
-    """Build the run-mode env-file (Algorithm step 8) — environment layers only.
+) -> list[str]:
+    """Compose the run-mode env lines (Algorithm step 8) — environment layers only.
+
+    The single composition shared by both execution substrates (one
+    composition, two sinks — per ``direct-runner``): the host path writes the
+    lines into the private env-file consumed by ``docker run --env-file``; the
+    direct path parses them into the child env layer of ``run_direct``.
 
     Args:
         home_env: ``home.env`` from the machine-wide home config — the
@@ -275,7 +282,8 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
             applied; None writes no line.
 
     Returns:
-        Path to the written private env-file.
+        The fully assembled KEY=VALUE lines in ladder order (the
+        ``GOGA_EXTRA_ENV`` payload line last).
 
     Note:
         Ladder order (lowest to highest): ``home_env`` as the BASE layer
@@ -290,7 +298,7 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
         ``-e AFM_DOCKER_FILE_ROOTS=...`` escape hatch); the payload line is
         always written (last-write-wins keeps it ahead of any CLI line of
         the same key). The task env layer (``config.pipeline.env``) and the
-        skip names NEVER enter the env-file — they apply in-container /
+        skip names NEVER enter the lines — they apply in-container /
         travel as argv.
     """
     # home.env is the BASE layer — lowest priority; git identity overrides it.
@@ -344,7 +352,82 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     # any message.
     lines += profile_carriage_lines(ambient_profile, home_profiles, workflow_name, cli_keys)
 
-    return _write_env_file(lines)
+    return lines
+
+
+def _env_overlay(lines: list[str]) -> dict[str, str]:
+    """Parse env-file lines into the direct-substrate child env layer.
+
+    Args:
+        lines: The ``_compose_env_lines`` result — KEY=VALUE lines in ladder
+            order.
+
+    Returns:
+        The parsed mapping — each line split on the FIRST ``=``, applied in
+        order so a later line of the same key wins, mirroring the
+        ``docker run --env-file`` last-write-wins semantics the host path
+        relies on.
+    """
+    return dict(line.split("=", 1) for line in lines)
+
+
+def _build_env_file(  # noqa: PLR0913, PLR0917
+    home_env: dict[str, str],
+    docker_run_tokens: list[str],
+    extra_env: tuple[str, ...],
+    proxy: str | None,
+    ambient_profile: str = "",
+    home_profiles: dict[str, dict[str, Any]] | None = None,
+    workflow_name: str | None = None,
+) -> Path:
+    """Build the run-mode env-file (Algorithm step 8) — the host sink of the shared lines.
+
+    A thin wrapper over ``_compose_env_lines`` (the one composition both
+    substrates share): composes the ladder lines and writes them into the
+    private temporary env-file consumed by ``docker run --env-file``.
+
+    Args:
+        home_env: ``home.env`` from the machine-wide home config — the
+            lowest-priority env layer (git identity and CLI win on key
+            conflict). Survives where unconflicted.
+        docker_run_tokens: ``home.docker.run`` tokens (already shell-tokenized,
+            consumed verbatim per the ``home-configuration`` contract) from
+            which the ``AFM_DOCKER_FILE_ROOTS`` file-manager roots are
+            composed — the project root plus one extra root per directory
+            mount. Written on EVERY run launch unless the CLI explicitly
+            supplied the key (the escape hatch).
+        extra_env: Additional raw KEY=VALUE strings written verbatim (a
+            SEPARATE channel above the dict layers, winning on key conflict)
+            and encoded into the payload line from the same values.
+        proxy: Resolved HTTP/HTTPS proxy URL; populates the proxy env vars when
+            non-None.
+        ambient_profile: The ambient host ``GOGA_PROFILE`` value — written as
+            the ``GOGA_PROFILE`` engine line only when non-empty (the CLI
+            activation channel travels as argv instead).
+        home_profiles: The loaded home bundle (the ``load_home_profiles``
+            result of the caller, None when empty) — encoded into the
+            ``GOGA_HOME_PROFILES`` engine line only when non-empty (per
+            ``home-profiles-carriage``); the payload never appears in any
+            message.
+        workflow_name: The effective workflow name of the run decision (the
+            ``_resolve_workflow_env_name`` result) — written as the
+            ``GOGA_WORKFLOW`` engine line only when a workflow will be
+            applied; None writes no line.
+
+    Returns:
+        Path to the written private env-file.
+    """
+    return _write_env_file(
+        _compose_env_lines(
+            home_env=home_env,
+            docker_run_tokens=docker_run_tokens,
+            extra_env=extra_env,
+            proxy=proxy,
+            ambient_profile=ambient_profile,
+            home_profiles=home_profiles,
+            workflow_name=workflow_name,
+        )
+    )
 
 
 def _compose_run_args(  # noqa: PLR0913, PLR0917
@@ -355,6 +438,7 @@ def _compose_run_args(  # noqa: PLR0913, PLR0917
     profile: str | None,
     skip: tuple[str, ...],
     parallel: int | None,
+    fail_on_error: bool = False,
 ) -> list[str]:
     """Compose the in-container run argv (Algorithm step 9 — the argv channel).
 
@@ -368,9 +452,15 @@ def _compose_run_args(  # noqa: PLR0913, PLR0917
             only when set.
         skip: raw stage names from the repeatable ``-s/--skip`` CLI option.
         parallel: optional int capping concurrently executing stages.
+        fail_on_error: the run-form fail-fast decision from the
+            ``--fail-on-error`` CLI flag — appended as ``--fail-on-error``
+            only when True (the in-container ``pipeline_cli`` threads it onto
+            the engine's ``--exit-on-fail``); False (default) omits the flag.
 
     Returns:
-        The post-image command handed to ``DockerRunner.run``:
+        The post-image command handed to ``DockerRunner.run`` (or, prefixed
+        with the ``python3`` program token, to ``run_direct`` on the direct
+        substrate):
         ``["-m","goga.pipeline","run",<name>,"--port",<port>]`` followed,
         in order, by the workflow decision (``-w <workflow>`` when
         explicit, else ``--no-workflow`` when set, else neither flag — the
@@ -379,7 +469,7 @@ def _compose_run_args(  # noqa: PLR0913, PLR0917
         one ``-s <name>`` per skip entry (forwarded as parsed — no
         validation, no dedup; unknown names are the in-container compiler's
         structural error), then ``--parallel <parallel>`` only when not
-        None.
+        None, then ``--fail-on-error`` only when True.
     """
     args = ["-m", "goga.pipeline", "run", name, "--port", str(port)]
 
@@ -409,6 +499,12 @@ def _compose_run_args(  # noqa: PLR0913, PLR0917
     if parallel is not None:
         args += ["--parallel", str(parallel)]
 
+    # --fail-on-error is appended ONLY when True (absent ⇒ no flag ⇒ the run
+    # launches with no fail-fast flag). The in-container pipeline_cli forwards
+    # it to the engine's --exit-on-fail.
+    if fail_on_error:
+        args += ["--fail-on-error"]
+
     return args
 
 
@@ -428,6 +524,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
     skip: tuple[str, ...] = (),
     parallel: int | None = None,
     home_profiles: dict[str, dict[str, Any]] | None = None,
+    fail_on_error: bool = False,
 ) -> int:
     """Launch the container in run mode (``-m goga.pipeline run <name> --port``).
 
@@ -478,6 +575,12 @@ def _run_named(  # noqa: PLR0913, PLR0917
             result of the caller, None when empty) — encoded into the
             ``GOGA_HOME_PROFILES`` engine line of the env-file only when
             non-empty (per ``home-profiles-carriage``).
+        fail_on_error: the run-form fail-fast decision from the
+            ``--fail-on-error`` CLI flag — appended to the in-container run
+            argv as ``--fail-on-error`` ONLY when True (after ``--parallel``,
+            before the container launch) so the in-container ``pipeline_cli``
+            threads it onto the engine's ``--exit-on-fail``. When False
+            (default), the flag is omitted (backward compatible).
 
     Returns:
         The container's exit code.
@@ -570,7 +673,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
         # args = the post-image command (the in-container goga.pipeline run call +
         # its port + the run-coordination flags); params = the docker-run options
         # the runner translates to flags via the shared param→flag rule.
-        args = _compose_run_args(name, port, workflow, no_workflow, profile, skip, parallel)
+        args = _compose_run_args(name, port, workflow, no_workflow, profile, skip, parallel, fail_on_error)
         params = {
             "name": container_name,
             "rm": True,
@@ -635,6 +738,7 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     skip: tuple[str, ...] = (),
     parallel: int | None = None,
     home_profiles: dict[str, dict[str, Any]] | None = None,
+    fail_on_error: bool = False,
 ) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
@@ -690,6 +794,11 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
             non-empty (per ``home-profiles-carriage``; the whole bundle
             crosses because the effective profile name may only become known
             in-container).
+        fail_on_error: the run-form fail-fast decision forwarded from the
+            ``--fail-on-error`` CLI flag. Appended to the in-container run
+            argv as ``--fail-on-error`` ONLY when True (the in-container
+            ``pipeline_cli`` threads it onto the engine's ``--exit-on-fail``);
+            False (default) omits the flag.
 
     Returns:
         The container's exit code.
@@ -701,21 +810,36 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         SystemExit: ``128 + signum`` when SIGTERM/SIGINT is received during run.
 
     Note:
-        Home (machine-wide) config is loaded once up front — an absent file
-        is the normal no-op state. The project is mounted at ``/workspace``;
-        user pipelines are NOT bind-mounted from the host — the image is
-        populated at build time via ``RUN goga connect ...`` in the
-        Dockerfile, so the run operates entirely in-container. The workflow
-        decision, the profile value, and the skip names travel to the
-        container as argv flags; the ambient profile, the encoded home
+        Home (machine-wide) config is loaded once up front on BOTH substrates
+        — an absent file is the normal no-op state. The project is mounted at
+        ``/workspace``; user pipelines are NOT bind-mounted from the host —
+        the image is populated at build time via ``RUN goga connect ...`` in
+        the Dockerfile, so the run operates entirely in-container. The
+        workflow decision, the profile value, and the skip names travel to
+        the container as argv flags; the ambient profile, the encoded home
         bundle, and the effective workflow name travel as env-file engine
         lines (each only when it carries cargo, under the engine-skip
         rule). The host prints NO workflow line — the launch feedback line
         prints in-container; the afm configuration file and the task env
         layer (``pipeline.env``) resolve in-container (the host resolves no
         agent and writes no afm configuration).
+
+        Direct substrate (step 12a, ``is_in_docker`` True): every docker-hosted
+        step is skipped — no docker-CLI check, no ``config.image`` guard, no
+        host runtime-dir machinery, no env-file write, no image acquisition,
+        no ``DockerRunner``. The port is still allocated on both substrates;
+        the SAME ``_compose_env_lines`` ladder composes the env lines (parsed
+        into the child env layer — no env-file exists, nothing to unlink) and
+        the SAME ``_compose_run_args`` composes the argv, executed through
+        ``run_direct`` (per ``direct-runner``): streamed output, forwarded
+        SIGTERM/SIGINT (exit ``128 + signum`` — no caller-side D7 handler;
+        ``run_direct`` owns the signals), the child's exit code verbatim.
+        ``clean`` wipes the in-container AFM_DIR before launch; ``update``
+        never reaches this branch (the caller rejected it).
     """
-    if not _check_docker():
+    # Step 1 — docker-CLI gate (host substrate only): inside the goga image
+    # (the GOGA_DOCKER marker) there is no docker launch to check or acquire.
+    if not is_in_docker() and not _check_docker():
         raise click.ClickException("docker not found in PATH")
 
     # Home (machine-wide) config preamble — an empty HomeConfig when the file is
@@ -729,6 +853,39 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         home: HomeConfig = load_home_config()
     except (ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+    # Step 12a — the direct substrate: execute the SAME composed argv and env
+    # contract as a child of the current environment (one composition, two
+    # sinks — the argv/env composers below are the ones the host path uses).
+    if is_in_docker():
+        # The port is part of the composed contract — allocated on BOTH
+        # substrates (mirrors the docker -p publish of the host path).
+        port = _allocate_port()
+
+        # --clean wipes the in-container AFM_DIR before launch — never after,
+        # and never in a finally (the directory survives across runs).
+        if clean:
+            afm_state = Path(_IN_CONTAINER_AFM_DIR)
+
+            if afm_state.exists():
+                shutil.rmtree(afm_state)
+
+            afm_state.mkdir(parents=True, exist_ok=True)
+
+        lines = _compose_env_lines(
+            home_env=home.env,
+            docker_run_tokens=home.docker.run,
+            extra_env=extra_env,
+            proxy=proxy,
+            ambient_profile=os.environ.get("GOGA_PROFILE", ""),
+            home_profiles=home_profiles,
+            workflow_name=_resolve_workflow_env_name(workflow, no_workflow, name),
+        )
+        args = _compose_run_args(name, port, workflow, no_workflow, profile, skip, parallel, fail_on_error)
+
+        # No env-file exists on this path (nothing to unlink) and no
+        # caller-side D7 handler — run_direct owns the signals.
+        return run_direct(["python3", *args], env=_env_overlay(lines))
 
     if config.image is None:
         raise click.ClickException("image in .goga/config.yml is not set")
@@ -751,4 +908,5 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         skip,
         parallel,
         home_profiles,
+        fail_on_error,
     )
