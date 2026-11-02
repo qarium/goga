@@ -590,7 +590,15 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
                 print(shlex.join(["python3", *args]), file=sys.stderr)
                 ctx.exit(0)
 
-            exit_code = run_direct(["python3", *args], env=_env_overlay(lines))
+            # The spawn failure channel (D5): run_direct propagates a raw
+            # OSError from Popen (the executor never wraps); the caller owns
+            # the wrapping, so a missing/unusable program token is the same
+            # clean message + exit 1 as every other failure of the command.
+            try:
+                exit_code = run_direct(["python3", *args], env=_env_overlay(lines))
+            except OSError as exc:
+                raise click.ClickException(str(exc)) from exc
+
             ctx.exit(exit_code)
         finally:
             # The no-.ralphex-in-project invariant holds under every exit

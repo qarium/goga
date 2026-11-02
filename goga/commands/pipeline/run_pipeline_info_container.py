@@ -101,7 +101,7 @@ def _compose_profile_carriage(home_profiles: dict[str, dict[str, Any]] | None) -
     return profile_carriage_lines(os.environ.get("GOGA_PROFILE", ""), home_profiles)
 
 
-def run_pipeline_info_container(  # noqa: C901, PLR0913, PLR0917
+def run_pipeline_info_container(  # noqa: C901, PLR0912, PLR0913, PLR0917
     name: str | None,
     info: bool,
     config: ProjectConfig,
@@ -208,7 +208,13 @@ def run_pipeline_info_container(  # noqa: C901, PLR0913, PLR0917
         argv = _compose_argv(name, info, workflow, no_workflow, profile, skip)
         cargo = _compose_profile_carriage(home_profiles)
 
-        return run_direct(["python3", *argv], env=_env_overlay(cargo) if cargo else None)
+        # The spawn failure channel (D5): the executor propagates a raw
+        # OSError from Popen; the caller owns the wrapping (clean message +
+        # exit 1).
+        try:
+            return run_direct(["python3", *argv], env=_env_overlay(cargo) if cargo else None)
+        except OSError as exc:
+            raise click.ClickException(str(exc)) from exc
 
     # In-container argv composition per the form (see _compose_argv): the card
     # form carries the workflow decision "as given" — explicit -w,

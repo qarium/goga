@@ -93,15 +93,26 @@ state, the agent prompts — resolves on the **daemon's** filesystem, not
 the job's. A job container with a bare `docker` binary would launch the
 pipeline against empty directories.
 
-A viable job therefore needs Docker-in-Docker: a privileged `dind`
-sidecar daemon, `DOCKER_HOST` pointing at it, and the workspace plus the
-goga runtime directory (`~/.goga/runtime`) shared as **identical paths**
-on both sides — goga computes the mount sources on the job side, and the
-daemon must serve the same bytes. On top of that come the regular
-unattended needs: a pinned goga version matching the image, a
-non-interactive stage configuration, a git identity for the stages that
-commit, and agent credentials from env variables (an ephemeral runner has
-no credential files to mount).
+A viable job therefore needs either Docker-in-Docker or the goga image as
+the job container itself:
+
+- **Docker-in-Docker**: a privileged `dind`
+  sidecar daemon, `DOCKER_HOST` pointing at it, and the workspace plus the
+  goga runtime directory (`~/.goga/runtime`) shared as **identical paths**
+  on both sides — goga computes the mount sources on the job side, and the
+  daemon must serve the same bytes. On top of that come the regular
+  unattended needs: a pinned goga version matching the image, a
+  non-interactive stage configuration, a git identity for the stages that
+  commit, and agent credentials from env variables (an ephemeral runner has
+  no credential files to mount).
+- **The goga image as the job container** — the simplest option: the image
+  sets `GOGA_DOCKER=1`, so `goga pipeline` takes the
+  [direct substrate](runtime.md#direct-in-container-execution) and runs the
+  composed command as a child process — no Docker-in-Docker, no daemon, no
+  mount-path sharing. Give the job the repository and the agent credentials
+  as env variables; add `--fail-on-error` when the step should fail on a
+  failed stage. Pipeline state lives in `/home/goga/pipeline` for the job's
+  lifetime only.
 
 The job container — Python, git, and the docker CLI in one image:
 

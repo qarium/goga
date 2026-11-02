@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, ClassVar, NamedTuple
 from unittest import mock
 
+import click
 import pytest
 from goga.commands.pipeline.run_pipeline_info_container import (
     run_pipeline_info_container as rpic,
@@ -810,3 +811,24 @@ class TestDirectSubstrate:
         assert result == 0
         assert spawn.called
         mocks["runner_cls"].assert_not_called()
+
+    def test_direct_spawn_failure_is_clean_click_error(self, tmp_path: Path, monkeypatch) -> None:
+        """A raw OSError from the spawn is wrapped by the caller (D5) — a clean ClickException.
+
+        ``run_direct`` propagates a spawn ``OSError`` raw (its own contract
+        test pins that); this launcher owns the wrapping, so a missing
+        program token is the same clean error surface as every other
+        failure of the informational forms — never a traceback.
+        """
+        import goga.docker.runner
+
+        monkeypatch.chdir(tmp_path)
+        self._install_direct(monkeypatch)
+
+        def _raising_popen(argv: list[str], env: dict[str, str] | None = None) -> object:
+            raise FileNotFoundError(f"No such file or directory: {argv[0]}")
+
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _raising_popen)
+
+        with pytest.raises(click.ClickException, match="No such file or directory"):
+            rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)

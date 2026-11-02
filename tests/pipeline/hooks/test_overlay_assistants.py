@@ -623,6 +623,34 @@ class TestOverlayAssistants:
         assert merged.env == {}  # the clear wins
         assert merged.prompt == "p"  # omitted fields flow
 
+    def test_merge_override_authored_empty_skills_clears_tool_skills(self) -> None:
+        """R2.1 — an authored ``skills: []`` is a clear, not an absence (the env twin).
+
+        The presence discipline covers both explicit empties: an authored
+        empty skills list wins over the delivered base's skills instead of
+        letting them flow — an omitted field flows, an authored empty
+        replaces whole.
+        """
+        base = WorkflowDocument(
+            prompt="authored",
+            assistants={"X": WorkflowAssistant(name="X", agent="a", skills=[])},
+        )
+        contributions = [
+            ToolContribution(
+                tool="t",
+                document=WorkflowDocument(
+                    assistants={"X": WorkflowAssistant(name="X", prompt="p", skills=["s1"])},
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        merged = overlay.workflow.assistants["X"]
+        assert merged.skills == []  # the clear wins
+        assert merged.prompt == "p"  # omitted fields flow
+
     def test_merge_override_delegate_false_opts_out_and_none_inherits(self) -> None:
         """The tri-state discipline end to end — authored False opts out, absent inherits."""
         base = WorkflowDocument(

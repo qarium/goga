@@ -75,7 +75,7 @@ pipx install goga
 docker info
 ```
 
-Before each launch they also verify that the host goga version and the image's goga version agree at the (major, minor) level — set `GOGA_SKIP_VERSION_CHECK=1` to skip the check, and run `goga --version` to print the installed host version.
+Before each launch they also verify that the host goga version and the image's goga version agree at the (major, minor) level — set `GOGA_SKIP_VERSION_CHECK=1` to skip the check, and run `goga --version` to print the installed host version. Inside the goga image itself (`GOGA_DOCKER=1`) both commands skip the docker machinery and run the composed command directly — no Docker-in-Docker needed to run them in a container job.
 
 Connect goga to your agent
 
@@ -193,6 +193,7 @@ goga pipeline development -t feat/x   # first switch to the branch hosting this 
 goga pipeline refinement -s discover  # shorter run: skip technical discovery
 goga pipeline development --parallel 4 # cap parallelism (subject to the pipeline's dependency rules)
 goga pipeline development --clean     # wipe persistent state for a fresh run
+goga pipeline development --fail-on-error  # exit non-zero when a stage fails
 ```
 
 Inspect pipelines without running anything:
@@ -288,7 +289,7 @@ stages:
       ANTHROPIC_MODEL: opus
 ```
 
-**`assistants` — collaborate with helper agents.** A top-level name-keyed catalog declares named helpers (prompt, skills, agent, delegate, env) and the per-stage `assistants` map attaches them (`gate`, `when` — `when` required on every attachment); each catalog entry also joins the run-level team. Requires afm 2.0+ (the shipped image carries it):
+**`assistants` — collaborate with helper agents.** A top-level name-keyed catalog declares named helpers (prompt, skills, agent, delegate, env) and the per-stage `assistants` map attaches them (`gate`, `when` — `when` required on every attachment); each catalog entry also joins the run-level team. An entry naming an assistant a tool delivered overrides it field by field (authored fields win whole, the rest flows from the delivery). Requires afm 2.0+ (the shipped image carries it):
 
 ```yaml
 assistants:

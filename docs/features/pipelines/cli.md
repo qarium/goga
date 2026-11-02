@@ -217,6 +217,7 @@ stages:
 | `--no-workflow` | flag | off | Disable workflow application entirely. Mutually exclusive with `--workflow`. Honored by the run and card forms |
 | `-s`, `--skip` | string (repeatable) | — | Exclude a stage from the compiled pipeline (one name per invocation). The stage is removed and its dependents' `depends_on` are reconnected. Forwarded as one `-s <name>` argv flag per invocation. Not mutually exclusive with `--workflow`/`--no-workflow` (skip names still compose under a disabled decision). Honored by the run and card forms; the host performs no name validation — unknown names surface in-container as a structural error |
 | `--parallel` | int | — | Cap the number of stages executed concurrently (run form only). Omitted (the default), stages run unbounded |
+| `--fail-on-error` | flag | off | Exit non-zero when a stage fails (run form only): the run stops at the first failed stage and the engine exits with code `1` — forwarded to the engine as its explicit `--exit-on-fail` argv flag. Without it a failed stage does not fail the run's exit code. The list/info forms accept it without effect |
 | `-p`, `--profile` | string | — | Activate a profile for this run — the CLI activation channel of the workflow rendering (see [Workflows — Profiles](workflows.md#profiles)). Honored by the run and card forms; forwarded as `--profile <name>` in the container argv. Beats `GOGA_PROFILE` and the workflow's own `profile:` default |
 
 ### Persistent pipeline state
@@ -274,6 +275,12 @@ Start the run on the branch hosting an existing piece of work:
 goga pipeline development -t feat/x
 ```
 
+Fail the run's exit code when a stage fails (default: a failed stage does not fail the exit code):
+
+```bash
+goga pipeline development --fail-on-error
+```
+
 ## Exit Codes
 
 Host side (all forms):
@@ -289,7 +296,7 @@ Container side, run form:
 | Code | Meaning                                                                  |
 |------|--------------------------------------------------------------------------|
 | `0`  | The pipeline ran successfully                                            |
-| `1`  | The pipeline was not found; an in-container project-configuration load failure or a hard `config/amend_config` hook failure at the in-container load (a clean `Error: ...` before any compile, write, or launch — see [Configuration — Hooks](../../configuration/hooks.md)); a damaged CLI environment payload (`Error: GOGA_EXTRA_ENV: invalid payload`, before the run-creation facts); a damaged profile-carriage payload (`Error: GOGA_HOME_PROFILES: invalid payload`, before any events or launch); a handled compile/malformed-file failure rendered as a clean `Error: ...` stderr message; a hard `pipeline/amend_workflow` hook failure — the run stops before any compile or launch with `Error: pipeline '<name>' was not amended: hook <name> of tool <tool> failed on pipeline.amend_workflow: <reason>` (see [Hooks](hooks.md)); or a broken tool package import during hooks-registry assembly (a clean `Error: ...` naming the package) |
+| `1`  | The pipeline was not found; an in-container project-configuration load failure or a hard `config/amend_config` hook failure at the in-container load (a clean `Error: ...` before any compile, write, or launch — see [Configuration — Hooks](../../configuration/hooks.md)); a damaged CLI environment payload (`Error: GOGA_EXTRA_ENV: invalid payload`, before the run-creation facts); a damaged profile-carriage payload (`Error: GOGA_HOME_PROFILES: invalid payload`, before any events or launch); a handled compile/malformed-file failure rendered as a clean `Error: ...` stderr message; a hard `pipeline/amend_workflow` hook failure — the run stops before any compile or launch with `Error: pipeline '<name>' was not amended: hook <name> of tool <tool> failed on pipeline.amend_workflow: <reason>` (see [Hooks](hooks.md)); a broken tool package import during hooks-registry assembly (a clean `Error: ...` naming the package); or, with `--fail-on-error`, a failed stage stopping the run (the engine's `--exit-on-fail` exit) |
 | `2`  | In-container argparse error (missing `NAME`, non-integer `--port`, missing `--port` without `--info`) |
 | `126`| The pipeline engine was present inside the image but could not be invoked (e.g. not executable) |
 | `127`| The pipeline engine is missing inside the container image               |

@@ -953,14 +953,18 @@ class TestBuildCommandProfileCarriage:
 # rejected with an error naming the option BEFORE any other work.
 
 
-def _write_direct_config(tmp_path: Path) -> None:
-    """Materialize the minimal build-project ``.goga/config.yml`` under ``tmp_path``."""
+def _write_direct_config(tmp_path: Path, *, image: str | None = "qarium/goga:latest") -> None:
+    """Materialize the minimal build-project ``.goga/config.yml`` under ``tmp_path``.
+
+    ``image=None`` models a config the host substrate's image guard would
+    reject — used to pin that the guard is substrate-scoped to the host path.
+    """
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(
         yaml.dump(
             {
                 "language": "python",
-                "image": "qarium/goga:latest",
+                "image": image,
                 "build": {"agent": "claude"},
                 "pipeline": {"agent": "claude"},
             }
@@ -1176,6 +1180,65 @@ class TestBuildDirectSubstrate:
 
         assert result.exit_code == 7
         assert len(spawn.calls) == 1
+
+    def test_build_direct_skips_docker_check_and_image_guard(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failing docker-CLI check and an unset image both pass on the direct substrate.
+
+        Mirrors the pipeline surface's twin: ``_check_docker`` resolving
+        ``False`` (no docker on the machine) and a config the host image
+        guard would reject must neither stop the direct run nor spawn any
+        docker activity — both gates are substrate-scoped to the host path.
+        """
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        _write_direct_config(tmp_path, image=None)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+        monkeypatch.setattr(_build_mod, "_check_docker", lambda: False)
+
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 0
+        assert len(spawn.calls) == 1
+
+    def test_build_direct_spawn_failure_is_clean_click_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raw OSError from the spawn is wrapped by the caller (D5) — clean message, exit 1.
+
+        ``run_direct`` propagates a spawn ``OSError`` raw (its own contract
+        test pins that); the command owns the wrapping, so a missing program
+        token is the same clean error surface as every other failure of
+        ``goga build`` — never a traceback — and the no-.ralphex-in-project
+        cleanup still runs on that exit path.
+        """
+        import goga.docker.runner
+
+        _write_direct_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        def _raising_popen(argv: list[str], env: dict[str, str] | None = None) -> object:
+            raise FileNotFoundError(f"No such file or directory: {argv[0]}")
+
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _raising_popen)
+
+        result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "No such file or directory" in result.stderr
+        assert not isinstance(result.exception, FileNotFoundError)
+        # The finally cleanup ran on the spawn-failure exit path too.
+        assert not (tmp_path / ".ralphex").exists()
 
     def test_build_direct_env_overlay_parses_the_same_ladder_lines(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

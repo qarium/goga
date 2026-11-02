@@ -884,8 +884,13 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         args = _compose_run_args(name, port, workflow, no_workflow, profile, skip, parallel, fail_on_error)
 
         # No env-file exists on this path (nothing to unlink) and no
-        # caller-side D7 handler — run_direct owns the signals.
-        return run_direct(["python3", *args], env=_env_overlay(lines))
+        # caller-side D7 handler — run_direct owns the signals. The spawn
+        # failure channel (D5): the executor propagates a raw OSError from
+        # Popen; the caller owns the wrapping (clean message + exit 1).
+        try:
+            return run_direct(["python3", *args], env=_env_overlay(lines))
+        except OSError as exc:
+            raise click.ClickException(str(exc)) from exc
 
     if config.image is None:
         raise click.ClickException("image in .goga/config.yml is not set")

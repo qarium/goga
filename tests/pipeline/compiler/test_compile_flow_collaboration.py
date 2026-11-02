@@ -882,6 +882,52 @@ class TestEffectiveContentCheck:
         assert "Ghost" in str(excinfo.value)
         assert "workflow.stages.build.assistants.Ghost" in str(excinfo.value)
 
+    def test_content_check_covers_unreferenced_catalog_entry(self, tmp_path: Path) -> None:
+        """The check runs over the whole namespace — an entry no stage references still fails.
+
+        The content check is a property of the namespace, not of the
+        attachments: a catalog override-style entry that no stage attaches
+        still joins the namespace (catalog entries always do) and still
+        stops compilation when it resolves neither prompt nor skills.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant Ghost at workflow.assistants.Ghost resolves neither prompt nor skills"),
+        ):
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n  Ghost:\n    agent: a1\n",
+            )
+
+    def test_content_check_covers_skipped_stage_declaration(self, tmp_path: Path) -> None:
+        """An override-style declaration on a ``skip: true`` stage still fails the check.
+
+        The namespace is built from the workflow document, not from the
+        post-skip working body (the attachment checks' domain): a skipped
+        stage's declaration is still authored content, so it joins the
+        namespace and its unresolved content stops compilation naming the
+        stage site — unlike a dangling REFERENCE on a skipped stage, which
+        stays silent.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape(
+                "assistant Ghost at workflow.stages.review.assistants.Ghost resolves neither prompt nor skills"
+            ),
+        ):
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n"
+                "  review:\n"
+                "    skip: true\n"
+                "    assistants:\n"
+                "      Ghost:\n"
+                "        when: checkpoints\n"
+                "        agent: a1\n",
+            )
+
 
 def _expected_entry(name: str, instruction: str) -> FlowAssistant:
     """Build the expected attachment entry for a default gate/when reference."""

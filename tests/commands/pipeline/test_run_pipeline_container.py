@@ -1199,6 +1199,26 @@ class TestDirectSubstrateLaunch:
         assert result == 0
         assert spawn.called
 
+    def test_direct_spawn_failure_is_clean_click_error(self, tmp_path: Path, monkeypatch) -> None:
+        """A raw OSError from the spawn is wrapped by the caller (D5) — clean message, exit 1.
+
+        ``run_direct`` propagates a spawn ``OSError`` raw (its own contract
+        test pins that); the launcher owns the wrapping, so a missing program
+        token is the same clean ``ClickException`` surface as every other
+        failure of the command — never a traceback.
+        """
+        import goga.docker.runner
+
+        self._install_direct(tmp_path, monkeypatch)
+
+        def _raising_popen(argv: list[str], env: dict[str, str] | None = None) -> object:
+            raise FileNotFoundError(f"No such file or directory: {argv[0]}")
+
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _raising_popen)
+
+        with pytest.raises(click.ClickException, match="No such file or directory"):
+            run_pipeline_container("deploy", _make_config())
+
     def test_direct_clean_wipes_before_launch(self, tmp_path: Path, monkeypatch) -> None:
         """``--clean`` wipes the in-container AFM_DIR strictly before the child launches."""
         import goga.docker.runner

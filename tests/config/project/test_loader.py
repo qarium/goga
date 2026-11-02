@@ -1088,6 +1088,22 @@ class TestLoadConfigEnvReferences:
         with pytest.raises(yaml.YAMLError, match="expected a variable name in !ENV"):
             load_project_config()
 
+    def test_load_project_config_env_on_int_field_rejects_without_coercion(self, goga_project, monkeypatch):
+        """An !ENV value stays a string — an int-typed field rejects it, never coerces it.
+
+        Resolution is always a string (no coercion): a field expecting an
+        int owns the rejection through its own validation, naming the
+        dotted field — even when the resolved text looks numeric.
+        """
+        monkeypatch.setenv("PATIENCE", "3")
+        _write_goga_yml(
+            goga_project,
+            "language: python\nbuild:\n  agent: claude\n  review:\n    additional:\n      patience: !ENV PATIENCE\n",
+        )
+
+        with pytest.raises(ValueError, match=re.escape("build.review.additional.patience must be an int")):
+            load_project_config()
+
 
 # --- Contract tests for _parse_codemanifest ---
 
