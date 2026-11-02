@@ -26,10 +26,10 @@ pipeline:
 ## Calling the loader
 
 ```python
-from ..yaml import parse_env_yaml   # from a sibling sub-cell of goga/config
+from ..yaml import parse_env_yaml  # from a sibling sub-cell of goga/config
 
 text = Path(".goga/config.yml").read_text()
-raw = parse_env_yaml(text)   # plain Python value; tags already resolved
+raw = parse_env_yaml(text)  # plain Python value; tags already resolved
 ```
 
 Relative import from a sibling sub-cell of `goga/config` goes one level

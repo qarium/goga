@@ -691,20 +691,37 @@ failures are attributable to the feature work.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create the virtualenv and install the project with the test extra:
+- [x] Create the virtualenv and install the project with the test extra:
   `python3 -m venv .venv && .venv/bin/pip install -e '.[test]'`
-- [ ] Verify the toolchain: `.venv/bin/python --version` (3.10+),
+- [x] Verify the toolchain: `.venv/bin/python --version` (3.10+),
   `.venv/bin/pytest --version`, `.venv/bin/ruff --version`
-- [ ] Baseline gate 1: `.venv/bin/pytest tests/ -x` — the full existing
+  (Python 3.12.16, pytest 9.2.0, ruff 0.17.3)
+- [x] Baseline gate 1: `.venv/bin/pytest tests/ -x` — the full existing
   suite must pass BEFORE any change (report the count)
-- [ ] Baseline gate 2: `.venv/bin/ruff check goga/ tests/` and
+  (7885 passed, 8 skipped. Two PRE-EXISTING baseline defects repaired,
+  both test-infrastructure only, no source change: (1) an autouse
+  `_isolate_goga_env` fixture in `tests/conftest.py` clears the ambient
+  container carriage vars `GOGA_WORKFLOW`/`GOGA_PROFILE`/`GOGA_EXTRA_ENV`/
+  `GOGA_HOME_PROFILES`/`GOGA_DOCKER` — the build cycle test relied on
+  ambient values the convention forbids and CI never sets; (2) the
+  shipped-workflows guard pinned six files while HEAD deliberately added
+  the seventh `worker.yml` — set updated to the real seven)
+- [x] Baseline gate 2: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — both clean
-- [ ] Baseline gate 3: `goga lint` (bare, from the repository root) —
+  (one pre-existing format defect repaired: `ruff format` on
+  `goga/config/yaml/.usages/env-variables.md` — whitespace-only inside an
+  example code fence, no contract semantics changed)
+- [x] Baseline gate 3: `goga lint` (bare, from the repository root) —
   0 errors; `goga schema` — record the current edge set for the Task-12
   comparison (the two `goga/config/yaml` edges and the
   `run_direct`/`is_in_docker`/`direct-runner` command-edge additions must
   appear only after the code lands — the manifests already declare them,
   so a red schema here means a stale cache, not a code problem)
+  (lint: 92 cells, 0 errors — one transient external-URL fetch timeout on
+  the first run, clean on retry; schema baseline saved to
+  `.ralphex/progress/schema-baseline-task1.json`: both config-cell →
+  `goga/config/yaml` edges and the command-cell → `goga/docker` additions
+  already declared by the manifests, no cycles)
 
 ### Task 2: `goga/config/yaml` — the `parse_env_yaml` routine and the cell facade
 

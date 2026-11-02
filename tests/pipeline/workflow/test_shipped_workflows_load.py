@@ -27,14 +27,24 @@ _SHIPPED_WORKFLOWS = sorted(_WORKFLOWS_DIR.glob("*.yml"))
 
 
 def test_shipped_workflow_assets_exist() -> None:
-    """The project workflows directory carries the six canonical workflow-files.
+    """The project workflows directory carries the seven canonical workflow-files.
 
     Guards against the workflows path moving unnoticed (which would silently
     turn the parametrized load test into a no-op over an empty collection).
+    The worker review workflow joined the canonical set with the
+    pipeline-settings-calibration spec-stage commit.
     """
     names = {path.name for path in _SHIPPED_WORKFLOWS}
 
-    assert names == {"development.yml", "refinement.yml", "sync.yml", "bugfix.yml", "patch.yml", "review.yml"}
+    assert names == {
+        "development.yml",
+        "refinement.yml",
+        "sync.yml",
+        "bugfix.yml",
+        "patch.yml",
+        "review.yml",
+        "worker.yml",
+    }
 
 
 @pytest.mark.parametrize("workflow_path", _SHIPPED_WORKFLOWS, ids=lambda path: path.name)
