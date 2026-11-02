@@ -49,7 +49,7 @@ docker launcher through the runpy entrypoint in `__main__.py`.
 
 Dispatch: run without `--info` → `run_pipeline(NAME, project_dir, user_dir, PORT,
 workflow=<WF or None>, no_workflow=<bool>, profile=<P or None>, skip=<names or None>,
-parallel=<N or None>)`; run
+parallel=<N or None>, fail_on_error=<bool>)`; run
 with `--info` → `describe_pipeline(NAME, project_dir, user_dir, workflow=<WF or None>,
 no_workflow=<bool>, profile=<P or None>, skip=<names or None>)`.
 

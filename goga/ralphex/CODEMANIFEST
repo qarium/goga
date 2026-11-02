@@ -1,9 +1,9 @@
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   ralphex: .goga/usages/cooks/ralphex.md
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - Working with the codebase
   - Organizing the REPL development cycle
   - Debugging and testing

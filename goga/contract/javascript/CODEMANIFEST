@@ -7,11 +7,11 @@ Imports:
     From: goga/contract/data
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   tree-sitter-js: .goga/usages/cooks/tree-sitter-js.md
 
 Annotations: |
-  During development and testing, use the practice `conventions`.
+  During development and testing, use the practice `convention`.
   For parsing JavaScript files, use the practice `tree-sitter-js`.
 
 ---

@@ -102,7 +102,7 @@ composed in-container argv and env contract execute as a child process.
   --update, -e/--env, --add-host, --proxy — each fails naming the
   option.
 - --clean wipes the in-container AFM_DIR (/home/goga/pipeline) before
-  the run; --dry-run prints the direct command.
+  the run.
 - The port is still allocated and passed; the env contract (engine
   variables, carriage payloads) is identical to the docker launch.
 - On the host (no marker) nothing changes — docker run as always.

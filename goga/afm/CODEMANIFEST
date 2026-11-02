@@ -1,9 +1,9 @@
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   afm: .goga/usages/cooks/afm.md
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - Working with the codebase
   - Organizing the REPL development cycle
   - Debugging and testing
@@ -85,7 +85,7 @@ Annotations: |
        with a clear message
     6. Return afm's exit code as `exit_code`
 
-    Apply the `conventions` practice for error-handling style and docstring formatting.
+    Apply the `convention` practice for error-handling style and docstring formatting.
 
     Requirements:
     - Always pass `flow_path` to "afm run" as the positional argument — never a

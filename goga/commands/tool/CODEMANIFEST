@@ -12,10 +12,10 @@ Imports:
 
 Usages:
   click: .goga/usages/cooks/click.md
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
 
 Annotations: |
-  The `conventions` practice governs codebase navigation, the REPL development cycle, debugging and testing, test infrastructure, and project-wide development principles.
+  The `convention` practice governs codebase navigation, the REPL development cycle, debugging and testing, test infrastructure, and project-wide development principles.
   Apply `click` to implement the CLI command.
   The dispatcher resolves the tool package and forwards captured arguments together with the optional injections the tool entry point declares.
 

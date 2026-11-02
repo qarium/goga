@@ -49,11 +49,11 @@ Imports:
     From: goga/docker
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - Working with the codebase
   - Organizing the REPL development cycle
   - Debugging and testing
@@ -269,7 +269,7 @@ Annotations: |
     - --update / -u (flag) — pull the image before launching the container
 
     Apply the `click` practice for the command surface and option declarations.
-    Apply the `conventions` CLI command docstring rule for the command's --help
+    Apply the `convention` CLI command docstring rule for the command's --help
     text (rendered verbatim by Click; omit Args/Returns/Raises) and intra-package
     imports.
     Apply the `build-usage` practice for the in-container build invocation contract.
@@ -578,7 +578,7 @@ Annotations: |
     `runtime_dir`: absolute host path under
                    ~/.goga/runtime/builds/<normalized_project>/<branch>/
 
-    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `convention` practice for docstring style and intra-package imports.
 
     Algorithm:
     1. Delegate to `resolve_runtime_dir`("builds") — no suffix
@@ -602,7 +602,7 @@ Annotations: |
 
     `host_dir`: host path computed by `resolve_build_runtime_dir`
 
-    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `convention` practice for docstring style and intra-package imports.
 
     Algorithm:
     1. When the directory exists, remove it recursively
@@ -628,7 +628,7 @@ Annotations: |
 
     `project_dir`: host project directory potentially containing ``.ralphex/``
 
-    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `convention` practice for docstring style and intra-package imports.
 
     Algorithm:
     1. Remove ``project_dir``/.ralphex recursively if it exists; tolerate a

@@ -19,11 +19,11 @@ Imports:
 
 Usages:
   click: .goga/usages/cooks/click.md
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   beautiful_yaml: .goga/usages/cooks/beautiful_yaml.md
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - working with the codebase
   - organizing the REPL development loop
   - debugging and testing

@@ -23,13 +23,13 @@ Imports:
 
 Usages:
   dsl: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   yaml: |
     The pyyaml library for parsing YAML documents.
     The library must be listed as a project dependency.
 
 Annotations: |
-  When developing and testing: follow the practice `conventions`.
+  When developing and testing: follow the practice `convention`.
 
   Use the practice `yaml` for loading documents.
   Use the practice `dsl` for YAML navigation.
