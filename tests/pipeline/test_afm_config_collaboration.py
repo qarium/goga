@@ -1,8 +1,10 @@
 """Contract and logic tests of the collaboration plumbing of ``write_afm_config``.
 
 Covers the collaboration half of the afm configuration authorship: the
-section materializes only when both the compiled flow document and the
-effective workflow document are given; the generated profiles exist exactly
+section writes on every launch — always headed by the static
+``runtime_context: wrapper`` — while the generated profiles materialize only
+when both the compiled flow document and the effective workflow document are
+given; the generated profiles exist exactly
 for the flow-referenced ids (one ``goga-<name>`` profile per team member and
 stage attachment, deduplicated); each profile carries exactly
 ``{title, command, delegate}``; an assistant carrying a non-empty effective
@@ -106,30 +108,37 @@ class TestWriteAfmConfigCollaborationContract:
         """write_afm_config is importable from the goga.pipeline facade."""
         assert write_afm_config is not None
 
-    def test_collaboration_section_requires_both_flow_and_workflow(self, config_path: Path) -> None:
-        """Neither document alone writes the collaboration key — the old content shape stays."""
+    def test_collaboration_profiles_require_both_flow_and_workflow(self, config_path: Path) -> None:
+        """The section always writes; the profiles need both documents.
+
+        Without one of the documents the section is exactly the static head
+        (``runtime_context: wrapper``); with both, the profiles materialize
+        under the head.
+        """
         flow = _flow_doc(members=[_member("reviewer")])
         workflow = _workflow_doc(catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")})
 
         write_afm_config("claude")
-        assert "collaboration" not in yaml.safe_load(config_path.read_text())
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == {"runtime_context": "wrapper"}
 
         write_afm_config("claude", flow=flow)
-        assert "collaboration" not in yaml.safe_load(config_path.read_text())
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == {"runtime_context": "wrapper"}
 
         write_afm_config("claude", workflow=workflow)
-        assert "collaboration" not in yaml.safe_load(config_path.read_text())
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == {"runtime_context": "wrapper"}
 
         write_afm_config("claude", flow=flow, workflow=workflow)
-        assert "collaboration" in yaml.safe_load(config_path.read_text())
+        collaboration = yaml.safe_load(config_path.read_text())["collaboration"]
+        assert collaboration["runtime_context"] == "wrapper"
+        assert list(collaboration["profiles"]) == ["goga-reviewer"]
 
     def test_collaboration_free_documents_write_empty_profiles(self, config_path: Path) -> None:
-        """Both documents without collaboration content write an empty profiles map."""
+        """Both documents without collaboration content write an empty profiles map under the head."""
         write_afm_config("claude", flow=_flow_doc(), workflow=_workflow_doc())
 
         data = yaml.safe_load(config_path.read_text())
 
-        assert data["collaboration"] == {"profiles": {}}
+        assert data["collaboration"] == {"runtime_context": "wrapper", "profiles": {}}
 
     def test_generated_profile_shape_is_exactly_title_command_delegate(self, config_path: Path) -> None:
         """A generated profile carries exactly ``{title, command, delegate}`` — nothing else."""
@@ -256,7 +265,7 @@ class TestWriteAfmConfigCollaborationLogic:
     def test_write_afm_config_add_stage_disabled(self, config_path: Path) -> None:
         """The generated config carries ``add_stage.enabled false`` unconditionally.
 
-        Written beside the four pre-existing statics even with no flow and no
+        Written beside the other statics even with no flow and no
         workflow — the dashboard of a goga-managed run accepts no
         out-of-model stage addition; the setting is never configurable.
         """
@@ -269,6 +278,7 @@ class TestWriteAfmConfigCollaborationLogic:
         assert parsed["open_browser"] is False
         assert parsed["proxy"] == {"enabled": False}
         assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
+        assert parsed["skin_dir"] == "/home/goga/.afm/skins"
 
     def test_afm_config_env_delivery_keys_on_nonempty_map(self, config_path: Path, closure_base: Path) -> None:
         """An authored ``env: {}`` is a clear — no closure file, no env-key validation.

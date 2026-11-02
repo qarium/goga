@@ -444,7 +444,8 @@ def _compose_run_args(  # noqa: PLR0913, PLR0917
 
     Args:
         name: Pipeline name without extension.
-        port: The allocated localhost port (mirrors the docker ``-p`` publish).
+        port: The resolved localhost port — the given CLI port or an
+            allocated free one (mirrors the docker ``-p`` publish).
         workflow: optional workflow name from the ``--workflow`` CLI flag.
         no_workflow: flag from the ``--no-workflow`` CLI flag.
         profile: optional profile name from the ``-p/--profile`` CLI flag —
@@ -525,6 +526,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
     parallel: int | None = None,
     home_profiles: dict[str, dict[str, Any]] | None = None,
     fail_on_error: bool = False,
+    port: int | None = None,
 ) -> int:
     """Launch the container in run mode (``-m goga.pipeline run <name> --port``).
 
@@ -581,6 +583,12 @@ def _run_named(  # noqa: PLR0913, PLR0917
             before the container launch) so the in-container ``pipeline_cli``
             threads it onto the engine's ``--exit-on-fail``. When False
             (default), the flag is omitted (backward compatible).
+        port: the fixed dashboard port from the ``--port`` CLI option, or
+            None. When not None, the launch uses this port verbatim in both
+            sinks — the docker ``-p <port>:<port>`` publish and the
+            in-container ``--port <port>`` argv — and no ephemeral port is
+            allocated. When None (default), a free localhost port is
+            allocated (the pre-existing behavior).
 
     Returns:
         The container's exit code.
@@ -593,7 +601,8 @@ def _run_named(  # noqa: PLR0913, PLR0917
             the env-file and restores the previous handlers first).
 
     Note:
-        Orchestration order: allocate a port; resolve and ensure the
+        Orchestration order: resolve the port (the given CLI port, else
+        allocate a free one); resolve and ensure the
         persistent afm state directory (wiping it first when ``clean``),
         before any signal handler or secret file exists; install the
         SIGTERM/SIGINT handlers BEFORE writing the secret env-file (D7) — a
@@ -612,7 +621,11 @@ def _run_named(  # noqa: PLR0913, PLR0917
         line prints in-container. The persistent directory is never deleted
         in ``finally`` — only the env-file is unlinked.
     """
-    port = _allocate_port()
+    # The given CLI port replaces the ephemeral allocation verbatim — both
+    # sinks (the docker publish and the in-container argv) read this one
+    # value; a taken port is the docker/afm bind error, never a silent
+    # fallback to another port.
+    port = port if port is not None else _allocate_port()
 
     # Steps 5-6 - resolve the persistent afm state host directory and ensure it
     # exists BEFORE installing signal handlers or creating temp files: it must
@@ -739,6 +752,7 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     parallel: int | None = None,
     home_profiles: dict[str, dict[str, Any]] | None = None,
     fail_on_error: bool = False,
+    port: int | None = None,
 ) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
@@ -799,6 +813,12 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
             argv as ``--fail-on-error`` ONLY when True (the in-container
             ``pipeline_cli`` threads it onto the engine's ``--exit-on-fail``);
             False (default) omits the flag.
+        port: the fixed dashboard port forwarded from the ``--port`` CLI
+            option (1-65535, validated by the CLI). When not None, BOTH port
+            sinks of the launch carry this value verbatim — the docker
+            ``-p <port>:<port>`` publish and the in-container ``--port``
+            argv — and no ephemeral port is allocated. When None (default),
+            a free localhost port is allocated as before.
 
     Returns:
         The container's exit code.
@@ -827,7 +847,8 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         Direct substrate (step 12a, ``is_in_docker`` True): every docker-hosted
         step is skipped — no docker-CLI check, no ``config.image`` guard, no
         host runtime-dir machinery, no env-file write, no image acquisition,
-        no ``DockerRunner``. The port is still allocated on both substrates;
+        no ``DockerRunner``. The port is still resolved on both substrates
+        (the given CLI port, else an allocated free one);
         the SAME ``_compose_env_lines`` ladder composes the env lines (parsed
         into the child env layer — no env-file exists, nothing to unlink) and
         the SAME ``_compose_run_args`` composes the argv, executed through
@@ -858,9 +879,10 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     # contract as a child of the current environment (one composition, two
     # sinks — the argv/env composers below are the ones the host path uses).
     if is_in_docker():
-        # The port is part of the composed contract — allocated on BOTH
-        # substrates (mirrors the docker -p publish of the host path).
-        port = _allocate_port()
+        # The port is part of the composed contract — resolved on BOTH
+        # substrates (the given CLI port, else an allocated free one; the
+        # direct substrate mirrors the docker -p publish of the host path).
+        port = port if port is not None else _allocate_port()
 
         # --clean wipes the in-container AFM_DIR before launch — never after,
         # and never in a finally (the directory survives across runs).
@@ -914,4 +936,5 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         parallel,
         home_profiles,
         fail_on_error,
+        port,
     )

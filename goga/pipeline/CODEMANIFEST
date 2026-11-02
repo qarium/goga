@@ -135,6 +135,23 @@ Usages:
     properly installed image — when a default is missing AND no inline
     override is supplied for the corresponding role, materialization
     fails with a readable error before launch.
+  default_skin: |
+    The goga dashboard skin ships inside the installed goga package at
+    goga/assets/afm/skin/ — a flat directory of skin files (currently
+    index.css, goga-old.css, favicon.png, and title.txt). The afm
+    configuration the run coordination writes points the engine at
+    /home/goga/.afm/skins (the static skin_dir field) with
+    theme: goga, and the skin materialization copies the packaged
+    directory verbatim into /home/goga/.afm/skins/goga/ on every launch
+    (validate-all, then reset, then copy — a missing or empty packaged
+    directory is one strict pre-run error that never wipes the
+    previously materialized skin). Resolution from the installed package
+    location is an implementation detail of the same shape as
+    `default_prompts` — the consumer may use any standard mechanism
+    that yields the absolute path to the package's goga/assets/afm/skin/
+    directory at runtime. The file set is whatever the package carries:
+    no fixed-name requirement beyond a non-empty directory, so the skin
+    evolves with the package without a contract change.
 
 Annotations: |
   The `convention` practice is used for:
@@ -153,7 +170,9 @@ Annotations: |
 
   The run interior arrives through afm-facing machinery of this cell: the
   afm configuration write registers goga's own observer hook on every
-  launch, and the hook entry of the in-container CLI bridges the lifecycle
+  launch, the dashboard skin materialization populates the skins directory
+  the written configuration points at (per `default_skin`), and the hook
+  entry of the in-container CLI bridges the lifecycle
   events onto the platform — one short-lived process per event, the
   curated vocabulary mapped in one place, the emission delivered through
   the pipeline hooks zone. The bridging is observer-only: no bridge
@@ -199,7 +218,8 @@ Annotations: |
 
   The run coordination owns the in-container run parameters: the opening
   load-and-amend of the project configuration (the effective configuration
-  feeds everything downstream), the afm configuration authorship, and the
+  feeds everything downstream), the afm configuration authorship, the afm
+  home's dashboard-skin materialization (per `default_skin`), and the
   launch environment composition around the afm launch. The config amendment
   delivery of the load moment follows the one-action-two-moments rule — the
   same action, vocabulary, and semantics as the host delivery; each side
@@ -233,6 +253,11 @@ Annotations: |
   materializes the four default agent prompt files (per `default_prompts`)
   into <AFM_DIR>/prompts/ and applies per-role inline overrides.
 
+  Skin materialization step: after the afm configuration write, run
+  coordination materializes the packaged goga dashboard skin (per
+  `default_skin`) into /home/goga/.afm/skins/goga/ — the flat per-launch
+  copy the written skin_dir/theme pair resolves through.
+
   Informational surface: the overview lists every discovered pipeline with
   its description from the DSL header; the card reports the name, the
   description, and the post-workflow stage composition produced by the same
@@ -255,12 +280,17 @@ Annotations: |
 
   Collaboration delivery: the afm configuration write materializes the
   engine's collaboration plumbing from the two artifacts the run already
-  produces — the compiled flow and the effective workflow. The compiled
+  produces — the compiled flow and the effective workflow. The section
+  writes on EVERY launch, always headed by collaboration.runtime_context:
+  wrapper — the static execution-context decision (every command goga
+  hands the engine, client and generated profiles alike, is an as-claude
+  wrapper or a closure over one). The compiled
   flow is the single source of truth: the helper profiles are
   materialized exactly for the generated profile ids the flow references
   (the binding of every team member and of every stage attachment), so
   the two artifacts cannot diverge and no dead profile remains for an
-  attachment removed by a stage skip. A generated profile is exactly
+  attachment removed by a stage skip; without both documents the section
+  stays the bare runtime_context head. A generated profile is exactly
   {title, command, delegate}: the title from the assistant name, the
   delegate permission from the declaration, and the command resolved the
   stage-agent way — the declaration's agent, else the effective global
@@ -725,7 +755,8 @@ Annotations: |
     `project_dir`: project-level pipelines directory (same meaning as in `list_pipelines`)
     `user_dir`: user-level pipelines directory (same meaning as in `list_pipelines`)
     `port`: TCP port forwarded to afm run --port via `run_flow`
-            (allocated by the host-side caller)
+            (resolved by the host-side caller: the --port CLI value when
+            the user pinned one, else an allocated free ephemeral port)
     `workflow`: optional explicit workflow name (without the .yml extension) —
                 the CLI decision from the -w flag; None with `no_workflow`
                 unset resolves the basename auto-match
@@ -759,6 +790,8 @@ Annotations: |
     Apply `compile-flow` for the compilation step contract and the documents
     tuple.
     Apply `default_prompts` for resolving the packaged default prompt files.
+    Apply `default_skin` for resolving the packaged dashboard skin and its
+    materialization target.
     Apply `afm` for the written afm configuration-file contract.
     Apply `resolve-wrapper-path` for the agent command resolution inside
     `write_afm_config`.
@@ -837,16 +870,22 @@ Annotations: |
         (stem via `translate_role`); require the summary default; then reset
         <AFM_DIR>/prompts/ and write exactly four files — overrides where
         present, defaults otherwise, summary always from the default
-    16. Write the afm configuration file via `write_afm_config` with the
+    16. Author the afm home: write the afm configuration file via
+        `write_afm_config` with the
         effective pipeline agent, the compiled flow document, and the
         effective workflow document (the overlay workflow; the resolved
         workflow when the amendment layer is off; None when no workflow
         resolved) — the whole file at the fixed in-container home path,
-        before the launch; the collaboration plumbing materializes from
+        before the launch; the collaboration section (always headed by
+        runtime_context: wrapper) materializes its profiles from
         the two documents, and a collaboration pre-run error (an
         unresolvable assistant agent name or an illegal env key) fails
         the launch with a clean error naming the assistant and its
-        authoring site before any events fire
+        authoring site before any events fire; then materialize the
+        packaged goga dashboard skin via `materialize_afm_skin` (per
+        `default_skin`) into /home/goga/.afm/skins/goga/ — the same
+        failure window (no events have fired), a missing packaged skin
+        failing the launch with a clean error
     17. Order the compiled stages via `order_stages` and build one
         `CompositionStage` per ordered stage — id from the `FlowStage` id,
         title from the `FlowStage` name
@@ -953,6 +992,11 @@ Annotations: |
       the effective workflow document — the profile set derives from the
       flow's references, the declarations from the workflow; a
       collaboration pre-run error fires no events and afm never launches
+    - The packaged goga dashboard skin is materialized exactly once per
+      run, immediately after the configuration write and before any run
+      event fires, via `materialize_afm_skin`; a missing or empty
+      packaged skin is one clean pre-run error — no events fire, afm
+      never launches, and the previously materialized skin survives
     - The launch layer applies to the afm subprocess only, through the env
       parameter of `run_flow` — engine-variable keys never enter the layer,
       and the container's process environment is never mutated
@@ -989,6 +1033,9 @@ Annotations: |
     - Do not write the afm configuration anywhere but the fixed in-container
       home path — never in the project directory, never in the afm state
       directory
+    - Do not materialize the skin anywhere but the fixed in-container home
+      skins path — never in the project directory, never in the afm state
+      directory, never under /workspace
     - Do not write inline prompt overrides into the compiled flow-file
     - Do not delete skipped stages or rewrite depends_on — `compile_flow`
       does both
@@ -1004,26 +1051,28 @@ Annotations: |
   annotations: |
     Write the whole afm configuration file in-container before the afm
     launch: the agent client command resolved from the effective pipeline
-    agent, the five static launcher-side fields, goga's own observer hook
-    entry, and the collaboration plumbing — the generated helper profiles
-    and the whole-run task budget.
+    agent, the six static launcher-side fields, goga's own observer hook
+    entry, and the collaboration section — the static runtime-context head,
+    the generated helper profiles, and the whole-run task budget.
 
     `agent`: the effective pipeline agent — the authored pipeline.agent as
              amended by the config delivery; None when no agent resolves
     `flow`: the compiled flow document (a `FlowDocument` from Imports) —
             the source of the generated profile ids (the binding of every
             team member and of every stage attachment the flow carries);
-            None writes no collaboration profiles
+            None writes no collaboration profiles (the section head still
+            writes)
     `workflow`: the effective workflow document — the source of each
                 referenced assistant's declaration (agent, delegate,
-                env); None writes no collaboration plumbing
+                env); None writes no collaboration profiles (the section
+                head still writes)
     `config_path`: the fixed in-container path of the written file
 
     Apply `convention` for docstring style and intra-package imports.
     Apply `afm` for the configuration-file contract — the field set, the
     fixed home path, the per-stage override relationship, the
     lifecycle-hooks registration of the observer hook entry, and the
-    collaboration profile and limits contract.
+    collaboration runtime-context, profile, and limits contract.
     Apply `resolve-wrapper-path` when resolving the client agent command
     and every generated profile command.
     Apply `collaboration-emission` for the compiled flow surface the
@@ -1038,16 +1087,23 @@ Annotations: |
        absolute wrapper path (never a bare agent name) — written only when
        an agent resolved, omitted otherwise so per-stage workflow agents
        or the binary's own defaults cover the absent global default; the
-       FIVE static fields — the dashboard theme, the disabled browser
+       SIX static fields — the dashboard theme, the disabled browser
        launch, the disabled internal proxy provider, the in-container
-       prompts directory, and the disabled dashboard stage-addition
+       prompts directory, the disabled dashboard stage-addition
        (add_stage.enabled false — the stage set presented to the engine
-       stays exactly the compiled pipeline); and the observer hook entry — the stable id
+       stays exactly the compiled pipeline), and the dashboard skins
+       directory (skin_dir /home/goga/.afm/skins — the directory the
+       written theme resolves in; the run coordination materializes the
+       packaged skin there per `default_skin`); and the observer hook entry — the stable id
        goga, the in-container hook command of this package's CLI, the
        all-events subscription, the inherited environment, and the afm
        default timeout and retries
-    3. When `flow` and `workflow` are both not None — materialize the
-       collaboration plumbing:
+    3. Compose the collaboration section — ALWAYS written, headed by
+       collaboration.runtime_context = wrapper (the static
+       execution-context decision: every command goga hands the engine is
+       an as-claude wrapper or a closure over one). When `flow` and
+       `workflow` are both not None — materialize the rest of the
+       plumbing under the head:
        1. Collect the referenced profile ids: the profile binding of
           every `FlowTeamMember` of the flow plus the profile binding of
           every stage attachment entry (`FlowAssistant`) of the flow
@@ -1081,17 +1137,22 @@ Annotations: |
     - The whole file is rewritten on every run — a repeated invocation
       stays safe; the collaboration plumbing is regenerated with it, so
       the same authoring takes effect on every consecutive launch
+    - The collaboration section is written on every launch and always
+      carries runtime_context: wrapper first; the profiles and the task
+      budget join it only when both `flow` and `workflow` are given
     - The profiles are materialized exactly for the ids the compiled flow
       references — no more, no less; an attachment removed by a stage
       skip leaves no profile behind
     - A generated profile carries exactly title, command, and delegate
     - collaboration.limits.max_tasks is written only when the workflow
       carries a delegation block
-    - The five static fields and the hook entry are constants — never
+    - The six static fields and the hook entry are constants — never
       configurable through the project configuration or the CLI
     - add_stage.enabled false is written unconditionally on every launch
       — the dashboard of a goga-managed run accepts no out-of-model stage
       addition
+    - skin_dir is written unconditionally on every launch — the written
+      theme always resolves through the goga-managed skins directory
     - Assistant env delivery keys on a non-empty effective map only —
       None and {} both mean "no closure"; delegate materializes False
       when the effective value is None
@@ -1104,12 +1165,15 @@ Annotations: |
     Constraints:
     - Do not write a bare agent name as a client or profile command —
       always the resolved absolute wrapper path or closure path
-    - Do not derive the prompts directory value or the hook entry values
-      from arguments or configuration fields — both are fixed
+    - Do not derive the prompts directory value, the skins directory
+      value, or the hook entry values from arguments or configuration
+      fields — all three are fixed
     - Do not create or manage the prompts directory — the run coordination
       materializes it
+    - Do not create or manage the skins directory — the run coordination
+      materializes the skin into it
     - Do not print any part of the written content
-    - Do not write collaboration plumbing from the workflow alone — the
+    - Do not write collaboration profiles from the workflow alone — the
       compiled flow decides which ids exist
     - Do not read or write the collaboration kill-switch (the enabled
       flag or its environment variable) — a disabled environment gets
@@ -1117,6 +1181,57 @@ Annotations: |
     - Do not write closures under the project directory or /workspace —
       container-local temp only
     - Do not print or log env values
+
+"materialize_afm_skin() -> skin_dir: Path":
+  location: afm_skin.py
+  annotations: |
+    Materialize the packaged goga dashboard skin into the afm skins
+    directory in-container before the afm launch — the flat per-launch
+    copy that lets the written skin_dir/theme: goga pair resolve from
+    the goga-managed skins directory instead of the engine's built-in
+    copy.
+
+    `skin_dir`: the materialized skin directory
+                (/home/goga/.afm/skins/goga)
+
+    Apply `convention` for docstring style and intra-package imports.
+    Apply `default_skin` for the packaged skin directory, its file set,
+    and the fixed materialization target.
+
+    Algorithm:
+    1. Resolve the packaged skin directory per `default_skin` — relative
+       to this module, so it holds in an installed image regardless of
+       CWD/AFM_DIR
+    2. Validate BEFORE touching the target: collect the regular files of
+       the packaged directory; a missing directory or one with no regular
+       file is one strict pre-run error (the installed package is
+       damaged) raised with a readable message — the target directory is
+       never touched, so a previously materialized skin survives
+    3. Reset the skin entry /home/goga/.afm/skins/goga/ — the whole file
+       set is regenerated per launch, so a removed packaged file never
+       lingers as a stale dashboard artifact
+    4. Copy every collected file flat into the reset entry
+    5. Return the materialized skin directory path
+
+    Requirements:
+    - Validate-all precedes wipe-and-write — a failed validation never
+      wipes the previously materialized skin
+    - The materialized file set is exactly the packaged directory's
+      regular files — verbatim contents, flat copy, no transformation
+    - Idempotent per launch — a repeated invocation resets and rewrites
+      the same content
+    - The skin lands only at the fixed home skins path — never in the
+      project directory, never in the afm state directory, never under
+      /workspace
+
+    Constraints:
+    - Do not derive the skins directory value from arguments or
+      configuration fields — it is fixed
+    - Do not create or manage the afm configuration file — the
+      configuration write is `write_afm_config`
+    - Do not read the engine's built-in skins — the packaged directory is
+      the single source
+    - Do not print any part of the copied content
 
 "apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str]) -> workflow: WorkflowDocument | None":
   location: apply_skip_stages.py
@@ -1528,7 +1643,8 @@ Description: |
   card), run coordination with the in-container run parameters — the
   configuration load-and-amend, the afm configuration authorship with
   the observer-hook registration and the collaboration plumbing
-  (generated helper profiles and the task budget), and the launch
-  environment composition — the per-stage env delivery through
-  generated closure wrappers, the lifecycle-event bridge of the run
-  interior, and the in-container CLI entrypoint pipeline_cli.
+  (the static runtime-context head, generated helper profiles, and the
+  task budget), the dashboard-skin materialization of the afm home, and
+  the launch environment composition — the per-stage env delivery
+  through generated closure wrappers, the lifecycle-event bridge of the
+  run interior, and the in-container CLI entrypoint pipeline_cli.

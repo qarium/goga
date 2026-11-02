@@ -219,7 +219,7 @@ Annotations: |
 
 ---
 
-"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, topic: str | None, todo: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, profile: str | None, skip: tuple[str, ...], parallel: int | None, fail_on_error: bool = False)":
+"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, topic: str | None, todo: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, profile: str | None, skip: tuple[str, ...], parallel: int | None, fail_on_error: bool = False, port: int | None = None)":
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline" with five explicit forms. Every form
@@ -296,6 +296,16 @@ Annotations: |
             --fail-on-error ONLY when set, and through the in-container
             CLI onto the engine's --exit-on-fail. Run form only; the
             listing and info forms accept it without effect
+    `port`: optional int from the long-only --port option
+            (click.IntRange 1-65535) — the fixed dashboard port. Run form
+            only: forwarded into `run_pipeline_container` as its `port`
+            so BOTH port sinks of the launch (the docker -p publish and
+            the in-container --port argv) carry this value verbatim and
+            no ephemeral port is allocated; None (default) keeps the
+            allocation. The listing and info forms accept it without
+            effect — no dashboard is launched there. NOT a host-only
+            option: the direct substrate consumes the port the same way,
+            so it is never rejected in-container
 
     Apply the `click` practice for the command surface: a single command
     (not a group), the optional positional `name` argument, the
@@ -396,7 +406,8 @@ Annotations: |
          per the flag matrix)
        - run — resolve the proxy (CLI over config) and the hosts (CLI over
          config), then `run_pipeline_container` with the full argument set
-         (including the profile value, the home bundle, and fail_on_error)
+         (including the profile value, the home bundle, fail_on_error, and
+         the port value)
     6. Propagate the returned exit code via the click context (per the
        `click` practice)
 
@@ -454,6 +465,11 @@ Annotations: |
     - Expose --fail-on-error as a click flag; forward it into the
       in-container run argv only when set (absent ⇒ no flag ⇒ the run
       launches with no fail-fast flag)
+    - Expose --port as a long-only click option typed IntRange(1, 65535);
+      forward the parsed value into `run_pipeline_container` only in the
+      run form — a value outside the range (or a non-integer) is a clean
+      click usage error before any docker activity; the listing and card
+      forms accept the flag without effect
     - On the direct path, every host-only option is a named clean error
       before any activity — no option is silently ignored
 
@@ -479,7 +495,7 @@ Annotations: |
     - Do not pass the topic name into the container — the container sees
       the branch through the mounted project
 
-"run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str] | None, clean: bool, update: bool, workflow: str | None, no_workflow: bool, profile: str | None, skip: tuple[str, ...], parallel: int | None, home_profiles: dict[str, dict[str, Any]] | None = None, fail_on_error: bool = False) -> exit_code: int":
+"run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str] | None, clean: bool, update: bool, workflow: str | None, no_workflow: bool, profile: str | None, skip: tuple[str, ...], parallel: int | None, home_profiles: dict[str, dict[str, Any]] | None = None, fail_on_error: bool = False, port: int | None = None) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher for the run form. Launches the goga Docker
@@ -533,6 +549,14 @@ Annotations: |
                      result of the caller, None when empty) — encoded into
                      the GOGA_HOME_PROFILES engine line of the env-file
                      (per `home-profiles-carriage`)
+    `port`: the fixed dashboard port from the long-only --port CLI option
+            (1-65535, validated by the caller), or None. When not None,
+            BOTH port sinks of the launch carry this value verbatim — the
+            docker -p <port>:<port> publish and the in-container
+            --port <port> argv — and no ephemeral port is allocated; when
+            None (default), a free localhost port is allocated as before.
+            Not a host-only option: the direct substrate resolves the port
+            the same way
     `exit_code`: container exit code (0 success; 2 argparse error
                  in-container; 127 afm missing inside the container;
                  non-zero pipeline failure)
@@ -550,7 +574,9 @@ Annotations: |
     Algorithm:
     1. Verify docker availability; raise ClickException when missing
     2. Verify config.image is set; raise ClickException when None
-    3. Allocate a free localhost TCP port for the dashboard
+    3. Resolve the dashboard port — the given CLI port verbatim, else
+       allocate a free localhost TCP port (a taken given port surfaces as
+       the docker/afm bind error itself; no silent fallback)
     4. Generate a unique container_name
     5. Resolve the persistent afm state host directory via
        `resolve_pipeline_runtime_dir` and ensure it exists (idempotent)
@@ -687,7 +713,8 @@ Annotations: |
 
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
-      (single source — the port allocated in step 3)
+      (single source — the port resolved in step 3: the given CLI port,
+      else an allocated free one)
     - env-file content: home.env (base) + git identity + the raw CLI -e
       strings + AFM_DIR + AFM_DOCKER_FILE_ROOTS + (when proxy) the proxy
       triple + GOGA_EXTRA_ENV + (when non-empty) GOGA_PROFILE +

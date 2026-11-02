@@ -225,6 +225,7 @@ class TestPipelineDispatchLogic:
             parallel=None,
             home_profiles=None,
             fail_on_error=False,
+            port=None,
         )
 
     def test_pipeline_proxy_none_falls_back_to_config(self) -> None:
@@ -253,6 +254,7 @@ class TestPipelineDispatchLogic:
             parallel=None,
             home_profiles=None,
             fail_on_error=False,
+            port=None,
         )
 
     def test_pipeline_update_flag_forwarded(self) -> None:

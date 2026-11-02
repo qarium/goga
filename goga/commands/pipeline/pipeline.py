@@ -127,6 +127,13 @@ from .run_pipeline_info_container import run_pipeline_info_container
     default=False,
     help="exit non-zero when a stage fails (run mode only; threads to afm --exit-on-fail)",
 )
+@click.option(
+    "--port",
+    "port",
+    type=click.IntRange(1, 65535),
+    default=None,
+    help="Run the dashboard on this fixed port instead of an allocated free one (run mode only)",
+)
 @click.pass_context
 def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     ctx: click.Context,
@@ -146,6 +153,7 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     skip: tuple[str, ...],
     parallel: int | None,
     fail_on_error: bool = False,
+    port: int | None = None,
 ) -> None:
     """Run a goga pipeline, or inspect the available ones.
 
@@ -403,7 +411,11 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         # and the home bundle join the full argument set — the launcher owns
         # their carriage (the --profile argv token and the env-file lines).
         # The fail-fast decision joins the run form only — the listing and
-        # card dispatches above accept --fail-on-error without effect.
+        # card dispatches above accept --fail-on-error without effect. The
+        # pinned port joins the run form the same way: the launcher replaces
+        # its ephemeral allocation with the given value (the listing and card
+        # forms accept --port without effect — no dashboard is launched
+        # there).
         exit_code = run_pipeline_container(
             name=name,
             config=config,
@@ -419,6 +431,7 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             parallel=parallel,
             home_profiles=home_bundle,
             fail_on_error=fail_on_error,
+            port=port,
         )
 
     ctx.exit(exit_code)

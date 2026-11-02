@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 
 _AFM_CONFIG_PATH = Path("/home/goga/.afm/config.yaml")
 _PROMPTS_DIR = "/home/goga/pipeline/prompts"
+_SKINS_DIR = "/home/goga/.afm/skins"
+
+# The collaboration execution context goga always declares — every command the
+# engine spawns for the run (client and generated profiles alike) is an
+# as-claude wrapper, so the wrapper context is the static delivery decision,
+# never a project-configurable field.
+_RUNTIME_CONTEXT = "wrapper"
 
 # The container-local base directory of the generated assistant env closures —
 # never under /workspace or the project directory. A module constant so the
@@ -226,11 +233,13 @@ def _collaboration_section(
             the delegation block.
 
     Returns:
-        The ``collaboration`` section: ``profiles`` (one
-        ``goga-<name>`` entry per referenced id, each exactly
-        ``{title, command, delegate}`` — an assistant carrying a non-empty
-        effective env map gets a generated closure path as its command) and
-        ``limits`` (only when the workflow carries a delegation block).
+        The ``collaboration`` section: ``runtime_context`` (the static
+        ``wrapper`` delivery decision — every generated profile command is an
+        as-claude wrapper or closure), ``profiles`` (one ``goga-<name>``
+        entry per referenced id, each exactly ``{title, command, delegate}``
+        — an assistant carrying a non-empty effective env map gets a
+        generated closure path as its command) and ``limits`` (only when the
+        workflow carries a delegation block).
 
     Raises:
         ValueError: Every resolution error of ``_resolve_profiles`` — all of
@@ -257,7 +266,7 @@ def _collaboration_section(
 
         profiles[f"{_PROFILE_PREFIX}{name}"] = {"title": name, "command": command, "delegate": delegate}
 
-    section: dict[str, object] = {"profiles": profiles}
+    section: dict[str, object] = {"runtime_context": _RUNTIME_CONTEXT, "profiles": profiles}
 
     if workflow.delegation is not None:
         section["limits"] = {"max_tasks": workflow.delegation.max_tasks}
@@ -278,31 +287,38 @@ def write_afm_config(
         flow: The compiled flow document — the source of the generated
             profile ids (the binding of every team member and of every stage
             attachment the flow carries); ``None`` (with a ``workflow`` given
-            or alone) writes no collaboration plumbing.
+            or alone) writes no collaboration profiles — the section head
+            (``runtime_context``) still writes.
         workflow: The effective workflow document — the source of each
             referenced assistant's declaration (agent, delegate, env) and of
             the delegation block; ``None`` (with a ``flow`` given or alone)
-            writes no collaboration plumbing.
+            writes no collaboration profiles — the section head
+            (``runtime_context``) still writes.
 
     Returns:
         The fixed in-container path of the written file
         (``/home/goga/.afm/config.yaml``), independent of ``AFM_DIR``. The
         content serializes the optional ``client`` block first (the
         ``client.command`` default for stages without a per-stage ``command:``
-        override), then the five static launcher fields — ``theme: goga``,
+        override), then the six static launcher fields — ``theme: goga``,
         ``open_browser: false``, ``proxy.enabled: false``, ``prompts_dir:
-        /home/goga/pipeline/prompts``, and ``add_stage.enabled: false`` (the
+        /home/goga/pipeline/prompts``, ``add_stage.enabled: false`` (the
         disabled dashboard stage-addition — the stage set presented to the
-        engine stays exactly the compiled pipeline) — never configurable
+        engine stays exactly the compiled pipeline), and ``skin_dir:
+        /home/goga/.afm/skins`` (the dashboard skins directory the written
+        ``theme`` resolves in — the packaged goga skin is materialized there
+        by the run coordination on every launch) — never configurable
         through the project configuration or the CLI — goga's observer hook
         registration: a
         ``hooks`` list carrying the single ``goga`` entry (``events: all``,
         the bridge command ``python3 -m goga.pipeline hook``,
         ``inherit_env: true``; ``timeout`` / ``retries`` omitted — the afm
         ``omitempty`` defaults 30 s / 0 — and no ``env`` map); and finally the
-        ``collaboration`` section when both ``flow`` and ``workflow`` are
-        given — one generated ``goga-<name>`` profile per flow-referenced id
-        (exactly ``{title, command, delegate}``; an assistant carrying a
+        ``collaboration`` section — ALWAYS written, headed by
+        ``runtime_context: wrapper`` (the static collaboration execution
+        context); when both ``flow`` and ``workflow`` are given the section
+        also carries one generated ``goga-<name>`` profile per flow-referenced
+        id (exactly ``{title, command, delegate}``; an assistant carrying a
         non-empty effective env map gets a generated owner-only closure path
         as its command) and ``limits.max_tasks`` only when the workflow
         carries a delegation block.
@@ -331,6 +347,7 @@ def write_afm_config(
             "proxy": {"enabled": False},
             "prompts_dir": _PROMPTS_DIR,
             "add_stage": {"enabled": False},
+            "skin_dir": _SKINS_DIR,
         }
     )
     content["hooks"] = [
@@ -342,16 +359,20 @@ def write_afm_config(
         }
     ]
 
-    collaboration: dict[str, object] | None = None
-
     if flow is not None and workflow is not None:
         collaboration = _collaboration_section(agent, flow, workflow)
-        content["collaboration"] = collaboration
+    else:
+        # The section head still writes — the runtime context is a static
+        # delivery decision that never depends on the two documents; only the
+        # profiles and the task budget are document-derived.
+        collaboration = {"runtime_context": _RUNTIME_CONTEXT}
+
+    content["collaboration"] = collaboration
 
     _AFM_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     _AFM_CONFIG_PATH.write_text(yaml.safe_dump(content, default_flow_style=False, sort_keys=False))
 
-    if collaboration is not None:
+    if "profiles" in collaboration:
         logger.info(
             "wrote afm collaboration plumbing",
             extra={"profiles": len(collaboration["profiles"]), "has_limits": "limits" in collaboration},

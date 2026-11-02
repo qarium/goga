@@ -51,13 +51,15 @@ class TestWriteAfmConfigContract:
         return_annotation = signature.return_annotation
         assert return_annotation == "Path" or return_annotation is Path
 
-    def test_write_afm_config_static_fields_carry_five_entries(self, config_path: Path) -> None:
-        """The written config parses as YAML carrying the FIVE static fields.
+    def test_write_afm_config_static_fields_carry_six_entries(self, config_path: Path) -> None:
+        """The written config parses as YAML carrying the SIX static fields.
 
         ``add_stage.enabled false`` — the disabled dashboard stage-addition —
-        joins the four pre-existing statics, written unconditionally on every
-        launch (the stage set presented to the engine stays exactly the
-        compiled pipeline).
+        and ``skin_dir`` — the dashboard skins directory the written theme
+        resolves in — join the four pre-existing statics, written
+        unconditionally on every launch (the stage set presented to the
+        engine stays exactly the compiled pipeline; the skin resolves from
+        the user-side skins directory the run coordination populates).
         """
         write_afm_config(None)
 
@@ -68,14 +70,38 @@ class TestWriteAfmConfigContract:
         assert data["proxy"] == {"enabled": False}
         assert data["prompts_dir"] == "/home/goga/pipeline/prompts"
         assert data["add_stage"] == {"enabled": False}
-        assert set(data) == {"theme", "open_browser", "proxy", "prompts_dir", "add_stage", "hooks"}
+        assert data["skin_dir"] == "/home/goga/.afm/skins"
+        assert set(data) == {
+            "theme",
+            "open_browser",
+            "proxy",
+            "prompts_dir",
+            "add_stage",
+            "skin_dir",
+            "hooks",
+            "collaboration",
+        }
+
+    def test_write_afm_config_without_documents_writes_collaboration_head(self, config_path: Path) -> None:
+        """No flow/workflow still writes the collaboration section head.
+
+        ``runtime_context: wrapper`` is a static delivery decision — every
+        command the engine spawns is an as-claude wrapper — so the section
+        writes on every launch; only the profiles and the task budget are
+        document-derived.
+        """
+        write_afm_config(None)
+
+        data = yaml.safe_load(config_path.read_text())
+
+        assert data["collaboration"] == {"runtime_context": "wrapper"}
 
 
 class TestWriteAfmConfigLogic:
     """Logic: the authored document, the agent optionality, and the failure mode."""
 
     def test_write_afm_config_with_agent_writes_resolved_wrapper_and_static_fields(self, config_path: Path) -> None:
-        """A resolved agent yields client.command plus the five static fields."""
+        """A resolved agent yields client.command plus the six static fields."""
         written = write_afm_config("codex")
 
         assert written == config_path
@@ -88,7 +114,9 @@ class TestWriteAfmConfigLogic:
             "proxy": {"enabled": False},
             "prompts_dir": "/home/goga/pipeline/prompts",
             "add_stage": {"enabled": False},
+            "skin_dir": "/home/goga/.afm/skins",
             "hooks": [_OBSERVER_HOOK],
+            "collaboration": {"runtime_context": "wrapper"},
         }
         assert "/home/goga/bin/" in data["client"]["command"]
 
@@ -99,7 +127,16 @@ class TestWriteAfmConfigLogic:
         data = yaml.safe_load(config_path.read_text())
 
         assert "client" not in data
-        assert set(data) == {"theme", "open_browser", "proxy", "prompts_dir", "add_stage", "hooks"}
+        assert set(data) == {
+            "theme",
+            "open_browser",
+            "proxy",
+            "prompts_dir",
+            "add_stage",
+            "skin_dir",
+            "hooks",
+            "collaboration",
+        }
 
     def test_write_afm_config_rewrites_whole_file_idempotently(self, config_path: Path) -> None:
         """Each invocation rewrites the whole document — stale keys disappear."""
@@ -114,7 +151,17 @@ class TestWriteAfmConfigLogic:
         second = yaml.safe_load(config_path.read_text())
 
         assert second == first
-        assert set(second) == {"client", "theme", "open_browser", "proxy", "prompts_dir", "add_stage", "hooks"}
+        assert set(second) == {
+            "client",
+            "theme",
+            "open_browser",
+            "proxy",
+            "prompts_dir",
+            "add_stage",
+            "skin_dir",
+            "hooks",
+            "collaboration",
+        }
 
     def test_write_afm_config_registers_the_observer_hook(self, config_path: Path) -> None:
         """The composed content carries goga's observer hook entry in the hooks layer.

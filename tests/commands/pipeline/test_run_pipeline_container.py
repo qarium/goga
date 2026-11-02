@@ -40,7 +40,7 @@ class TestRunPipelineContainerContract:
         assert run_pipeline_container is rpc
 
     def test_signature_name_config_extra_env(self) -> None:
-        """Signature exposes the full declared order ending in fail_on_error."""
+        """Signature exposes the full declared order ending in port."""
         import inspect
 
         params = list(inspect.signature(rpc).parameters)
@@ -59,6 +59,7 @@ class TestRunPipelineContainerContract:
             "parallel",
             "home_profiles",
             "fail_on_error",
+            "port",
         ]
 
     def test_extra_env_has_empty_tuple_default(self) -> None:
@@ -633,6 +634,63 @@ class TestRunPipelineContainerEnvLadder:
 # --- parallel cap (run mode only) ---
 
 
+class TestPipelineRunPort:
+    """The fixed ``port`` override: one value, both sinks, no allocation.
+
+    ``port`` (int | None) replaces the ephemeral allocation verbatim when
+    given — the docker ``-p <port>:<port>`` publish and the in-container
+    ``--port <port>`` argv carry the same value; ``None`` keeps allocating
+    (backward compatible).
+    """
+
+    def _capture_docker(self, monkeypatch) -> dict[str, object]:
+        """Replace ``DockerRunner.run`` with a recorder of (args, params)."""
+        captured: dict[str, object] = {"args": None, "params": None}
+
+        def _record(_self, args, extra_args=None, **params):
+            captured["args"] = list(args)
+            captured["params"] = {k: v for k, v in params.items() if k != "extra_args"}
+            return 0
+
+        monkeypatch.setattr(_rpc_mod.DockerRunner, "run", _record)
+        return captured
+
+    def test_given_port_replaces_allocation_on_docker_substrate(self, tmp_path: Path, monkeypatch) -> None:
+        """A given port skips ``_allocate_port`` and feeds both sinks verbatim."""
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        allocation = mock.Mock(side_effect=AssertionError("_allocate_port must not run"))
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", allocation)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        captured = self._capture_docker(monkeypatch)
+
+        with mock.patch.object(subprocess, "run"):
+            result = run_pipeline_container("deploy", config, port=7000)
+
+        assert result == 0
+        args = captured["args"]
+        assert args[args.index("--port") + 1] == "7000"
+        assert captured["params"]["p"] == "7000:7000"
+
+    def test_unset_port_still_allocates_on_docker_substrate(self, tmp_path: Path, monkeypatch) -> None:
+        """``port=None`` (default) keeps the ephemeral allocation for both sinks."""
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        captured = self._capture_docker(monkeypatch)
+
+        with mock.patch.object(subprocess, "run"):
+            result = run_pipeline_container("deploy", config)
+
+        assert result == 0
+        args = captured["args"]
+        assert args[args.index("--port") + 1] == "50321"
+        assert captured["params"]["p"] == "50321:50321"
+
+
 class TestPipelineRunParallel:
     """Run mode threads the optional ``parallel`` cap into the in-container argv.
 
@@ -1188,6 +1246,20 @@ class TestDirectSubstrateLaunch:
         docker_mocks["runner_cls"].assert_not_called()
         docker_mocks["build"].assert_not_called()
         docker_mocks["update"].assert_not_called()
+
+    def test_direct_given_port_replaces_allocation(self, tmp_path: Path, monkeypatch) -> None:
+        """A given port skips the allocation on the direct substrate too — the argv carries it verbatim."""
+        spawn, _ = self._install_direct(tmp_path, monkeypatch)
+        allocate = mock.Mock(side_effect=AssertionError("_allocate_port must not run"))
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", allocate)
+
+        result = run_pipeline_container("deploy", _make_config(), port=7000)
+
+        assert result == 0
+        assert len(spawn.calls) == 1
+        argv, _env = spawn.calls[0]
+
+        assert argv == ["python3", "-m", "goga.pipeline", "run", "deploy", "--port", "7000"]
 
     def test_direct_skips_docker_check_and_image_guard(self, tmp_path: Path, monkeypatch) -> None:
         """A failing docker-CLI check and an unset image both pass on the direct substrate."""

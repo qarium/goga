@@ -5,7 +5,8 @@ workflow from the CLI-provided decision under the profile activation context, me
 workflow amendment through the
 pipeline hooks zone, compiles the pipeline-file to an afm flow-file via `compile_flow`, applies the per-stage env
 wrappers as a targeted post-compile patch of the written flow-file, materializes the four agent
-prompt files, writes the afm configuration file, emits the run-creation facts, launches afm via `run_flow` with the
+prompt files, writes the afm configuration file, materializes the packaged goga dashboard skin,
+emits the run-creation facts, launches afm via `run_flow` with the
 composed launch layer, and emits the run-completion facts on its return.
 
 ## Signature
@@ -15,7 +16,8 @@ skip=None, parallel=None, fail_on_error=False) -> exit_code
 
 - `name: str` — pipeline name without extension
 - `project_dir: Path` / `user_dir: Path` — absolute project / user pipeline directories
-- `port: int` — dashboard port, allocated by the host-side launcher
+- `port: int` — dashboard port, resolved by the host-side launcher (the `--port` CLI value
+  when the user pinned one, else an allocated free ephemeral port)
 - `workflow: str | None` — explicit workflow name without the `.yml` extension; None falls back
   to the basename auto-match
 - `no_workflow: bool` — when True, workflow application is disabled
@@ -40,18 +42,36 @@ proxy, hosts) of the effective configuration are applied-but-unconsumed here —
 
 Before the launch the coordination writes the whole afm configuration file via `write_afm_config`: the client command
 resolved from the effective `pipeline.agent` — written only when an agent resolves, so per-stage workflow agents or
-afm's own defaults cover the absent global default — plus the five static fields (theme, open_browser, proxy.enabled,
-prompts_dir, add_stage.enabled=false — the dashboard stage-addition is off for goga-managed runs) at the fixed
+afm's own defaults cover the absent global default — plus the six static fields (theme, open_browser, proxy.enabled,
+prompts_dir, add_stage.enabled=false — the dashboard stage-addition is off for goga-managed runs — and
+skin_dir=/home/goga/.afm/skins — the dashboard skins directory the theme resolves in) at the fixed
 in-container home path (`/home/goga/.afm/config.yaml`, independent of `AFM_DIR`).
 
-The write also materializes the collaboration plumbing when the run
-carries collaboration authoring: generated `collaboration.profiles`
+The `collaboration` section is ALWAYS written, headed by the static
+`runtime_context: wrapper` (every command goga hands the engine is an
+as-claude wrapper or a closure over one). When the run carries
+collaboration authoring (both the compiled flow and the effective
+workflow), the section also materializes the
+plumbing: generated `collaboration.profiles`
 entries (`goga-<name>` = `{title, command, delegate}`) exactly for the
 profile ids the compiled flow references, and
 `collaboration.limits.max_tasks` when the workflow carries a `delegation:`
 block. The compiled flow is the single source of truth for the profile
 set; assistant env travels through regenerated closures whose paths
 become the profile commands.
+
+## afm skin materialization
+
+Immediately after the configuration write the coordination materializes
+the packaged goga dashboard skin via `materialize_afm_skin`: the flat
+files of the installed package's `goga/assets/afm/skin/` directory are
+copied verbatim into `/home/goga/.afm/skins/goga/` (validate-all, then
+reset, then copy — so the file set is regenerated per launch and a stale
+file never lingers). This is what makes the written `skin_dir`/`theme`
+pair resolve from the goga-managed skins directory. A missing or empty
+packaged skin directory is one strict pre-run error — afm never launches,
+no run events fire, and the previously materialized skin survives the
+failed validation.
 
 The write also registers goga's own observer hook in the global layer of the file: `id: goga`,
 `command: python3 -m goga.pipeline hook`, `events: all`, `inherit_env: true`, and the afm
@@ -118,7 +138,8 @@ tool stops the command with a clean error, and its whole contribution is discard
 ## Run events
 
 `run_created` fires immediately before the runner launch — after compilation, prompt
-materialization, and the afm configuration write. `run_completed` fires on every launch-attempt
+materialization, the afm configuration write, and the skin materialization. `run_completed`
+fires on every launch-attempt
 return — zero, non-zero, and spawn failures (126/127) alike — with the work statuses recomputed
 at the completion moment and the actual exit code. Both notifications are soft: a failing hook
 warns and the run's exit code is unaffected. A missing pipeline, a structural composition error,
@@ -146,6 +167,13 @@ profile flag, the skip names, the parallel cap) never travel through the environ
 arrive as parameters from the CLI.
 
 ## Threading chains (host → container)
+
+    goga pipeline NAME --port 7000
+      → docker run -p 7000:7000 … -m goga.pipeline run NAME --port 7000
+        → pipeline_cli: port = 7000
+          → run_pipeline(…, port=7000)
+            → run_flow(…, port=7000)
+              → afm run --port 7000 <flow>   # no free-port search ran
 
     goga pipeline NAME --parallel N
       → docker run … -m goga.pipeline run NAME --port PORT --parallel N

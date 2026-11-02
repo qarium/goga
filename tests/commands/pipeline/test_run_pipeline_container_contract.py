@@ -56,7 +56,7 @@ def _make_config():
 
 class TestRunPipelineContainerWorkflowSignature:
     def test_signature_has_the_declared_final_params(self) -> None:
-        """The signature ends ``workflow, no_workflow, profile, skip, parallel, home_profiles, fail_on_error``."""
+        """The signature ends ``...parallel, home_profiles, fail_on_error, port``."""
         params = list(inspect.signature(rpc).parameters)
         assert params == [
             "name",
@@ -73,6 +73,7 @@ class TestRunPipelineContainerWorkflowSignature:
             "parallel",
             "home_profiles",
             "fail_on_error",
+            "port",
         ]
 
 
@@ -103,11 +104,10 @@ class TestRunPipelineContainerProfileSignature:
         assert param.default is None
         assert typing.get_type_hints(rpc)["profile"] == str | None
 
-    def test_home_profiles_param_is_final_optional_mapping(self) -> None:
-        """``home_profiles`` is a bundle mapping defaulting to ``None``, just before the final ``fail_on_error``."""
+    def test_home_profiles_param_is_optional_mapping_before_fail_on_error(self) -> None:
+        """``home_profiles`` is a bundle mapping defaulting to ``None``, just before ``fail_on_error``."""
         params = list(inspect.signature(rpc).parameters)
         assert params[params.index("home_profiles") + 1] == "fail_on_error"
-        assert params[-1] == "fail_on_error"
         param = inspect.signature(rpc).parameters["home_profiles"]
         assert param.default is None
         assert typing.get_type_hints(rpc)["home_profiles"] == dict[str, dict[str, Any]] | None
@@ -154,10 +154,10 @@ class TestRunPipelineContainerParallelSignature:
 
 
 class TestRunPipelineContainerFailOnErrorContract:
-    def test_fail_on_error_is_final_param_default_false(self) -> None:
-        """``fail_on_error`` is the final signature parameter, typed ``bool``, default ``False``."""
+    def test_fail_on_error_keeps_default_false_before_port(self) -> None:
+        """``fail_on_error`` stays typed ``bool`` with default ``False``, just before the final ``port``."""
         params = list(inspect.signature(rpc).parameters)
-        assert params[-1] == "fail_on_error"
+        assert params[params.index("fail_on_error") + 1] == "port"
 
         param = inspect.signature(rpc).parameters["fail_on_error"]
         assert param.default is False
@@ -173,11 +173,12 @@ class TestRunPipelineContainerFailOnErrorContract:
         assert list(params)[-1] == "fail_on_error"
         assert params["fail_on_error"].default is False
 
-    def test_run_named_threads_fail_on_error(self) -> None:
-        """The internal ``_run_named`` helper threads ``fail_on_error`` (default ``False``)."""
+    def test_run_named_threads_fail_on_error_and_port(self) -> None:
+        """The internal ``_run_named`` helper threads ``fail_on_error`` and the final ``port``."""
         params = inspect.signature(_rpc_mod._run_named).parameters
-        assert list(params)[-1] == "fail_on_error"
         assert params["fail_on_error"].default is False
+        assert list(params)[-1] == "port"
+        assert params["port"].default is None
 
 
 class TestRunPipelineContainerStillReturnsExitCode:

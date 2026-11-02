@@ -194,6 +194,7 @@ goga pipeline refinement -s discover  # shorter run: skip technical discovery
 goga pipeline development --parallel 4 # cap parallelism (subject to the pipeline's dependency rules)
 goga pipeline development --clean     # wipe persistent state for a fresh run
 goga pipeline development --fail-on-error  # exit non-zero when a stage fails
+goga pipeline development --port 7000      # pin the dashboard port (no free-port search)
 ```
 
 Inspect pipelines without running anything:

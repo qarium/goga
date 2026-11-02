@@ -40,7 +40,8 @@ docker launcher through the runpy entrypoint in `__main__.py`.
 - `-s NAME` (repeatable) — stage names to skip, available in BOTH modes: a run applies them to
   the execution, a card reflects them in the composition. Forwarding-only — unknown names
   surface as the compiler's structural error during composition.
-- `--port PORT` (int) — dashboard port, allocated by the host launcher. Required only when
+- `--port PORT` (int) — dashboard port, resolved by the host launcher (its `--port` CLI
+  value when the user pinned one, else an allocated free port). Required only when
   `--info` is absent; ignored in info mode.
 - `--parallel N` (int, optional) — max concurrently executing stages; run mode only.
 - `--fail-on-error` (flag) — fail-fast: a failed stage ends the run
