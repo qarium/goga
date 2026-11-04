@@ -55,11 +55,12 @@ class TestWriteAfmConfigContract:
         """The written config parses as YAML carrying the SIX static fields.
 
         ``add_stage.enabled false`` — the disabled dashboard stage-addition —
-        and ``skin_dir`` — the dashboard skins directory the written theme
-        resolves in — join the four pre-existing statics, written
-        unconditionally on every launch (the stage set presented to the
-        engine stays exactly the compiled pipeline; the skin resolves from
-        the user-side skins directory the run coordination populates).
+        and ``skin_dir`` — the engine's custom skin directory, served
+        wholesale as the active skin while it holds ``index.css`` — join the
+        four pre-existing statics, written unconditionally on every launch
+        (the stage set presented to the engine stays exactly the compiled
+        pipeline; the skin is materialized there by the run coordination;
+        ``theme`` only names the engine-builtin fallback skin).
         """
         write_afm_config(None)
 
@@ -70,7 +71,7 @@ class TestWriteAfmConfigContract:
         assert data["proxy"] == {"enabled": False}
         assert data["prompts_dir"] == "/home/goga/pipeline/prompts"
         assert data["add_stage"] == {"enabled": False}
-        assert data["skin_dir"] == "/home/goga/.afm/skins"
+        assert data["skin_dir"] == "/home/goga/.afm/skins/goga"
         assert set(data) == {
             "theme",
             "open_browser",
@@ -114,7 +115,7 @@ class TestWriteAfmConfigLogic:
             "proxy": {"enabled": False},
             "prompts_dir": "/home/goga/pipeline/prompts",
             "add_stage": {"enabled": False},
-            "skin_dir": "/home/goga/.afm/skins",
+            "skin_dir": "/home/goga/.afm/skins/goga",
             "hooks": [_OBSERVER_HOOK],
             "collaboration": {"runtime_context": "wrapper"},
         }

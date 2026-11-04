@@ -87,7 +87,7 @@ amended by the in-container `amend_config` delivery); a bare agent name is never
 | `server`        | str    | Server-side settings                                             |
 | `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga in-container run coordination always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
 | `theme`         | str    | Dashboard theme name. The goga in-container run coordination always writes `theme: goga`. |
-| `skin_dir`      | str    | Dashboard skins directory. When set, afm resolves the active `theme` under this directory — `<skin_dir>/<theme>/` (e.g. `index.css`, `title.txt`) — instead of its built-in copy; a name missing there falls back to the built-in skin with a warning. The goga in-container run coordination always writes `skin_dir: /home/goga/.afm/skins` and materializes the packaged goga skin into `/home/goga/.afm/skins/goga/` on every launch (`goga/assets/afm/skin/` in the installed package is the source), so the theme always resolves from the goga-managed skins directory. |
+| `skin_dir`      | str    | The engine's custom skin directory. When set and holding `index.css` directly inside, afm serves the directory wholesale as the active dashboard skin instead of its built-in copy; `theme` then only names the engine-builtin fallback skin used when the directory does not hold `index.css`. The goga in-container run coordination always writes `skin_dir: /home/goga/.afm/skins/goga` and materializes the packaged goga skin into that directory on every launch (`goga/assets/afm/skin/` in the installed package is the source), so the dashboard always shows the goga-managed skin. |
 | `add_stage`     | map    | Governs the dashboard's stage-addition capability. A map with a single `enabled` (bool) key; `enabled: false` makes the run's stage set immutable from the dashboard (the "add stage" capability is off for the run). Verified on v2.0.9 (`yaml:"add_stage,omitempty"` with a nested `enabled` field). |
 
 ## Collaboration (afm v2.x)
@@ -326,8 +326,8 @@ Each invocation receives the full event as JSON on stdin:
 ```
 ~/.afm/
 ├── config.yaml                # optional; afm falls back to defaults when missing
-├── skins/                     # dashboard skins directory (`skin_dir`); goga
-│   └── goga/                  # materializes the packaged goga skin here per launch
+├── skins/                     # dashboard skins base; goga materializes
+│   └── goga/                  # the packaged skin here per launch (`skin_dir`)
 └── flows/                     # flow *.yaml files discovered by `afm list`
 ```
 
@@ -477,8 +477,10 @@ The host does:
    prompt directory regardless of whether the pipeline-file customizes any
    prompt), `add_stage.enabled: false` (the run's stage set stays exactly the
    compiled pipeline — the dashboard accepts no out-of-model stage addition),
-   and `skin_dir: /home/goga/.afm/skins` (the skins directory `theme: goga`
-   resolves in — populated from the installed package's
+   and `skin_dir: /home/goga/.afm/skins/goga` (the engine's custom skin
+   directory, served wholesale as the active skin while it holds
+   `index.css` — `theme: goga` names the engine-builtin fallback;
+   populated from the installed package's
    `goga/assets/afm/skin/` on every launch), plus the always-written
    `collaboration` section headed by `runtime_context: wrapper`.
 

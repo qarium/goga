@@ -44,7 +44,8 @@ Before the launch the coordination writes the whole afm configuration file via `
 resolved from the effective `pipeline.agent` — written only when an agent resolves, so per-stage workflow agents or
 afm's own defaults cover the absent global default — plus the six static fields (theme, open_browser, proxy.enabled,
 prompts_dir, add_stage.enabled=false — the dashboard stage-addition is off for goga-managed runs — and
-skin_dir=/home/goga/.afm/skins — the dashboard skins directory the theme resolves in) at the fixed
+skin_dir=/home/goga/.afm/skins/goga — the engine's custom skin directory, served wholesale as the
+active skin while it holds `index.css`; `theme` only names the engine-builtin fallback) at the fixed
 in-container home path (`/home/goga/.afm/config.yaml`, independent of `AFM_DIR`).
 
 The `collaboration` section is ALWAYS written, headed by the static
@@ -67,8 +68,9 @@ the packaged goga dashboard skin via `materialize_afm_skin`: the flat
 files of the installed package's `goga/assets/afm/skin/` directory are
 copied verbatim into `/home/goga/.afm/skins/goga/` (validate-all, then
 reset, then copy — so the file set is regenerated per launch and a stale
-file never lingers). This is what makes the written `skin_dir`/`theme`
-pair resolve from the goga-managed skins directory. A missing or empty
+file never lingers). This repopulates the very directory the written
+`skin_dir` points at, so the dashboard always shows the goga-managed
+skin instead of the engine's built-in one. A missing or empty
 packaged skin directory is one strict pre-run error — afm never launches,
 no run events fire, and the previously materialized skin survives the
 failed validation.

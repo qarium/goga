@@ -13,4 +13,5 @@ stages:
   worker:
     assistants:
       reviewer:
+        gate: true
         when: finish

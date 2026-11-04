@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 
 _AFM_CONFIG_PATH = Path("/home/goga/.afm/config.yaml")
 _PROMPTS_DIR = "/home/goga/pipeline/prompts"
-_SKINS_DIR = "/home/goga/.afm/skins"
+# The engine's custom skin directory: afm serves it wholesale as the active
+# skin only while it holds index.css DIRECTLY inside (``theme`` then names just
+# the builtin fallback). Must equal _SKIN_TARGET_BASE/_SKIN_NAME of afm_skin.
+_SKINS_DIR = "/home/goga/.afm/skins/goga"
 
 # The collaboration execution context goga always declares — every command the
 # engine spawns for the run (client and generated profiles alike) is an
@@ -305,9 +308,11 @@ def write_afm_config(
         /home/goga/pipeline/prompts``, ``add_stage.enabled: false`` (the
         disabled dashboard stage-addition — the stage set presented to the
         engine stays exactly the compiled pipeline), and ``skin_dir:
-        /home/goga/.afm/skins`` (the dashboard skins directory the written
-        ``theme`` resolves in — the packaged goga skin is materialized there
-        by the run coordination on every launch) — never configurable
+        /home/goga/.afm/skins/goga`` (the engine's custom skin directory —
+        afm serves it wholesale as the active skin while it holds
+        ``index.css``; the packaged goga skin is materialized there by the
+        run coordination on every launch, and ``theme: goga`` names the
+        builtin fallback used only when it does not) — never configurable
         through the project configuration or the CLI — goga's observer hook
         registration: a
         ``hooks`` list carrying the single ``goga`` entry (``events: all``,

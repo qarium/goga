@@ -49,14 +49,14 @@ class TestMaterializeAfmSkinContract:
         self, skin_base: Path, packaged_skin: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The packaged skin files land verbatim under <base>/goga/ — a flat copy."""
-        write_skin(packaged_skin, names=("goga-old.css", "favicon.png", "title.txt"))
+        write_skin(packaged_skin, names=("goga.css", "favicon.png", "title.txt"))
 
         result = materialize_afm_skin()
 
         assert result == skin_base / "goga"
         assert sorted(entry.name for entry in result.iterdir()) == [
             "favicon.png",
-            "goga-old.css",
+            "goga.css",
             "index.css",
             "title.txt",
         ]

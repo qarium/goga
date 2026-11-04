@@ -8,13 +8,16 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# The fixed in-container skins directory the afm configuration's ``skin_dir``
-# field points at — never under /workspace or the project directory. A module
-# constant so the tests (and only they) can relocate it.
+# The fixed in-container skins base directory — the PARENT of the directory
+# the afm configuration's ``skin_dir`` field points at. Never under /workspace
+# or the project directory. A module constant so the tests (and only they) can
+# relocate it.
 _SKIN_TARGET_BASE = Path("/home/goga/.afm/skins")
 
-# The skin name — the dashboard theme goga writes (``theme: goga``) resolves
-# to <base>/<name>/ inside the skins directory.
+# The skin directory name — the materialized ``<base>/<name>`` directory is
+# what the afm configuration's ``skin_dir`` points at; afm serves it wholesale
+# as the active skin while it holds ``index.css`` (``theme`` only names an
+# engine-builtin fallback, it never resolves inside this directory).
 _SKIN_NAME = "goga"
 
 
@@ -32,12 +35,13 @@ def _resolve_packaged_skin_dir() -> Path:
 def materialize_afm_skin() -> Path:
     """Materialize the packaged goga dashboard skin into the afm skins directory.
 
-    The afm configuration points the engine at ``/home/goga/.afm/skins`` (the
-    static ``skin_dir`` field of :func:`goga.pipeline.afm_config.write_afm_config`);
-    this routine populates the ``goga`` entry of that directory from the
-    installed goga package so the written ``theme: goga`` resolves from the
-    user-side skins directory instead of the engine's built-in copy. Called by
-    the run coordination on every launch, next to the configuration write.
+    The afm configuration points the engine's ``skin_dir`` at
+    ``/home/goga/.afm/skins/goga`` (the static field of
+    :func:`goga.pipeline.afm_config.write_afm_config`); afm serves that
+    directory wholesale as the active dashboard skin when it holds an
+    ``index.css``. This routine repopulates it from the installed goga
+    package on every launch, so the dashboard shows the packaged skin
+    instead of the engine's built-in one.
 
     Returns:
         The materialized skin directory

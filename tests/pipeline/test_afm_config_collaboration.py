@@ -278,7 +278,7 @@ class TestWriteAfmConfigCollaborationLogic:
         assert parsed["open_browser"] is False
         assert parsed["proxy"] == {"enabled": False}
         assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
-        assert parsed["skin_dir"] == "/home/goga/.afm/skins"
+        assert parsed["skin_dir"] == "/home/goga/.afm/skins/goga"
 
     def test_afm_config_env_delivery_keys_on_nonempty_map(self, config_path: Path, closure_base: Path) -> None:
         """An authored ``env: {}`` is a clear — no closure file, no env-key validation.

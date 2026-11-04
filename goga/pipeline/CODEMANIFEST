@@ -138,10 +138,12 @@ Usages:
   default_skin: |
     The goga dashboard skin ships inside the installed goga package at
     goga/assets/afm/skin/ — a flat directory of skin files (currently
-    index.css, goga-old.css, favicon.png, and title.txt). The afm
-    configuration the run coordination writes points the engine at
-    /home/goga/.afm/skins (the static skin_dir field) with
-    theme: goga, and the skin materialization copies the packaged
+    index.css, goga.css, favicon.png, and title.txt). The afm
+    configuration the run coordination writes points the engine's
+    skin_dir at /home/goga/.afm/skins/goga (the static field, the very
+    directory that must hold index.css for afm to serve the custom skin;
+    theme: goga names the engine-builtin fallback), and the skin
+    materialization copies the packaged
     directory verbatim into /home/goga/.afm/skins/goga/ on every launch
     (validate-all, then reset, then copy — a missing or empty packaged
     directory is one strict pre-run error that never wipes the
@@ -255,8 +257,10 @@ Annotations: |
 
   Skin materialization step: after the afm configuration write, run
   coordination materializes the packaged goga dashboard skin (per
-  `default_skin`) into /home/goga/.afm/skins/goga/ — the flat per-launch
-  copy the written skin_dir/theme pair resolves through.
+  `default_skin`) into /home/goga/.afm/skins/goga/ — the very directory
+  the written skin_dir points at, served wholesale by afm as the active
+  skin while it holds index.css (theme only names the engine-builtin
+  fallback).
 
   Informational surface: the overview lists every discovered pipeline with
   its description from the DSL header; the card reports the name, the
@@ -1091,10 +1095,12 @@ Annotations: |
        launch, the disabled internal proxy provider, the in-container
        prompts directory, the disabled dashboard stage-addition
        (add_stage.enabled false — the stage set presented to the engine
-       stays exactly the compiled pipeline), and the dashboard skins
-       directory (skin_dir /home/goga/.afm/skins — the directory the
-       written theme resolves in; the run coordination materializes the
-       packaged skin there per `default_skin`); and the observer hook entry — the stable id
+       stays exactly the compiled pipeline), and the engine's custom
+       skin directory (skin_dir /home/goga/.afm/skins/goga — served
+       wholesale as the active skin while it holds index.css; the
+       written theme only names the engine-builtin fallback; the run
+       coordination materializes the packaged skin there per
+       `default_skin`); and the observer hook entry — the stable id
        goga, the in-container hook command of this package's CLI, the
        all-events subscription, the inherited environment, and the afm
        default timeout and retries
@@ -1151,8 +1157,9 @@ Annotations: |
     - add_stage.enabled false is written unconditionally on every launch
       — the dashboard of a goga-managed run accepts no out-of-model stage
       addition
-    - skin_dir is written unconditionally on every launch — the written
-      theme always resolves through the goga-managed skins directory
+    - skin_dir is written unconditionally on every launch — the
+      goga-managed skin directory it names is served as the active skin
+      whenever it holds index.css
     - Assistant env delivery keys on a non-empty effective map only —
       None and {} both mean "no closure"; delegate materializes False
       when the effective value is None
@@ -1165,13 +1172,13 @@ Annotations: |
     Constraints:
     - Do not write a bare agent name as a client or profile command —
       always the resolved absolute wrapper path or closure path
-    - Do not derive the prompts directory value, the skins directory
-      value, or the hook entry values from arguments or configuration
-      fields — all three are fixed
+    - Do not derive the prompts directory value, the skin directory
+      value (skin_dir), or the hook entry values from arguments or
+      configuration fields — all three are fixed
     - Do not create or manage the prompts directory — the run coordination
       materializes it
-    - Do not create or manage the skins directory — the run coordination
-      materializes the skin into it
+    - Do not create or manage the skin directory the skin_dir field
+      names — the run coordination materializes the skin into it
     - Do not print any part of the written content
     - Do not write collaboration profiles from the workflow alone — the
       compiled flow decides which ids exist
@@ -1187,8 +1194,10 @@ Annotations: |
   annotations: |
     Materialize the packaged goga dashboard skin into the afm skins
     directory in-container before the afm launch — the flat per-launch
-    copy that lets the written skin_dir/theme: goga pair resolve from
-    the goga-managed skins directory instead of the engine's built-in
+    copy of the very directory the written skin_dir points at, served
+    wholesale by afm as the active skin while it holds index.css (the
+    written theme only names the engine-builtin fallback), so the
+    dashboard shows the packaged skin instead of the engine's built-in
     copy.
 
     `skin_dir`: the materialized skin directory
@@ -1225,8 +1234,8 @@ Annotations: |
       /workspace
 
     Constraints:
-    - Do not derive the skins directory value from arguments or
-      configuration fields — it is fixed
+    - Do not derive the skin directory value (the skin_dir target) from
+      arguments or configuration fields — it is fixed
     - Do not create or manage the afm configuration file — the
       configuration write is `write_afm_config`
     - Do not read the engine's built-in skins — the packaged directory is
