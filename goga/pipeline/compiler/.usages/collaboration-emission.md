@@ -45,11 +45,14 @@ order follows the authored key order. Every entry materializes every key:
 | `title` | the assistant name |
 | `instruction` | the authored prompt; the empty string when none |
 | `mode` | `required` when `gate: true`; `advisory` otherwise |
-| `trigger` | `one_shot` / `checkpoints` / `on_completion` — mapped from `when` |
+| `trigger` | `one_shot` / `checkpoints` / `on_completion` / `on_message` — mapped from `when` |
 
 `trigger` is always written explicitly — the engine's own
 default is `one_shot` and is never relied upon (`when` is authored on every
-attachment; there is no compiler-side engagement default). The stage entry carries
+attachment; there is no compiler-side engagement default). `when: message`
+compiles to `on_message`, the resting engagement: the engine sends no initial
+request, the helper waits for messages (one turn each) and stays attached.
+The stage entry carries
 NO `skills` key: the afm engine (verified on v2.0.9) strict-parses
 `stages[].assistants` and rejects unknown fields
 (`unknown field "skills"; use "profile"`). Skills reach the engine ONLY

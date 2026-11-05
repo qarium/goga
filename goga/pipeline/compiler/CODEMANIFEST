@@ -358,7 +358,8 @@ Annotations: |
 
   Every emitted entry materializes its defaults: mode from gate (true →
   required, false → advisory), trigger from when (start → one_shot,
-  checkpoints → checkpoints, finish → on_completion — always written
+  checkpoints → checkpoints, finish → on_completion, message → on_message —
+  always written
   explicitly, the engine's one_shot default is never relied upon), title
   from the authored name, instruction from the
   authored prompt (the empty string when none). A reference takes its

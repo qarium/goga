@@ -115,7 +115,11 @@ Annotations: |
   the map key: an inner name key of an entry value is an unknown key, and a
   list value or a string value on either surface is a structural error naming
   the map form. Every stage attachment states when the assistant engages — one
-  of start, checkpoints, finish; a missing when is a structural error. gate is
+  of start, checkpoints, finish, message; a missing when is a structural
+  error. message is the resting engagement: the engine sends no initial
+  request, the helper waits for messages and stays attached after each answer
+  (gate stays combinable with it — the engine owns the completion semantics).
+  gate is
   optional on an attachment and materializes false; gate and when are unknown
   keys of the catalog.
 

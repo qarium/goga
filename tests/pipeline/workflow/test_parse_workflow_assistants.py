@@ -516,6 +516,24 @@ class TestStageAttachments:
         assert entry.gate is False
         assert entry.when == "start"
 
+    def test_parse_attachment_when_message_is_accepted(self) -> None:
+        """``when: message`` — the resting engagement — parses and is carried verbatim."""
+        document = parse_workflow(
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        gate: true\n"
+            "        when: message\n",
+        )
+
+        entry = document.stages["build"].assistants["reviewer"]
+        assert entry.when == "message"
+        assert entry.gate is True
+
     def test_parse_attachment_list_and_string_forms_rejected(self) -> None:
         """The retired list and scalar attachment forms are hard-rejected naming the map form."""
         with pytest.raises(WorkflowSyntaxError) as exc_info:
@@ -606,7 +624,7 @@ class TestStageAttachments:
             ),
             (
                 "stages:\n  b:\n    assistants:\n      r:\n        when: later\n",
-                r"when must be one of: start, checkpoints, finish in workflow\.stages\.b\.assistants\.r",
+                r"when must be one of: start, checkpoints, finish, message in workflow\.stages\.b\.assistants\.r",
             ),
             (
                 "stages:\n  b:\n    assistants:\n      r:\n        when: start\n        gate: x\n",

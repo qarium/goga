@@ -42,7 +42,10 @@ class WorkflowAssistant:
             finish; materialized ``False`` (advisory) when not authored.
             Authored only on a stage attachment; the catalog rejects the key.
         when: When the assistant engages — one of ``"start"``,
-            ``"checkpoints"``, ``"finish"``. Authored on every stage
+            ``"checkpoints"``, ``"finish"``, ``"message"``. ``"message"`` is
+            the resting engagement: the engine sends no initial request, the
+            helper waits for messages and stays attached after each answer.
+            Authored on every stage
             attachment (a missing ``when`` is a structural error); unknown
             in the catalog (the catalog rejects the key). The model default
             serves the construction paths that carry no attachment

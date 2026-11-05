@@ -467,6 +467,49 @@ class TestTeamAndAttachmentMaterialization:
         assert entry.trigger == "one_shot"
         assert "trigger: one_shot" in text
 
+    def test_compile_when_message_maps_to_on_message(self, tmp_path: Path) -> None:
+        """``when: message`` compiles to the engine's ``on_message`` resting engagement."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: message\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.trigger == "on_message"
+        assert "trigger: on_message" in text
+
+    def test_compile_when_message_combines_with_gate(self, tmp_path: Path) -> None:
+        """``gate: true`` with ``when: message`` compiles to required mode and on_message trigger."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        gate: true\n"
+            "        when: message\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.mode == "required"
+        assert entry.trigger == "on_message"
+        assert "mode: required" in text
+        assert "trigger: on_message" in text
+
     def test_compile_skills_only_catalog_member_materializes_empty_instruction(self, tmp_path: Path) -> None:
         """A skills-only catalog member compiles — team ``instruction: ''``, skills verbatim."""
         _pipeline_doc, flow_doc, text = _compile(

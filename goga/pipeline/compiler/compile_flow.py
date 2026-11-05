@@ -172,11 +172,14 @@ _GATE_MODE: dict[bool, str] = {True: "required", False: "advisory"}
 # The attachment ``when`` → afm ``trigger`` vocabulary (step 4.10). Written
 # explicitly on every attachment — the engine default is ``one_shot`` and is
 # never relied upon (``checkpoints`` is written out even though it is the
-# authoring default).
+# authoring default). ``message`` maps to the resting engagement: the engine
+# sends no initial request, the helper waits for messages (one turn each) and
+# stays attached afterwards.
 _WHEN_TRIGGER: dict[str, str] = {
     "start": "one_shot",
     "checkpoints": "checkpoints",
     "finish": "on_completion",
+    "message": "on_message",
 }
 
 

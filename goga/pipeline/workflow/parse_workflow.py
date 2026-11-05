@@ -110,7 +110,9 @@ _REPEAT_KEYS = ("max_cycles", "keep_runs")
 
 # Accepted values of an attachment's ``when`` parameter — the engagement
 # timing vocabulary the compiler translates into the afm ``trigger`` values.
-_WHEN_VALUES = ("start", "checkpoints", "finish")
+# ``message`` is the resting engagement: the engine sends no initial request,
+# the helper waits for messages and stays attached after each answer.
+_WHEN_VALUES = ("start", "checkpoints", "finish", "message")
 
 # The assistant-name grammar: every authored catalog or inline-declaration
 # name must fullmatch this pattern (the same character class the afm
@@ -169,7 +171,8 @@ def parse_workflow(text: str) -> WorkflowDocument:
             ``[A-Za-z0-9._-]`` or equal to the reserved ``assistant``), a
             per-stage ``assistants`` map is malformed (a non-mapping value, a
             non-mapping attachment value, a missing ``when``, a non-bool
-            ``gate``, a ``when`` outside ``start``/``checkpoints``/``finish``,
+            ``gate``, a ``when`` outside ``start``/``checkpoints``/``finish``/
+            ``message``,
             an unknown declaration key, a wrong-typed field, a declaration
             with neither ``prompt`` nor ``skills``, or a key violating the
             name rules), a declaration name repeats across the
@@ -1492,7 +1495,8 @@ def _validate_when(scope: str, field_value: Any) -> str:
 
     Raises:
         WorkflowSyntaxError: If ``field_value`` is not a ``str``, or is a
-            ``str`` other than ``"start"``/``"checkpoints"``/``"finish"``.
+            ``str`` other than ``"start"``/``"checkpoints"``/``"finish"``/
+            ``"message"``.
     """
     if not isinstance(field_value, str):
         raise WorkflowSyntaxError(f"non-str value in {scope}.when")

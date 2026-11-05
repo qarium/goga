@@ -81,11 +81,18 @@ stages:
 
 | Attachment key | Type | Default | Note |
 |------------|------|---------|------|
-| `when` | `start` \| `checkpoints` \| `finish` | **required** | when the assistant engages |
+| `when` | `start` \| `checkpoints` \| `finish` \| `message` | **required** | when the assistant engages |
 | `gate` | bool | `false` | `true` — the verdict must pass before the stage finishes |
 
 `when` is required on every attachment — the entry names the assistant, so
 its engagement timing is authored explicitly. `gate` is optional.
+
+`when: message` is the resting engagement: the engine sends NO initial
+request — the helper waits idle until someone messages it, each message is
+one turn, and the helper stays attached afterwards. Combine it with `gate:
+true` deliberately: a gated message helper produces a verdict only after it
+is messaged, so a stage attaching one never finishes until someone writes to
+the helper and its verdict passes.
 
 A value carrying any key beyond `gate`/`when` is a full inline declaration —
 it accepts the catalog field set plus `gate`/`when` and may carry neither
