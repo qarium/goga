@@ -11855,3 +11855,199 @@ button.metric:hover .metric-value {
   font-family: inherit;
   line-height: inherit;
 }
+
+/* === Маячок внимания на табе (question/approval): active-подчёркивание перекрывало
+   янтарное гало — оба жили на ::after, поздний active-бар побеждал. Для glow-таба
+   гало важнее: янтарный бар с пульсом работает и на активном табе. === */
+.workspace-tab.glow::after,
+.workspace-tab.glow.active::after {
+  height: 3px;
+  background: rgba(var(--glow-rgb), 0.95);
+  box-shadow: 0 0 10px 1px rgba(var(--glow-rgb), 0.5);
+  animation: tabHaloGlow 2.2s ease-in-out infinite;
+}
+/* Буквы таба внимания не красим — как у обычных табов; сигнал несут бар-гало и счётчик */
+.workspace-tab.workspace-tab-attention {
+  color: var(--text-muted);
+}
+.workspace-tab-attention .workspace-tab-count {
+  background: rgba(242, 184, 75, 0.22);
+  color: #f2b84b;
+}
+:root[data-theme="light"] .workspace-tab-attention .workspace-tab-count { background: rgba(180, 83, 9, 0.16); color: #b45309; }
+
+/* === Refresh 06.11: компоненты, появившиеся в afm после снапшота скина (новая Stage note, Board fact и др.) === */
+
+/* — из assistants.css */
+
+.assistant-activity-state {
+ display: inline-flex; align-items: center; gap: 6px;
+}
+.assistant-activity-state.is-failed {
+ color: var(--danger-text);
+}
+.assistant-activity-state.is-timed_out {
+ color: var(--danger-text);
+}
+.assistant-activity-state.is-usage_limit {
+ color: var(--danger-text);
+}
+.assistant-activity-state.is-not_received {
+ color: var(--text-secondary);
+}
+.assistant-activity-state.is-unknown_outcome {
+ color: var(--text-secondary);
+}
+.assistant-activity-state.is-interrupted {
+ color: var(--text-secondary);
+}
+
+/* — из feed-workspace.css */
+
+.feed-composer-mode[aria-pressed="true"] {
+ background: rgba(var(--accent-primary-rgb), 0.16); color: var(--accent-text); font-weight: 600;
+}
+.feed-reply-context {
+ display: flex; flex-direction: column; min-width: 0;
+}
+.feed-reply-chip-note {
+ flex-basis: 100%; color: var(--text-secondary); font-size: 11.5px;
+}
+.feed-reply-chip-actions {
+ flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 12px;
+}
+.feed-reply-chip--conversation.is-unused {
+ border-left-color: var(--separator-subtle);
+}
+.feed-reply-chip--conversation.is-unused .feed-reply-chip-label {
+ color: var(--text-muted);
+}
+.feed-reply-chip--conversation.is-closed {
+ border-left-color: var(--attention);
+}
+.feed-reply-chip--conversation.is-closed .feed-reply-chip-note {
+ color: var(--attention-text);
+}
+.feed-composer-blocked {
+ display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--text-secondary); font-size: 12px;
+}
+
+/* — из mesh.css */
+
+.board-facts {
+
+  flex: 0 0 auto;
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 3px;
+}
+.board-facts-header {
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.board-facts-title {
+
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.board-facts-count {
+
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.board-facts-list {
+
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 12px;
+}
+
+/* — из stage-note.css */
+
+.stage-note[data-presentation='compact'] {
+
+  min-height: 32px;
+  padding: 0 10px;
+  background: transparent;
+}
+.stage-note-title {
+ display: flex; flex: 1 1 0; min-width: 0; margin: 0; font-size: inherit; font-weight: inherit;
+}
+.stage-note-toggle {
+
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.stage-note-toggle:hover:not(:disabled) {
+ color: var(--text-primary);
+}
+.stage-note-toggle:focus-visible {
+ outline: 2px solid var(--focus-ring); outline-offset: 1px;
+}
+.stage-note-toggle:disabled {
+ cursor: default;
+}
+.stage-note-toggle svg {
+ width: 14px; height: 14px; flex: 0 0 auto;
+}
+.stage-note-toggle svg:nth-of-type(2) {
+ color: var(--accent-text);
+}
+.stage-note-name {
+ flex: 0 0 auto; font-size: 12px; font-weight: 600; color: var(--text-primary);
+}
+.stage-note-subtitle {
+ flex: 0 0 auto; font-size: 10px; color: var(--text-muted);
+}
+.stage-note-preview {
+
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.stage-note-badge {
+ flex: 0 0 auto; font-size: 10px; white-space: nowrap; color: var(--text-muted);
+}
+.stage-note-body {
+ min-height: 0; overflow-y: auto;
+}
+@media (max-width: 600px) {
+.stage-note[data-presentation='compact'] {
+ min-height: 44px; padding: 0 10px;
+}
+.stage-note-toggle {
+ min-height: 44px; gap: 5px;
+}
+.stage-note-subtitle {
+ font-size: 9px;
+}
+.stage-note-badge {
+ font-size: 9px;
+}
+}
