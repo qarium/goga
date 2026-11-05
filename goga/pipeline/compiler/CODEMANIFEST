@@ -969,7 +969,9 @@ Annotations: |
             true, "advisory" otherwise
     `trigger`: the engagement mapping — "one_shot" from start,
                "checkpoints" from checkpoints, "on_completion" from
-               finish
+               finish, "on_message" from message (the resting engagement —
+               no initial request; each message is one turn and the helper
+               stays attached)
 
     The entry carries NO skills field: the engine strict-parses
     stages[].assistants entries and rejects any key outside the five
@@ -1004,7 +1006,7 @@ Annotations: |
     "mode -> str": |
       required when the effective gate is true, advisory otherwise.
     "trigger -> str": |
-      one_shot, checkpoints, or on_completion — mapped from when.
+      one_shot, checkpoints, on_completion, or on_message — mapped from when.
 
 "FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, repeat: FlowRepeat | None = None, memory: FlowMemory | None = None, collaboration: FlowCollaboration | None = None, team: list[FlowTeamMember] | None = None, stages: list[FlowStage])":
   location: flow_document.py

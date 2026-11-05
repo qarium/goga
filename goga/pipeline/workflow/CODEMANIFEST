@@ -482,10 +482,12 @@ Annotations: |
     `gate`: whether the assistant's verdict must pass before the stage may
             finish; materialized false (advisory) when not authored
     `when`: when the assistant engages — one of "start", "checkpoints",
-            "finish". Authored on every stage attachment (a missing when is
-            a structural error); unknown in the catalog. The model default
-            serves the construction paths that carry no attachment
-            authoring
+            "finish", "message". "message" is the resting engagement: the
+            engine sends no initial request, the helper waits for messages
+            and stays attached after each answer. Authored on every stage
+            attachment (a missing when is a structural error); unknown in
+            the catalog. The model default serves the construction paths
+            that carry no attachment authoring
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -535,8 +537,8 @@ Annotations: |
       Whether the assistant's verdict holds stage completion; false
       (advisory) when not authored.
     "when -> str": |
-      When the assistant engages — start, checkpoints, or finish; authored
-      on every stage attachment, unknown in the catalog.
+      When the assistant engages — start, checkpoints, finish, or message;
+      authored on every stage attachment, unknown in the catalog.
 
 "WorkflowDelegation(depth: int | None = None, max_tasks: int = 50)":
   location: workflow_delegation.py
@@ -963,7 +965,8 @@ Annotations: |
         attachment in workflow.stages.NAME.ASSISTANT"). Every entry states
         when — a missing when raises "when is required in
         workflow.stages.NAME.assistants.ASSISTANT"; when must be one of
-        start/checkpoints/finish. gate (when present) must be a bool. A
+        start/checkpoints/finish/message. gate (when present) must be a
+        bool. A
         value whose keys are within {gate, when} is a reference; a value
         carrying any further key is a full inline declaration (the catalog
         field set plus gate and when) — it MAY carry no prompt and no
@@ -1089,7 +1092,7 @@ Annotations: |
       {gate, when} form a reference and whose any further key forms a full
       inline declaration (the catalog key set plus gate and when); when is
       required on every entry and is one of
-      start/checkpoints/finish; gate is a bool
+      start/checkpoints/finish/message; gate is a bool
     - An assistant entry (catalog or full inline) without prompt and
       without skills parses successfully — override-style authoring; the
       requirement that the EFFECTIVE entry resolve content is the
