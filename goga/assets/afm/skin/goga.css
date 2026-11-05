@@ -11845,3 +11845,13 @@ button.metric:hover .metric-value {
   font-weight: 550;
   white-space: nowrap;
 }
+
+/* === Номера строк в просмотре файлов: гуттер — <button>, а v1.2.4-правило не сбрасывало
+   нативный фон/рамку кнопки (HEAD-сброс не попал при сборке — селектор считался покрытым) === */
+.file-line-num {
+  border: 0;
+  border-right: 1px solid var(--separator-subtle);
+  background: none;
+  font-family: inherit;
+  line-height: inherit;
+}
