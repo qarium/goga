@@ -490,8 +490,8 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
 
     # Step 16a: materialize the packaged goga dashboard skin into the skins
     # directory the just-written ``skin_dir`` field points at — the flat
-    # per-launch copy that lets the written ``theme: goga`` resolve from the
-    # user-side skins directory. Same failure window as the config write: a
+    # per-launch copy the engine serves wholesale as the active skin. Same
+    # failure window as the config write: a
     # missing packaged skin (a ``ValueError``) or an unwritable home (an
     # ``OSError``) is a clean pre-run error — no events have fired yet.
     materialize_afm_skin()

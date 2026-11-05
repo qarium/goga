@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 _AFM_CONFIG_PATH = Path("/home/goga/.afm/config.yaml")
 _PROMPTS_DIR = "/home/goga/pipeline/prompts"
 # The engine's custom skin directory: afm serves it wholesale as the active
-# skin only while it holds index.css DIRECTLY inside (``theme`` then names just
-# the builtin fallback). Must equal _SKIN_TARGET_BASE/_SKIN_NAME of afm_skin.
+# skin only while it holds index.css DIRECTLY inside (the engine's builtin
+# theme is then just the fallback). Must equal _SKIN_TARGET_BASE/_SKIN_NAME of
+# afm_skin.
 _SKINS_DIR = "/home/goga/.afm/skins/goga"
 
 # The collaboration execution context goga always declares — every command the
@@ -28,6 +29,9 @@ _SKINS_DIR = "/home/goga/.afm/skins/goga"
 # as-claude wrapper, so the wrapper context is the static delivery decision,
 # never a project-configurable field.
 _RUNTIME_CONTEXT = "wrapper"
+
+# Hide dynamic attach helpers button
+_HIDE_ATTACH_HELPERS = True
 
 # The container-local base directory of the generated assistant env closures —
 # never under /workspace or the project directory. A module constant so the
@@ -122,6 +126,21 @@ def _referenced_names(flow: FlowDocument) -> list[str]:
             unique.append(name)
 
     return unique
+
+
+def _wrapper_agent_label(command: str) -> str | None:
+    """Return the bare agent id of an ``<agent>-as-claude.sh`` wrapper path, else ``None``.
+
+    The engine's dashboard label falls back to the file base name (``claude-as-claude.sh``);
+    the generated ``command_names`` section maps every wrapper to the bare agent id.
+    """
+    suffix = "-as-claude.sh"
+    base = Path(command).name
+
+    if not base.endswith(suffix):
+        return None
+
+    return base[: -len(suffix)]
 
 
 def _resolve_profiles(
@@ -236,7 +255,10 @@ def _collaboration_section(
             the delegation block.
 
     Returns:
-        The ``collaboration`` section: ``runtime_context`` (the static
+        The ``(collaboration section, command names)`` pair — the section (see
+        below) and the exact-command → bare-agent-id map for the generated
+        wrapper/closure commands (the top-level ``command_names`` config).
+        ``runtime_context`` (the static
         ``wrapper`` delivery decision — every generated profile command is an
         as-claude wrapper or closure), ``profiles`` (one ``goga-<name>``
         entry per referenced id, each exactly ``{title, command, delegate}``
@@ -256,9 +278,11 @@ def _collaboration_section(
     _CLOSURE_BASE.chmod(0o700)
 
     profiles: dict[str, dict[str, object]] = {}
+    command_names: dict[str, str] = {}
 
     for name, (delegate, env, target) in resolved.items():
         command = target
+        agent_label = _wrapper_agent_label(target)
 
         # None and {} both mean "no closure" — the closure materializes on a
         # non-empty effective env map only (an explicitly cleared env is no env).
@@ -267,14 +291,24 @@ def _collaboration_section(
             _write_owner_only(path, _render_closure(env, target))
             command = str(path)
 
-        profiles[f"{_PROFILE_PREFIX}{name}"] = {"title": name, "command": command, "delegate": delegate}
+        profiles[f"{_PROFILE_PREFIX}{name}"] = {
+            "title": name,
+            "command": command,
+            "delegate": delegate,
+        }
+        if agent_label is not None:
+            command_names[command] = agent_label
 
-    section: dict[str, object] = {"runtime_context": _RUNTIME_CONTEXT, "profiles": profiles}
+    section: dict[str, object] = {
+        "runtime_context": _RUNTIME_CONTEXT,
+        "hide_attach_helpers": _HIDE_ATTACH_HELPERS,
+        "profiles": profiles,
+    }
 
     if workflow.delegation is not None:
         section["limits"] = {"max_tasks": workflow.delegation.max_tasks}
 
-    return section
+    return section, command_names
 
 
 def write_afm_config(
@@ -303,7 +337,7 @@ def write_afm_config(
         (``/home/goga/.afm/config.yaml``), independent of ``AFM_DIR``. The
         content serializes the optional ``client`` block first (the
         ``client.command`` default for stages without a per-stage ``command:``
-        override), then the six static launcher fields — ``theme: goga``,
+        override), then the five static launcher fields —
         ``open_browser: false``, ``proxy.enabled: false``, ``prompts_dir:
         /home/goga/pipeline/prompts``, ``add_stage.enabled: false`` (the
         disabled dashboard stage-addition — the stage set presented to the
@@ -311,22 +345,29 @@ def write_afm_config(
         /home/goga/.afm/skins/goga`` (the engine's custom skin directory —
         afm serves it wholesale as the active skin while it holds
         ``index.css``; the packaged goga skin is materialized there by the
-        run coordination on every launch, and ``theme: goga`` names the
-        builtin fallback used only when it does not) — never configurable
-        through the project configuration or the CLI — goga's observer hook
-        registration: a
+        run coordination on every launch, and the engine's builtin theme
+        names the fallback used only when it does not) — never configurable
+        through the project configuration or the CLI — the ``command_names``
+        map, written only when non-empty: every generated command — the
+        resolved client wrapper and each profile command, wrapper or closure
+        alike — labeled with the bare agent id of its underlying
+        ``<agent>-as-claude.sh`` wrapper, so the dashboard never falls back
+        to the file base name; goga's observer hook registration: a
         ``hooks`` list carrying the single ``goga`` entry (``events: all``,
         the bridge command ``python3 -m goga.pipeline hook``,
         ``inherit_env: true``; ``timeout`` / ``retries`` omitted — the afm
         ``omitempty`` defaults 30 s / 0 — and no ``env`` map); and finally the
         ``collaboration`` section — ALWAYS written, headed by
         ``runtime_context: wrapper`` (the static collaboration execution
-        context); when both ``flow`` and ``workflow`` are given the section
-        also carries one generated ``goga-<name>`` profile per flow-referenced
-        id (exactly ``{title, command, delegate}``; an assistant carrying a
-        non-empty effective env map gets a generated owner-only closure path
-        as its command) and ``limits.max_tasks`` only when the workflow
-        carries a delegation block.
+        context) and ``hide_attach_helpers: true`` (the dynamic
+        attach-helpers dashboard entry point stays hidden — helpers come
+        only from the authored workflow plumbing); when both ``flow`` and
+        ``workflow`` are given the section also carries one generated
+        ``goga-<name>`` profile per flow-referenced id (exactly ``{title,
+        command, delegate}``; an assistant carrying a non-empty effective
+        env map gets a generated owner-only closure path as its command)
+        and ``limits.max_tasks`` only when the workflow carries a
+        delegation block.
 
     Raises:
         ValueError: When a referenced assistant's declared env carries an
@@ -347,7 +388,7 @@ def write_afm_config(
 
     content.update(
         {
-            "theme": "goga",
+            # "theme": "goga-old",
             "open_browser": False,
             "proxy": {"enabled": False},
             "prompts_dir": _PROMPTS_DIR,
@@ -365,12 +406,23 @@ def write_afm_config(
     ]
 
     if flow is not None and workflow is not None:
-        collaboration = _collaboration_section(agent, flow, workflow)
+        collaboration, profile_command_names = _collaboration_section(agent, flow, workflow)
     else:
         # The section head still writes — the runtime context is a static
         # delivery decision that never depends on the two documents; only the
         # profiles and the task budget are document-derived.
-        collaboration = {"runtime_context": _RUNTIME_CONTEXT}
+        collaboration = {"runtime_context": _RUNTIME_CONTEXT, "hide_attach_helpers": _HIDE_ATTACH_HELPERS}
+        profile_command_names = {}
+
+    # The engine's dashboard label falls back to the file base name; map every
+    # generated command to the bare agent id (``claude-as-claude.sh`` → ``claude``).
+    command_names = dict(profile_command_names)
+    if wrapper is not None:
+        client_label = _wrapper_agent_label(wrapper)
+        if client_label is not None:
+            command_names[wrapper] = client_label
+    if command_names:
+        content["command_names"] = command_names
 
     content["collaboration"] = collaboration
 

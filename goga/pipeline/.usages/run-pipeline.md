@@ -42,15 +42,21 @@ proxy, hosts) of the effective configuration are applied-but-unconsumed here —
 
 Before the launch the coordination writes the whole afm configuration file via `write_afm_config`: the client command
 resolved from the effective `pipeline.agent` — written only when an agent resolves, so per-stage workflow agents or
-afm's own defaults cover the absent global default — plus the six static fields (theme, open_browser, proxy.enabled,
+afm's own defaults cover the absent global default — plus the five static fields (open_browser, proxy.enabled,
 prompts_dir, add_stage.enabled=false — the dashboard stage-addition is off for goga-managed runs — and
 skin_dir=/home/goga/.afm/skins/goga — the engine's custom skin directory, served wholesale as the
-active skin while it holds `index.css`; `theme` only names the engine-builtin fallback) at the fixed
+active skin while it holds `index.css`; no `theme` is written, so the engine-builtin theme is the
+fallback) and the `command_names` map — every generated command (the client wrapper and each
+profile command, wrapper or closure alike) labeled with the bare agent id of its underlying
+`<agent>-as-claude.sh` wrapper; written only when non-empty — at the fixed
 in-container home path (`/home/goga/.afm/config.yaml`, independent of `AFM_DIR`).
 
 The `collaboration` section is ALWAYS written, headed by the static
 `runtime_context: wrapper` (every command goga hands the engine is an
-as-claude wrapper or a closure over one). When the run carries
+as-claude wrapper or a closure over one) and the static
+`hide_attach_helpers: true` (the run's dynamic attach-helpers dashboard
+entry point stays hidden — helpers come only from the authored workflow
+plumbing). When the run carries
 collaboration authoring (both the compiled flow and the effective
 workflow), the section also materializes the
 plumbing: generated `collaboration.profiles`

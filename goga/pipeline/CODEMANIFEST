@@ -142,7 +142,7 @@ Usages:
     configuration the run coordination writes points the engine's
     skin_dir at /home/goga/.afm/skins/goga (the static field, the very
     directory that must hold index.css for afm to serve the custom skin;
-    theme: goga names the engine-builtin fallback), and the skin
+    the engine-builtin theme is the fallback when it does not), and the skin
     materialization copies the packaged
     directory verbatim into /home/goga/.afm/skins/goga/ on every launch
     (validate-all, then reset, then copy — a missing or empty packaged
@@ -259,8 +259,8 @@ Annotations: |
   coordination materializes the packaged goga dashboard skin (per
   `default_skin`) into /home/goga/.afm/skins/goga/ — the very directory
   the written skin_dir points at, served wholesale by afm as the active
-  skin while it holds index.css (theme only names the engine-builtin
-  fallback).
+  skin while it holds index.css (the engine-builtin theme is the
+  fallback when it does not).
 
   Informational surface: the overview lists every discovered pipeline with
   its description from the DSL header; the card reports the name, the
@@ -286,15 +286,23 @@ Annotations: |
   engine's collaboration plumbing from the two artifacts the run already
   produces — the compiled flow and the effective workflow. The section
   writes on EVERY launch, always headed by collaboration.runtime_context:
-  wrapper — the static execution-context decision (every command goga
+  wrapper and collaboration.hide_attach_helpers: true — the static
+  execution-context decision (every command goga
   hands the engine, client and generated profiles alike, is an as-claude
-  wrapper or a closure over one). The compiled
+  wrapper or a closure over one) and the static dashboard decision
+  (helpers join a goga-managed run only through the authored workflow
+  plumbing, never through dynamic dashboard attachment). The compiled
   flow is the single source of truth: the helper profiles are
   materialized exactly for the generated profile ids the flow references
   (the binding of every team member and of every stage attachment), so
   the two artifacts cannot diverge and no dead profile remains for an
   attachment removed by a stage skip; without both documents the section
-  stays the bare runtime_context head. A generated profile is exactly
+  stays the bare static head. Every command the write produces — the
+  client wrapper and each profile command, wrapper or closure alike — is
+  labeled in the top-level command_names map with the bare agent id of
+  its underlying as-claude wrapper, so the dashboard never falls back to
+  the file base name; the map is written only when at least one labeled
+  command exists. A generated profile is exactly
   {title, command, delegate}: the title from the assistant name, the
   delegate permission from the declaration, and the command resolved the
   stage-agent way — the declaration's agent, else the effective global
@@ -881,7 +889,8 @@ Annotations: |
         workflow when the amendment layer is off; None when no workflow
         resolved) — the whole file at the fixed in-container home path,
         before the launch; the collaboration section (always headed by
-        runtime_context: wrapper) materializes its profiles from
+        runtime_context: wrapper and hide_attach_helpers: true)
+        materializes its profiles from
         the two documents, and a collaboration pre-run error (an
         unresolvable assistant agent name or an illegal env key) fails
         the launch with a clean error naming the assistant and its
@@ -1055,9 +1064,10 @@ Annotations: |
   annotations: |
     Write the whole afm configuration file in-container before the afm
     launch: the agent client command resolved from the effective pipeline
-    agent, the six static launcher-side fields, goga's own observer hook
-    entry, and the collaboration section — the static runtime-context head,
-    the generated helper profiles, and the whole-run task budget.
+    agent, the five static launcher-side fields, goga's own observer hook
+    entry, the command-name label map, and the collaboration section — the
+    static runtime-context head with the hidden attach-helpers toggle, the
+    generated helper profiles, and the whole-run task budget.
 
     `agent`: the effective pipeline agent — the authored pipeline.agent as
              amended by the config delivery; None when no agent resolves
@@ -1075,8 +1085,9 @@ Annotations: |
     Apply `convention` for docstring style and intra-package imports.
     Apply `afm` for the configuration-file contract — the field set, the
     fixed home path, the per-stage override relationship, the
-    lifecycle-hooks registration of the observer hook entry, and the
-    collaboration runtime-context, profile, and limits contract.
+    lifecycle-hooks registration of the observer hook entry, the
+    collaboration runtime-context, hide-attach-helpers, profile, and limits
+    contract, and the command-name label map.
     Apply `resolve-wrapper-path` when resolving the client agent command
     and every generated profile command.
     Apply `collaboration-emission` for the compiled flow surface the
@@ -1091,24 +1102,27 @@ Annotations: |
        absolute wrapper path (never a bare agent name) — written only when
        an agent resolved, omitted otherwise so per-stage workflow agents
        or the binary's own defaults cover the absent global default; the
-       SIX static fields — the dashboard theme, the disabled browser
-       launch, the disabled internal proxy provider, the in-container
-       prompts directory, the disabled dashboard stage-addition
-       (add_stage.enabled false — the stage set presented to the engine
-       stays exactly the compiled pipeline), and the engine's custom
-       skin directory (skin_dir /home/goga/.afm/skins/goga — served
-       wholesale as the active skin while it holds index.css; the
-       written theme only names the engine-builtin fallback; the run
-       coordination materializes the packaged skin there per
-       `default_skin`); and the observer hook entry — the stable id
-       goga, the in-container hook command of this package's CLI, the
-       all-events subscription, the inherited environment, and the afm
-       default timeout and retries
+       FIVE static fields — the disabled browser launch, the disabled
+       internal proxy provider, the in-container prompts directory, the
+       disabled dashboard stage-addition (add_stage.enabled false — the
+       stage set presented to the engine stays exactly the compiled
+       pipeline), and the engine's custom skin directory (skin_dir
+       /home/goga/.afm/skins/goga — served wholesale as the active skin
+       while it holds index.css; the engine-builtin theme is the fallback
+       when it does not; the run coordination materializes the packaged
+       skin there per `default_skin`); and the observer hook entry — the
+       stable id goga, the in-container hook command of this package's
+       CLI, the all-events subscription, the inherited environment, and
+       the afm default timeout and retries
     3. Compose the collaboration section — ALWAYS written, headed by
        collaboration.runtime_context = wrapper (the static
        execution-context decision: every command goga hands the engine is
-       an as-claude wrapper or a closure over one). When `flow` and
-       `workflow` are both not None — materialize the rest of the
+       an as-claude wrapper or a closure over one) and
+       collaboration.hide_attach_helpers = true (the static dashboard
+       decision: the run's dynamic attach-helpers entry point stays
+       hidden — helpers join a goga-managed run only through the authored
+       workflow plumbing). When `flow` and `workflow` are both not None —
+       materialize the rest of the
        plumbing under the head:
        1. Collect the referenced profile ids: the profile binding of
           every `FlowTeamMember` of the flow plus the profile binding of
@@ -1133,26 +1147,44 @@ Annotations: |
        4. Write collaboration.profiles.<id> = {title: <name>, command:
           <resolved>, delegate: <declaration delegate>} — nothing else in
           the profile
-       5. When the workflow carries a delegation block — write
+       5. While resolving each profile, collect the command-name labels:
+          when the base name of the profile's resolved TARGET wrapper
+          follows <agent>-as-claude.sh — record command_names[<command>]
+          = <agent> (the bare agent id; the exact command key is the
+          wrapper itself or the generated closure path when one
+          materialized — the engine's dashboard label otherwise falls
+          back to the file base name)
+       6. When the workflow carries a delegation block — write
           collaboration.limits.max_tasks = the materialized max_tasks
-    4. Write the whole file to the fixed in-container home configuration
+    4. Compose the top-level command_names map from the collected profile
+       labels plus the same label for the resolved client wrapper when an
+       agent resolved — and write it ONLY when the composed map is
+       non-empty (an agentless run without profiles writes no map)
+    5. Write the whole file to the fixed in-container home configuration
        path — the path is independent of the afm state directory variable
-    5. Return the written path
+    6. Return the written path
 
     Requirements:
     - The whole file is rewritten on every run — a repeated invocation
       stays safe; the collaboration plumbing is regenerated with it, so
       the same authoring takes effect on every consecutive launch
     - The collaboration section is written on every launch and always
-      carries runtime_context: wrapper first; the profiles and the task
-      budget join it only when both `flow` and `workflow` are given
+      carries runtime_context: wrapper and hide_attach_helpers: true
+      first; the profiles and the task budget join it only when both
+      `flow` and `workflow` are given
     - The profiles are materialized exactly for the ids the compiled flow
       references — no more, no less; an attachment removed by a stage
       skip leaves no profile behind
     - A generated profile carries exactly title, command, and delegate
     - collaboration.limits.max_tasks is written only when the workflow
       carries a delegation block
-    - The six static fields and the hook entry are constants — never
+    - command_names is written only when at least one labeled command
+      exists — an agentless run without collaboration profiles writes no
+      map; every key is the exact command path (the wrapper or the
+      generated closure over it) and every value the bare agent id of the
+      underlying <agent>-as-claude.sh wrapper; a command whose base name
+      does not follow that convention gets no label and no entry
+    - The five static fields and the hook entry are constants — never
       configurable through the project configuration or the CLI
     - add_stage.enabled false is written unconditionally on every launch
       — the dashboard of a goga-managed run accepts no out-of-model stage
@@ -1196,7 +1228,7 @@ Annotations: |
     directory in-container before the afm launch — the flat per-launch
     copy of the very directory the written skin_dir points at, served
     wholesale by afm as the active skin while it holds index.css (the
-    written theme only names the engine-builtin fallback), so the
+    engine-builtin theme is the fallback when it does not), so the
     dashboard shows the packaged skin instead of the engine's built-in
     copy.
 

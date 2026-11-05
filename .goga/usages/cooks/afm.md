@@ -86,8 +86,9 @@ amended by the in-container `amend_config` delivery); a bare agent name is never
 | `proxy`         | map    | Outbound proxy settings. Surfaces at least `proxy.enabled: bool` — when `false`, afm does not use its own internal outbound proxy provider. The goga in-container run coordination always writes `proxy.enabled: false`: goga manages the outbound proxy through the container env-file (`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`), so afm's own internal proxy provider must stay off to avoid the two layers colliding. |
 | `server`        | str    | Server-side settings                                             |
 | `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga in-container run coordination always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
-| `theme`         | str    | Dashboard theme name. The goga in-container run coordination always writes `theme: goga`. |
+| `theme`         | str    | Dashboard theme name. The goga in-container run coordination writes no `theme` — the goga-managed `skin_dir` carries the presentation, and the engine-builtin theme remains the fallback used when the skin directory does not hold `index.css`. |
 | `skin_dir`      | str    | The engine's custom skin directory. When set and holding `index.css` directly inside, afm serves the directory wholesale as the active dashboard skin instead of its built-in copy; `theme` then only names the engine-builtin fallback skin used when the directory does not hold `index.css`. The goga in-container run coordination always writes `skin_dir: /home/goga/.afm/skins/goga` and materializes the packaged goga skin into that directory on every launch (`goga/assets/afm/skin/` in the installed package is the source), so the dashboard always shows the goga-managed skin. |
+| `command_names` | map[str]str | Command-path → display-name labels. The dashboard derives its per-command labels from this map and otherwise falls back to the command's file base name (an unmapped command can surface as an unknown label). The goga in-container run coordination writes it — only when non-empty — mapping every generated command (the resolved client wrapper and each generated profile command, wrapper or env closure alike) to the bare agent id of its underlying `<agent>-as-claude.sh` wrapper (e.g. `/home/goga/bin/claude-as-claude.sh` → `claude`), so a `claude-as-claude.sh` wrapper never shows as a file name. |
 | `add_stage`     | map    | Governs the dashboard's stage-addition capability. A map with a single `enabled` (bool) key; `enabled: false` makes the run's stage set immutable from the dashboard (the "add stage" capability is off for the run). Verified on v2.0.9 (`yaml:"add_stage,omitempty"` with a nested `enabled` field). |
 
 ## Collaboration (afm v2.x)
@@ -113,6 +114,7 @@ profiles only produce warnings; `afm run`/`afm validate` proceed.
 | `enabled` | bool | `true` | Overridden by `AFM_COLLABORATION=0`; flow cannot set it |
 | `mode` | `team` \| `assistants` | `team` | Precedence flow > project > global; invalid values stop config loading |
 | `runtime_context` | str | — | Execution context of collaboration commands, global default; a per-profile `collaboration.profiles.*.runtime_context` overrides it. goga always writes `collaboration.runtime_context: wrapper` — every command goga hands the engine (client and generated profiles alike) is an as-claude wrapper or a closure over one — as the static head of the section, written on every launch even when no profiles materialize |
+| `hide_attach_helpers` | bool | `false` | Dashboard toggle: hides the dynamic attach-helpers entry point of the collaboration UI for the run (the binary also carries an `AFM_HIDE_ATTACH_HELPERS` variable). Verified on v2.2.5 (`yaml:"hide_attach_helpers,omitempty"` inside the `collaboration` block; the dashboard reports `hide_attach_helpers` through `/api/status`). goga always writes `collaboration.hide_attach_helpers: true` beside the `runtime_context` head — helpers join a goga-managed run only through the authored workflow plumbing, never through dynamic dashboard attachment |
 | `max_depth` | int | `3` | `0` prevents helper creation; precedence flow > project > global; depth 1 = helper attached directly to a stage. Verified deviation (v2.0.9): at `max_depth: 0` the engine ALSO declines team-member agent creation (`delegation_depth_exceeded` warning; members are added at depth >= 1) |
 | `limits.max_tasks` | int | `20` | Lifetime budget counting every task of the run: helpers, run agents, and their children |
 | `profiles` | map | — | Role definitions (below) |
@@ -185,9 +187,12 @@ start and can message/board.
 - goga authors collaboration in the workflow-file only and delivers: flow-file parts
   (`collaboration: {mode: assistants}` always, `max_depth` when authored, `team`
   list, stage `assistants` entries) plus global-config plumbing
-  (`collaboration.runtime_context: wrapper` as the always-written static head of the
+  (`collaboration.runtime_context: wrapper` and
+  `collaboration.hide_attach_helpers: true` as the always-written static head of the
   section, `collaboration.profiles.goga-<name>` = `{title, command, delegate}` only,
-  and `collaboration.limits.max_tasks` when `delegation:` is authored).
+  and `collaboration.limits.max_tasks` when `delegation:` is authored; every
+  generated command is additionally labeled with its bare agent id in the
+  top-level `command_names` map, written only when non-empty).
 - The compiled flow-file is the single source of truth for the config write —
   profiles are materialized exactly for the ids the flow references.
 - goga never reads or writes `collaboration.enabled` / `AFM_COLLABORATION`; an
@@ -464,7 +469,7 @@ The host does:
    in-container wrapper path matching the `*-as-claude.sh` convention, resolved from
    the EFFECTIVE pipeline agent; written only when an agent resolves — omitted
    otherwise so per-stage workflow agents or afm's own defaults cover the absent
-   global default), plus six static constants — `theme: goga` (dashboard theme),
+   global default), plus five static constants —
    `open_browser: false` (the dashboard is reached via the host-printed
    http://localhost:<port> URL; afm must not attempt to open a browser inside
    the container), `proxy.enabled: false` (afm's own internal outbound proxy
@@ -479,10 +484,14 @@ The host does:
    compiled pipeline — the dashboard accepts no out-of-model stage addition),
    and `skin_dir: /home/goga/.afm/skins/goga` (the engine's custom skin
    directory, served wholesale as the active skin while it holds
-   `index.css` — `theme: goga` names the engine-builtin fallback;
-   populated from the installed package's
-   `goga/assets/afm/skin/` on every launch), plus the always-written
-   `collaboration` section headed by `runtime_context: wrapper`.
+   `index.css` — no `theme` is written, so the engine-builtin theme is the
+   fallback; populated from the installed package's
+   `goga/assets/afm/skin/` on every launch), plus the `command_names` map
+   labeling every generated command (the client wrapper and each profile
+   command, wrapper or closure alike) with the bare agent id of its
+   underlying `<agent>-as-claude.sh` wrapper — written only when non-empty —
+   and the always-written `collaboration` section headed by
+   `runtime_context: wrapper` and `hide_attach_helpers: true`.
 
    The launcher adds no credential mounts. A user who wants credentials inside the container
    mounts them through the home configuration (`docker.run` volume tokens) or passes

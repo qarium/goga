@@ -2,7 +2,8 @@
 
 Covers the collaboration half of the afm configuration authorship: the
 section writes on every launch — always headed by the static
-``runtime_context: wrapper`` — while the generated profiles materialize only
+``runtime_context: wrapper`` and ``hide_attach_helpers: true`` — while the
+generated profiles materialize only
 when both the compiled flow document and the effective workflow document are
 given; the generated profiles exist exactly
 for the flow-referenced ids (one ``goga-<name>`` profile per team member and
@@ -112,24 +113,26 @@ class TestWriteAfmConfigCollaborationContract:
         """The section always writes; the profiles need both documents.
 
         Without one of the documents the section is exactly the static head
-        (``runtime_context: wrapper``); with both, the profiles materialize
-        under the head.
+        (``runtime_context: wrapper`` and ``hide_attach_helpers: true``);
+        with both, the profiles materialize under the head.
         """
+        head = {"runtime_context": "wrapper", "hide_attach_helpers": True}
         flow = _flow_doc(members=[_member("reviewer")])
         workflow = _workflow_doc(catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")})
 
         write_afm_config("claude")
-        assert yaml.safe_load(config_path.read_text())["collaboration"] == {"runtime_context": "wrapper"}
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == head
 
         write_afm_config("claude", flow=flow)
-        assert yaml.safe_load(config_path.read_text())["collaboration"] == {"runtime_context": "wrapper"}
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == head
 
         write_afm_config("claude", workflow=workflow)
-        assert yaml.safe_load(config_path.read_text())["collaboration"] == {"runtime_context": "wrapper"}
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == head
 
         write_afm_config("claude", flow=flow, workflow=workflow)
         collaboration = yaml.safe_load(config_path.read_text())["collaboration"]
         assert collaboration["runtime_context"] == "wrapper"
+        assert collaboration["hide_attach_helpers"] is True
         assert list(collaboration["profiles"]) == ["goga-reviewer"]
 
     def test_collaboration_free_documents_write_empty_profiles(self, config_path: Path) -> None:
@@ -138,7 +141,11 @@ class TestWriteAfmConfigCollaborationContract:
 
         data = yaml.safe_load(config_path.read_text())
 
-        assert data["collaboration"] == {"runtime_context": "wrapper", "profiles": {}}
+        assert data["collaboration"] == {
+            "runtime_context": "wrapper",
+            "hide_attach_helpers": True,
+            "profiles": {},
+        }
 
     def test_generated_profile_shape_is_exactly_title_command_delegate(self, config_path: Path) -> None:
         """A generated profile carries exactly ``{title, command, delegate}`` — nothing else."""
@@ -268,13 +275,15 @@ class TestWriteAfmConfigCollaborationLogic:
         Written beside the other statics even with no flow and no
         workflow — the dashboard of a goga-managed run accepts no
         out-of-model stage addition; the setting is never configurable.
+        No ``theme`` writes — the engine-builtin theme stays the fallback
+        behind the materialized ``skin_dir`` skin.
         """
         write_afm_config(None)
 
         parsed = yaml.safe_load(config_path.read_text())
 
         assert parsed["add_stage"] == {"enabled": False}
-        assert parsed["theme"] == "goga"
+        assert "theme" not in parsed
         assert parsed["open_browser"] is False
         assert parsed["proxy"] == {"enabled": False}
         assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"

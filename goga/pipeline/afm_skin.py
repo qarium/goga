@@ -16,8 +16,8 @@ _SKIN_TARGET_BASE = Path("/home/goga/.afm/skins")
 
 # The skin directory name — the materialized ``<base>/<name>`` directory is
 # what the afm configuration's ``skin_dir`` points at; afm serves it wholesale
-# as the active skin while it holds ``index.css`` (``theme`` only names an
-# engine-builtin fallback, it never resolves inside this directory).
+# as the active skin while it holds ``index.css`` (the engine-builtin theme is
+# only a fallback, it never resolves inside this directory).
 _SKIN_NAME = "goga"
 
 
