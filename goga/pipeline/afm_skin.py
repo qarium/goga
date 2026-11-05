@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # the afm configuration's ``skin_dir`` field points at. Never under /workspace
 # or the project directory. A module constant so the tests (and only they) can
 # relocate it.
-_SKIN_TARGET_BASE = Path("/home/goga/.afm/skins")
+_SKINS_TARGET_BASE = Path("/home/goga/.afm/skins")
 
 # The skin directory name — the materialized ``<base>/<name>`` directory is
 # what the afm configuration's ``skin_dir`` points at; afm serves it wholesale
@@ -69,9 +69,9 @@ def materialize_afm_skin() -> Path:
             "(the installed goga package is damaged — rebuild the image)"
         )
 
-    target = _SKIN_TARGET_BASE / _SKIN_NAME
+    target = _SKINS_TARGET_BASE / _SKIN_NAME
 
-    _SKIN_TARGET_BASE.mkdir(parents=True, exist_ok=True)
+    _SKINS_TARGET_BASE.mkdir(parents=True, exist_ok=True)
 
     # Reset the skin entry — the whole file set is regenerated per launch so a
     # removed packaged file never lingers as a stale dashboard artifact.

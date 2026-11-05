@@ -20,9 +20,9 @@ _AFM_CONFIG_PATH = Path("/home/goga/.afm/config.yaml")
 _PROMPTS_DIR = "/home/goga/pipeline/prompts"
 # The engine's custom skin directory: afm serves it wholesale as the active
 # skin only while it holds index.css DIRECTLY inside (the engine's builtin
-# theme is then just the fallback). Must equal _SKIN_TARGET_BASE/_SKIN_NAME of
+# theme is then just the fallback). Must equal _SKINS_TARGET_BASE/_SKIN_NAME of
 # afm_skin.
-_SKINS_DIR = "/home/goga/.afm/skins/goga"
+_SKIN_DIR = "/home/goga/.afm/skins/goga"
 
 # The collaboration execution context goga always declares — every command the
 # engine spawns for the run (client and generated profiles alike) is an
@@ -393,7 +393,7 @@ def write_afm_config(
             "proxy": {"enabled": False},
             "prompts_dir": _PROMPTS_DIR,
             "add_stage": {"enabled": False},
-            "skin_dir": _SKINS_DIR,
+            "skin_dir": _SKIN_DIR,
         }
     )
     content["hooks"] = [

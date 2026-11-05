@@ -25,7 +25,7 @@ def skin_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     the materialized skin lands under pytest's tmp_path instead.
     """
     base = tmp_path / ".afm-home" / "skins"
-    monkeypatch.setattr(_afm_skin_module, "_SKIN_TARGET_BASE", base)
+    monkeypatch.setattr(_afm_skin_module, "_SKINS_TARGET_BASE", base)
     return base
 
 

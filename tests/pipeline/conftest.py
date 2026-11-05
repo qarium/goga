@@ -87,7 +87,7 @@ def _in_container_run_context(
     pin_package_environment({})
     monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
     monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", tmp_path / "goga-assistant-env")
-    monkeypatch.setattr(_afm_skin_module, "_SKIN_TARGET_BASE", tmp_path / ".afm-home" / "skins")
+    monkeypatch.setattr(_afm_skin_module, "_SKINS_TARGET_BASE", tmp_path / ".afm-home" / "skins")
 
 
 @pytest.fixture
