@@ -141,6 +141,43 @@ class TestPipelineCliContract:
         assert "-p" in action.option_strings
         assert action.default is None
 
+    def test_run_subparser_declares_fail_on_error_flag(self) -> None:
+        """The `run` subparser declares `--fail-on-error` as a store-true flag with default False."""
+        import argparse
+
+        _, run_parser = _cli_module._build_parser()
+        actions = [action for action in run_parser._actions if action.dest == "fail_on_error"]
+
+        assert len(actions) == 1
+        action = actions[0]
+        assert "--fail-on-error" in action.option_strings
+        assert isinstance(action, argparse._StoreTrueAction)
+        assert action.default is False
+
+    def test_run_subparser_accepts_fail_on_error_in_both_modes(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`--fail-on-error` parses without an argparse error with and without `--info`.
+
+        The flag binds in both modes and takes effect in run mode only — the
+        same surface pattern as the workflow, profile, and skip flags.
+        """
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
+            exit_code = pipeline_cli(["run", "deploy", "--info", "--fail-on-error"])
+
+        assert exit_code == 0
+
+        with mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "--fail-on-error"])
+
+        assert exit_code == 0
+
     def test_pipeline_cli_parses_profile_flag_both_modes(
         self,
         tmp_path: Path,
@@ -395,6 +432,7 @@ class TestPipelineCliLogic:
             profile=None,
             skip=None,
             parallel=None,
+            fail_on_error=False,
         )
 
     def test_pipeline_cli_passes_parallel_to_run_pipeline(
@@ -426,6 +464,7 @@ class TestPipelineCliLogic:
             profile=None,
             skip=None,
             parallel=4,
+            fail_on_error=False,
         )
 
     def test_pipeline_cli_run_threads_workflow_and_repeatable_skip(
@@ -459,6 +498,7 @@ class TestPipelineCliLogic:
             profile=None,
             skip=["build", "test"],
             parallel=None,
+            fail_on_error=False,
         )
 
     def test_skip_absent_yields_none_not_empty_list(
@@ -499,6 +539,38 @@ class TestPipelineCliLogic:
 
         assert exit_code == 0
         assert mock_run_pipeline.call_args.kwargs["parallel"] is None
+
+    def test_pipeline_cli_fail_on_error_flag_binds_in_both_modes(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`--fail-on-error` parses in both modes: inert on the card, threaded in the run.
+
+        The card invocation accepts the flag without an argparse error and
+        never reaches run_pipeline (inert in info mode); the run invocation
+        threads fail_on_error=True into run_pipeline — takes effect in run
+        mode only (R5.4).
+        """
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+        with (
+            mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe,
+            mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0) as mock_run,
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--info", "--fail-on-error"])
+
+        assert exit_code == 0
+        assert mock_describe.called
+        mock_run.assert_not_called()
+
+        with mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0) as mock_run:
+            exit_code = pipeline_cli(["run", "deploy", "--port", "5000", "--fail-on-error"])
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["fail_on_error"] is True
 
     def test_pipeline_cli_run_without_port_exits_with_2(
         self,

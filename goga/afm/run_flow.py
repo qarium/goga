@@ -10,6 +10,7 @@ def run_flow(
     flow_path: Path,
     port: int,
     max_parallel: int | None = None,
+    exit_on_fail: bool = False,
     env: dict[str, str] | None = None,
 ) -> int:
     """Run a goga flow file via the external ``afm`` binary.
@@ -20,6 +21,11 @@ def run_flow(
         port: TCP port forwarded to ``afm run --port``; allocated by the caller.
         max_parallel: Optional concurrency cap forwarded as
             ``afm run --max-parallel``; ``None`` omits the flag.
+        exit_on_fail: When ``True``, the launch argv carries the engine's
+            explicit ``--exit-on-fail`` flag — a failed stage stops the run and
+            the engine exits with code 1. When ``False`` (default), the flag is
+            omitted. An argv flag (visible in the process listing) — never the
+            ``AFM_EXIT_ON_FAIL`` environment variable.
         env: Optional env layer applied over the inherited environment for this
             subprocess only; its values never reach argv, logs, or errors.
 
@@ -30,6 +36,8 @@ def run_flow(
     cmd = ["afm", "run", "--port", str(port)]
     if max_parallel is not None:
         cmd += ["--max-parallel", str(max_parallel)]
+    if exit_on_fail:
+        cmd += ["--exit-on-fail"]
     cmd.append(str(flow_path))
 
     try:

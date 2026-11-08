@@ -16,6 +16,31 @@ The config loader looks for this file relative to the current working directory.
 
 For the machine-wide `~/.goga/config.yml`, see [Home Configuration](home.md). To read values back from the command line, see [`goga config`](cli.md).
 
+## Environment references (`!ENV`)
+
+Any scalar value in the file may be written as `!ENV NAME` — resolved from the
+process environment at load time into the variable's value:
+
+```yaml
+pipeline:
+  agent: !ENV PIPELINE_AGENT
+  env:
+    ANTHROPIC_API_KEY: !ENV ANTHROPIC_API_KEY
+```
+
+Rules:
+
+- Resolution is always a **string** — no coercion. A field expecting an int or
+  bool rejects an `!ENV` value per its own validation (`build.review.additional.patience: !ENV N` fails with `... must be an int`), even when the text looks numeric.
+- An **unset** variable resolves to `""` — fields with their own empty-means-unset
+  rule (the agent fields) then behave as if unset; other fields see the empty string.
+- The tag applies to **scalars only** — `!ENV` on a mapping or a list value, or
+  with an empty argument, fails the load with the YAML library's own error
+  naming the position.
+- The tag is registered on the project-configuration (and
+  [tool-configuration](../features/tools/configuration.md)) load only; the
+  [home configuration](home.md) is plain YAML and does not resolve it.
+
 ## Example configuration
 
 ```yaml

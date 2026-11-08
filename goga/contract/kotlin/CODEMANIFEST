@@ -7,11 +7,11 @@ Imports:
     From: goga/contract/data
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   tree-sitter-kotlin: .goga/usages/cooks/tree-sitter-kotlin.md
 
 Annotations: |
-  During development and testing, use practice `conventions`.
+  During development and testing, use practice `convention`.
   For parsing Kotlin files, use practice `tree-sitter-kotlin`.
 
 ---

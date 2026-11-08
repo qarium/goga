@@ -99,6 +99,33 @@ except yaml.YAMLError as e:
     print(e)
 ```
 
+## Environment references (!ENV)
+
+Scalar values in `.goga/config.yml` may reference the environment: a
+value written `!ENV NAME` resolves, at load time, to the string value of
+the variable `NAME`.
+
+```yaml
+pipeline:
+  agent: !ENV PIPELINE_AGENT
+```
+
+- `PIPELINE_AGENT=claude` → `pipeline.agent` is the string `"claude"`.
+- `PIPELINE_AGENT` unset → `pipeline.agent` is the empty string — the
+  loader treats it exactly like an authored empty value (the `agent`
+  fields resolve it to `None`), so the configuration still loads.
+- Resolution is always a string — no coercion. A field expecting an int
+  or bool rejects an `!ENV` value per its own validation.
+- Malformed use (`!ENV` with an empty argument, a tag in an impossible
+  position) fails the load with the yaml library's own error naming the
+  file position.
+- The resolved configuration depends on the environment: one committed
+  file can serve multiple environments. Tests must control the
+  variables explicitly.
+
+The home configuration (`~/.goga/config.yml`) does NOT resolve `!ENV` —
+the tag applies to the project configuration only.
+
 ## .goga/config.yml Schema
 
 Minimal valid configuration (only `language` is required at the loader level):

@@ -31,6 +31,8 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 | --no-workflow | flag | disable workflow resolution (run and card) |
 | -p / --profile NAME | str | the contributor-profile activation channel (run and card); forwarded as `--profile NAME` only when set; the same leading-dash check as the workflow name |
 | --parallel N | int | max concurrently executing stages; run only; long-only — the `-p` short alias belongs to `--profile` |
+| --fail-on-error | flag | exit non-zero when a stage fails (threads to afm `--exit-on-fail`); run only |
+| --port N | int (1–65535) | run the dashboard on this fixed port instead of an allocated free one; run only — the same value reaches the docker `-p N:N` publish and the in-container `--port N` argv, and a taken port surfaces as the bind error itself (no silent fallback) |
 | -s / --skip NAME | repeatable | exclude a stage; run and card forms |
 | -c / --clean | flag | wipe persistent afm state before launch; run only |
 | -u / --update | flag | refresh the image before the flat list and the run; no-op in the info forms |
@@ -67,7 +69,7 @@ silently.
 ## Flag behavior in the list/info forms
 
 - Ignored in the listing forms (no-op, no side effects): `-e/--env`, `--proxy`, `-c/--clean`,
-  `--parallel`, `--add-host`, `-t/--topic`, `--todo`.
+  `--parallel`, `--fail-on-error`, `--port`, `--add-host`, `-t/--topic`, `--todo`.
 - `-u/--update`: works in `--list` without `--info`; no-op in both `--info` forms.
 - `-w/--workflow`, `--no-workflow`, `-p/--profile`, and `-s/--skip`: validated as usual
   (exclusivity, leading-dash, and, for -w, file existence) and honored by the card form —
@@ -77,7 +79,8 @@ silently.
 
 ## Docker shapes
 
-- Run form: full shape — allocated port, env-file, persistent afm state
+- Run form: full shape — resolved port (the `--port` CLI value when pinned,
+  else an allocated free port), env-file, persistent afm state
   mount, caller-side signal handler. No afm-config overlay exists: the whole
   `config.yaml` is written in-container by the run coordination, after its
   load-and-amend of the effective configuration.
@@ -87,6 +90,27 @@ silently.
   lines and never `GOGA_WORKFLOW`. The decision travels in the
   subcommand argv: `-m goga.pipeline list [--info]` or `-m goga.pipeline run NAME --info
   [-w WORKFLOW | --no-workflow] [--profile NAME] [-s NAME]...`.
+
+## Direct in-container execution (GOGA_DOCKER=1)
+
+Inside the goga image the same command runs without docker: the
+composed in-container argv and env contract execute as a child process.
+
+    # in-container
+    goga pipeline deploy                     # direct run
+    goga pipeline --list                     # direct listing
+    goga pipeline deploy --fail-on-error     # direct run, fail-fast
+
+- Host-only options are errors on this path: -t/--topic, --todo,
+  --update, -e/--env, --add-host, --proxy — each fails naming the
+  option. `--port` is NOT host-only: the direct substrate binds afm on it
+  the same way, so `goga pipeline deploy --port 7000` works in-container.
+- --clean wipes the in-container AFM_DIR (/home/goga/pipeline) before
+  the run.
+- The port is still resolved (pinned or allocated) and passed; the env
+  contract (engine
+  variables, carriage payloads) is identical to the docker launch.
+- On the host (no marker) nothing changes — docker run as always.
 
 ## Environment carriage (run form)
 
@@ -162,9 +186,11 @@ with padding.
 The user-facing --parallel (long-only; the `-p` short alias belongs to
 --profile) is a Click option. The Docker port-publish
 -p <port>:<port> is an internal translated docker token assembled by the
-run launcher from the allocated port (run form
-only). Different namespaces (Click CLI vs docker run argv) — no collision.
-The user never authors the docker -p.
+run launcher from the resolved port (run form
+only; the `--port` CLI value when pinned, else an allocated free port).
+Different namespaces (Click CLI vs docker run argv) — no collision.
+The user never authors the docker -p directly; `--port` is the sanctioned
+channel that fixes its value.
 
 ## Threading chains
 
@@ -173,6 +199,10 @@ The user never authors the docker -p.
     goga pipeline --list          → minimal shape: list
     goga pipeline --list --info   → minimal shape: list --info
     goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow] [--profile P] [-s NAME]...
+
+    goga pipeline NAME --port 7000
+      → docker run -p 7000:7000 … -m goga.pipeline run NAME --port 7000
+        → the dashboard binds the pinned port; no free-port search runs
 
     goga pipeline NAME --parallel N
       → docker run … -m goga.pipeline run NAME --port PORT --parallel N

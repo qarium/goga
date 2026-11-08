@@ -942,6 +942,435 @@ class TestBuildCommandProfileCarriage:
 # host launcher removes it unconditionally in ``finally``.
 
 
+# --- Direct substrate (GOGA_DOCKER=1) tests: step 1a / 14a ---
+#
+# Inside the goga image the command executes the SAME composed in-container
+# command line and env contract as a direct child process through
+# ``run_direct`` (per ``direct-runner``) instead of through docker run. The
+# docker-CLI check, the image guard, the host ralphex runtime-dir machinery,
+# the env-file write, and DockerRunner are substrate-scoped to the host path;
+# the host-only options (-e/--env, --add-host, --proxy, -u/--update) are
+# rejected with an error naming the option BEFORE any other work.
+
+
+def _write_direct_config(tmp_path: Path, *, image: str | None = "qarium/goga:latest") -> None:
+    """Materialize the minimal build-project ``.goga/config.yml`` under ``tmp_path``.
+
+    ``image=None`` models a config the host substrate's image guard would
+    reject — used to pin that the guard is substrate-scoped to the host path.
+    """
+    (tmp_path / ".goga").mkdir(exist_ok=True)
+    (tmp_path / ".goga" / "config.yml").write_text(
+        yaml.dump(
+            {
+                "language": "python",
+                "image": image,
+                "build": {"agent": "claude"},
+                "pipeline": {"agent": "claude"},
+            }
+        )
+    )
+
+
+class TestBuildDirectSubstrate:
+    """The direct substrate (GOGA_DOCKER=1): the same composed child, host-only options rejected.
+
+    Step 1a contract: with the marker set, each of the four host-only options
+    is rejected with an error naming it BEFORE any other work (SC2 — the
+    docker-CLI check and the config load never run, nothing is silently
+    ignored, no child spawns). Step 14a contract: the direct run spawns the
+    SAME composed in-container argv with the SAME env ladder parsed into the
+    child env layer (SC1 build form), the direct dry-run prints the child
+    command and exits 0, and --clean wipes ``<cwd>/.ralphex`` before launch.
+    """
+
+    @pytest.mark.parametrize(
+        ("argv", "flag"),
+        [
+            (["plan.md", "-e", "K=V"], "--env/-e"),
+            (["plan.md", "--add-host", "h:ip"], "--add-host"),
+            (["plan.md", "--proxy", "http://p"], "--proxy"),
+            (["plan.md", "-u"], "--update/-u"),
+        ],
+        ids=["env", "add-host", "proxy", "update"],
+    )
+    def test_build_direct_rejects_each_host_only_option(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str], flag: str
+    ) -> None:
+        """Each host-only option exits 1 naming the option, before any spawn or docker check."""
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        _write_direct_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        result = CliRunner().invoke(build_cmd, argv)
+
+        assert result.exit_code == 1
+        assert flag in result.stderr
+        assert "is host-only" in result.stderr
+        # Nothing was silently ignored and nothing ran — no child, no docker
+        # activity.
+        assert spawn.calls == []
+
+    def test_build_direct_host_only_rejection_precedes_config_load(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Step 1a runs BEFORE the docker check and the config load (contract: 1a before 1).
+
+        A config-less project with ``-e`` still reports the host-only error —
+        not the config error, and not the docker-CLI error.
+        """
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker") as mock_check,
+            mock.patch.object(_build_mod, "load_project_config") as mock_config,
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md", "-e", "K=V"])
+
+        assert result.exit_code == 1
+        assert "is host-only" in result.stderr
+        # The rejection precedes both the docker-CLI check and the config load.
+        mock_check.assert_not_called()
+        mock_config.assert_not_called()
+        assert spawn.calls == []
+
+    def test_build_direct_spawns_child_with_env_overlay(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A direct run spawns the composed argv with the parsed ladder as the env layer.
+
+        The child argv is the SAME post-image command the docker substrate
+        hands to the image entrypoint, prefixed with the program token; the
+        env overlay carries the ``GOGA_EXTRA_ENV`` payload line composed from
+        the same (empty) parsed CLI entries; no docker machinery runs; the
+        project directory keeps no ``.ralphex/`` (the finally cleanup ran).
+        """
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        _write_direct_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        runner_cls = mock.Mock()
+        with (
+            mock.patch.object(_build_mod, "DockerRunner", runner_cls),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist") as mock_build,
+            mock.patch.object(_build_mod, "docker_update") as mock_refresh,
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 0
+        assert len(spawn.calls) == 1
+        argv, env = spawn.calls[0]
+        assert argv == ["python3", "-m", "goga.build", "plan.md"]
+        assert env["GOGA_EXTRA_ENV"] == encode_extra_env([])
+        # The project-directory invariant holds under the direct exit path.
+        assert not (tmp_path / ".ralphex").exists()
+        # The docker substrate is fully bypassed.
+        runner_cls.assert_not_called()
+        mock_build.assert_not_called()
+        mock_refresh.assert_not_called()
+
+    def test_build_direct_dry_run_prints_child_command_and_exits_zero(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The direct dry-run prints the DIRECT child command — never a docker run line."""
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        _write_direct_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        with mock.patch.object(_build_mod, "DockerRunner") as runner_cls:
+            result = CliRunner().invoke(build_cmd, ["plan.md", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert "python3 -m goga.build plan.md --dry-run" in result.stderr
+        # The DIRECT line, never the docker line — and nothing executed.
+        assert "docker run" not in result.stderr
+        assert spawn.calls == []
+        runner_cls.assert_not_called()
+
+    @pytest.mark.parametrize("clean", [True, False], ids=["clean", "no-clean"])
+    def test_build_direct_clean_wipes_before_launch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clean: bool
+    ) -> None:
+        """--clean wipes ``<cwd>/.ralphex`` BEFORE the spawn; the finally cleanup owns every exit path.
+
+        The spawn fake records the stale-marker state at call time: with
+        ``--clean`` the marker is already gone when the child spawns; without
+        it the marker survives the launch (no wipe) and only the finally
+        cleanup removes the directory afterwards — the no-.ralphex-in-project
+        invariant holds on both arms.
+        """
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        _write_direct_config(tmp_path)
+        stale = tmp_path / ".ralphex" / "stale"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("old-state")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        observed: dict[str, bool] = {}
+
+        class _RecordingPopen(DirectSpawnPopen):
+            def __call__(self, argv: list[str], env: dict[str, str] | None = None) -> object:
+                observed["stale_at_spawn"] = stale.exists()
+
+                return super().__call__(argv, env)
+
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _RecordingPopen(returncode=0))
+
+        argv = ["plan.md", "--clean"] if clean else ["plan.md"]
+        result = CliRunner().invoke(build_cmd, argv)
+
+        assert result.exit_code == 0
+        # The launch happened, and the wipe (or its absence) preceded it.
+        assert observed["stale_at_spawn"] is not clean
+        # The no-.ralphex-in-project invariant holds under every exit path.
+        assert not stale.exists()
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_build_direct_child_exit_code_propagates_verbatim(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The child's exit code returns through ``ctx.exit`` verbatim — no remapping."""
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        _write_direct_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        spawn = DirectSpawnPopen(returncode=7)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 7
+        assert len(spawn.calls) == 1
+
+    def test_build_direct_skips_docker_check_and_image_guard(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failing docker-CLI check and an unset image both pass on the direct substrate.
+
+        Mirrors the pipeline surface's twin: ``_check_docker`` resolving
+        ``False`` (no docker on the machine) and a config the host image
+        guard would reject must neither stop the direct run nor spawn any
+        docker activity — both gates are substrate-scoped to the host path.
+        """
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        _write_direct_config(tmp_path, image=None)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+        monkeypatch.setattr(_build_mod, "_check_docker", lambda: False)
+
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 0
+        assert len(spawn.calls) == 1
+
+    def test_build_direct_spawn_failure_is_clean_click_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raw OSError from the spawn is wrapped by the caller (D5) — clean message, exit 1.
+
+        ``run_direct`` propagates a spawn ``OSError`` raw (its own contract
+        test pins that); the command owns the wrapping, so a missing program
+        token is the same clean error surface as every other failure of
+        ``goga build`` — never a traceback — and the no-.ralphex-in-project
+        cleanup still runs on that exit path.
+        """
+        import goga.docker.runner
+
+        _write_direct_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        def _raising_popen(argv: list[str], env: dict[str, str] | None = None) -> object:
+            raise FileNotFoundError(f"No such file or directory: {argv[0]}")
+
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _raising_popen)
+
+        result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "No such file or directory" in result.stderr
+        assert not isinstance(result.exception, FileNotFoundError)
+        # The finally cleanup ran on the spawn-failure exit path too.
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_build_direct_env_overlay_parses_the_same_ladder_lines(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """D1 parity: the direct child env layer is the parse of the SAME composed lines.
+
+        The host substrate writes the composed ladder into the private
+        env-file; the direct substrate parses the SAME lines into the child
+        env layer — one composition, two sinks (divergence between the
+        surfaces is a defect per ``direct-runner``).
+        """
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen
+
+        _write_direct_config(tmp_path)
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {"GIT_AUTHOR_NAME": "User"})
+        monkeypatch.setenv("GOGA_PROFILE", "ambient")
+        monkeypatch.chdir(tmp_path)
+
+        def _parse(lines: list[str]) -> dict[str, str]:
+            return dict(line.split("=", 1) for line in lines)
+
+        # Host substrate: capture the env-file lines the ladder composes.
+        host_lines: dict[str, list[str]] = {}
+
+        def _capture(lines: list[str]) -> Path:
+            host_lines["lines"] = list(lines)
+
+            return tmp_path / "env"
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_write_env_file", side_effect=_capture),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            monkeypatch.delenv("GOGA_DOCKER", raising=False)
+            CliRunner().invoke(build_cmd, ["plan.md"])
+
+        # Direct substrate: capture the child env layer of the same project.
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with mock.patch.object(_build_mod, "_write_env_file") as mock_write:
+            CliRunner().invoke(build_cmd, ["plan.md"])
+
+        mock_write.assert_not_called()
+        assert len(spawn.calls) == 1
+        _argv, direct_env = spawn.calls[0]
+        assert direct_env is not None
+        # The overlay applies OVER the inherited environment (run_direct's
+        # merge): every ladder key lands with its composed value, and the
+        # composed values are exactly the parse of the SAME lines the host
+        # path wrote (docker --env-file semantics mirrored by first-= split).
+        expected_overlay = _parse(host_lines["lines"])
+        assert set(expected_overlay) <= set(direct_env)
+
+        for key, value in expected_overlay.items():
+            assert direct_env[key] == value
+
+        assert direct_env["GIT_AUTHOR_NAME"] == "User"
+        assert direct_env["GOGA_PROFILE"] == "ambient"
+
+
+class TestComposeEnvLines:
+    """The extracted ladder composer — one composition shared by both substrate sinks.
+
+    The host sink writes the lines into the private env-file; the direct sink
+    parses them through ``_env_overlay`` into the child env layer.
+    """
+
+    def test_compose_env_lines_ladder_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The ladder: home.env base < git identity < raw CLI lines < engine proxy triple < payload < carriage."""
+        monkeypatch.setenv("GOGA_PROFILE", "ambient")
+        lines = _build_mod._compose_env_lines(
+            home_env={"HOME_KEY": "home-val", "SHARED": "home"},
+            git_env={"GIT_AUTHOR_NAME": "User", "SHARED": "git"},
+            extra_env=("CLI_KEY=cli-val",),
+            proxy="http://p:3128",
+            home_profiles={"mixa": {"worker": {"agent": "codex"}}},
+        )
+
+        assert lines[0] == "HOME_KEY=home-val"
+        assert "SHARED=git" in lines  # git identity overrides home.env on conflict
+        assert lines.index("HOME_KEY=home-val") < lines.index("CLI_KEY=cli-val")
+        assert lines.index("CLI_KEY=cli-val") < lines.index("HTTP_PROXY=http://p:3128")
+        assert lines.index("HTTP_PROXY=http://p:3128") < lines.index("HTTPS_PROXY=http://p:3128")
+        assert "NO_PROXY=localhost,127.0.0.1" in lines
+        # The payload line, then the two carriage engine lines, close the file.
+        payload_idx = next(i for i, line in enumerate(lines) if line.startswith("GOGA_EXTRA_ENV="))
+        assert decode_extra_env(lines[payload_idx].partition("=")[2]) == {"CLI_KEY": "cli-val"}
+        assert payload_idx < lines.index("GOGA_PROFILE=ambient")
+        assert lines.index("GOGA_PROFILE=ambient") < next(
+            i for i, line in enumerate(lines) if line.startswith("GOGA_HOME_PROFILES=")
+        )
+        assert not any(line.startswith("GOGA_WORKFLOW=") for line in lines)
+
+    def test_compose_env_lines_no_proxy_omits_triple(self) -> None:
+        """No resolved proxy — no proxy triple in the lines."""
+        lines = _build_mod._compose_env_lines(
+            home_env={},
+            git_env={},
+            extra_env=(),
+            proxy=None,
+            home_profiles={},
+        )
+
+        assert lines == [f"GOGA_EXTRA_ENV={encode_extra_env([])}"]
+
+    def test_compose_env_lines_engine_skip_rule(self) -> None:
+        """An explicit -e key suppresses the launcher's own engine line for that key."""
+        lines = _build_mod._compose_env_lines(
+            home_env={},
+            git_env={},
+            extra_env=("HTTP_PROXY=user-proxy",),
+            proxy="http://launcher:3128",
+            home_profiles={},
+        )
+
+        assert [line for line in lines if line.startswith("HTTP_PROXY=")] == ["HTTP_PROXY=user-proxy"]
+        assert "HTTPS_PROXY=http://launcher:3128" in lines
+
+    def test_env_overlay_splits_first_equals_last_write_wins(self) -> None:
+        """The overlay parse: split on the FIRST ``=``, later lines win — mirroring --env-file."""
+        overlay = _build_mod._env_overlay(["A=1", "B=x=y", "A=2"])
+
+        assert overlay == {"A": "2", "B": "x=y"}
+
+
 class TestCleanupRalphexInProject:
     """``_cleanup_ralphex_in_project`` removes the Docker-created mount point."""
 

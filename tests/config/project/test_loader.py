@@ -18,6 +18,7 @@ from goga.config import (
     TopicsConfig,
     load_project_config,
 )
+from goga.config.project import loader as project_loader
 from goga.config.project.config import (
     DepConfig,
     TopicsCreateConfig,
@@ -36,6 +37,7 @@ from goga.config.project.loader import (
     _parse_usages,
     _validate_usages_root,
 )
+from goga.config.yaml import parse_env_yaml
 
 from tests.config.conftest import _write_goga_yml
 from tests.conftest import is_kw_only_dataclass
@@ -127,6 +129,22 @@ class TestLoadConfigFacade:
         _write_goga_yml(goga_project, MINIMAL_YAML)
         result = load_project_config()
         assert isinstance(result, ProjectConfig)
+
+
+class TestLoadConfigEnvParseContract:
+    def test_project_loader_parses_through_the_yaml_cell(self):
+        """The loader's parse step routes through parse_env_yaml of goga/config/yaml."""
+        assert project_loader.parse_env_yaml is parse_env_yaml
+
+    def test_project_loader_carries_no_code_level_yaml_import(self):
+        """The yaml module is no longer bound in the loader (docstrings keep the exception names)."""
+        assert not hasattr(project_loader, "yaml")
+
+    def test_project_loader_signature_unchanged(self):
+        """load_project_config still takes no parameters and returns ProjectConfig."""
+        signature = inspect.signature(load_project_config)
+        assert list(signature.parameters) == []
+        assert signature.return_annotation is ProjectConfig
 
 
 # --- Positive tests ---
@@ -1036,6 +1054,54 @@ class TestLoadConfigEdgeCases:
             "language: python\npipeline:\n  agent: claude\nbuild:\n  agent: [unclosed\n",
         )
         with pytest.raises(yaml.YAMLError):
+            load_project_config()
+
+
+class TestLoadConfigEnvReferences:
+    ENV_AGENT_YAML = "language: python\npipeline:\n  agent: !ENV PIPELINE_AGENT\n"
+
+    def test_load_project_config_env_agent_unset_resolves_absent(self, goga_project, monkeypatch):
+        """An unset !ENV variable resolves to "" and the agent field's empty rule yields None (SC6)."""
+        monkeypatch.delenv("PIPELINE_AGENT", raising=False)
+        _write_goga_yml(goga_project, self.ENV_AGENT_YAML)
+
+        config = load_project_config()
+
+        assert config.pipeline is not None
+        assert config.pipeline.agent is None
+
+    def test_load_project_config_env_agent_set_resolves_value(self, goga_project, monkeypatch):
+        """A set !ENV variable resolves to its string value at load time."""
+        monkeypatch.setenv("PIPELINE_AGENT", "claude")
+        _write_goga_yml(goga_project, self.ENV_AGENT_YAML)
+
+        config = load_project_config()
+
+        assert config.pipeline is not None
+        assert config.pipeline.agent == "claude"
+        assert isinstance(config.pipeline.agent, str)
+
+    def test_load_project_config_malformed_env_tag_raises_yaml_error(self, goga_project):
+        """A malformed !ENV use propagates the yaml constructor error naming the position."""
+        _write_goga_yml(goga_project, "language: python\nagent: !ENV\n")
+
+        with pytest.raises(yaml.YAMLError, match="expected a variable name in !ENV"):
+            load_project_config()
+
+    def test_load_project_config_env_on_int_field_rejects_without_coercion(self, goga_project, monkeypatch):
+        """An !ENV value stays a string — an int-typed field rejects it, never coerces it.
+
+        Resolution is always a string (no coercion): a field expecting an
+        int owns the rejection through its own validation, naming the
+        dotted field — even when the resolved text looks numeric.
+        """
+        monkeypatch.setenv("PATIENCE", "3")
+        _write_goga_yml(
+            goga_project,
+            "language: python\nbuild:\n  agent: claude\n  review:\n    additional:\n      patience: !ENV PATIENCE\n",
+        )
+
+        with pytest.raises(ValueError, match=re.escape("build.review.additional.patience must be an int")):
             load_project_config()
 
 

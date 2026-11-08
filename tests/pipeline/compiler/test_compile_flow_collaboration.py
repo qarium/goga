@@ -17,6 +17,10 @@ entries —
   translated-agents comparison — an authored ``roles: [planning]`` equals
   ``[planner]``); the duplicate-name guard stays as defense for
   programmatic contributions (an authored map cannot repeat a key);
+- the content check — every namespace member must resolve a ``prompt`` or a
+  ``skills`` list after the overlay merge (an override-style entry naming an
+  undelivered assistant raises ``StructuralError`` naming it and its site;
+  a merged override entry carries the delivered content and compiles);
 - loop-expanded copies share one attachment list (uniform across copies);
 - an authored ``assistants`` key in a stage body is a structural error;
 - an extend-seeded stage with a stages-block entry keeps its attachments
@@ -46,6 +50,7 @@ from goga.pipeline.compiler.compile_flow import (
     _CANONICAL_KEY_ORDER,
     _canonical_fields,
 )
+from goga.pipeline.hooks import ToolContribution, merge_workflow_overlay
 from goga.pipeline.workflow import (
     WorkflowAssistant,
     WorkflowDocument,
@@ -163,6 +168,31 @@ class TestCompileFlowCollaborationContract:
         assert "_CollaborationEmission" not in facade_all
         assert "_assistant_namespace" not in facade_all
         assert "_assemble_assistants" not in facade_all
+
+    def test_content_check_raises_structural_error_through_public_surface(self, tmp_path: Path) -> None:
+        """A namespace member resolving neither prompt nor skills fails the public compile.
+
+        The compile-time content check surfaces as a ``StructuralError`` (a
+        ``ValueError`` subclass) through ``compile_flow`` — the override-style
+        catalog entry ``Ghost: {agent: a1}`` joins the namespace under the
+        five-field declaration rule but carries no prompt and no skills.
+        """
+        with pytest.raises(StructuralError) as excinfo:
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n"
+                "  Ghost:\n"
+                "    agent: a1\n"
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      Ghost:\n"
+                "        when: checkpoints\n",
+            )
+
+        assert isinstance(excinfo.value, ValueError)
+        assert "Ghost" in str(excinfo.value)
 
     def test_workflow_document_default_catalog_is_empty(self) -> None:
         """A default ``WorkflowDocument`` carries an empty catalog and no delegation."""
@@ -436,6 +466,49 @@ class TestTeamAndAttachmentMaterialization:
 
         assert entry.trigger == "one_shot"
         assert "trigger: one_shot" in text
+
+    def test_compile_when_message_maps_to_on_message(self, tmp_path: Path) -> None:
+        """``when: message`` compiles to the engine's ``on_message`` resting engagement."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: message\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.trigger == "on_message"
+        assert "trigger: on_message" in text
+
+    def test_compile_when_message_combines_with_gate(self, tmp_path: Path) -> None:
+        """``gate: true`` with ``when: message`` compiles to required mode and on_message trigger."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        gate: true\n"
+            "        when: message\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.mode == "required"
+        assert entry.trigger == "on_message"
+        assert "mode: required" in text
+        assert "trigger: on_message" in text
 
     def test_compile_skills_only_catalog_member_materializes_empty_instruction(self, tmp_path: Path) -> None:
         """A skills-only catalog member compiles — team ``instruction: ''``, skills verbatim."""
@@ -754,6 +827,149 @@ class TestAttachmentChecks:
         assert [stage.id for stage in flow_doc.stages] == ["build"]
         assert "ghost" not in text
         assert flow_doc.collaboration == FlowCollaboration(mode="assistants", max_depth=None)
+
+
+class TestEffectiveContentCheck:
+    """The step-4.10 content check — every namespace member must resolve prompt or skills."""
+
+    def test_compile_flow_override_entry_with_base_compiles(self, tmp_path: Path) -> None:
+        """A merged override entry carries the delivered content and compiles (SC4 end-to-end).
+
+        The authored catalog entry ``X: {agent: my-agent}`` over the tool's
+        whole ``X`` entry passes through ``merge_workflow_overlay`` before
+        compilation — the merged ``prompt``/``skills`` satisfy the content
+        check, the team member carries the tool's instruction, and the
+        stage reference resolves onto the same profile.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  prompt: Make\n"
+        )
+        authored = parse_workflow(
+            "assistants:\n"
+            "  X:\n"
+            "    agent: my-agent\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      X:\n"
+            "        when: checkpoints\n"
+        )
+        tool = parse_workflow(
+            "assistants:\n"
+            "  X:\n"
+            "    prompt: tool-prompt\n"
+            "    skills: [s1]\n"
+            "    agent: tool-agent\n"
+            "    delegate: true\n"
+            "    env:\n"
+            "      K: V\n"
+        )
+        overlay = merge_workflow_overlay(authored, [ToolContribution(tool="t", document=tool)])
+
+        _pipeline_doc, flow_doc = compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=overlay.workflow)
+
+        assert [member.id for member in flow_doc.team] == ["X"]
+        assert flow_doc.team[0].instruction == "tool-prompt"
+        assert flow_doc.team[0].skills == ["s1"]
+        assert [entry.profile for entry in flow_doc.stages[0].fields["assistants"]] == ["goga-X"]
+
+    def test_compile_flow_override_without_base_is_structural_error(self, tmp_path: Path) -> None:
+        """An override-style catalog entry with no delivery fails the content check (SC5).
+
+        Under the five-field declaration rule the ``agent``-only catalog
+        entry joins the namespace; with no tool delivery its ``prompt`` and
+        ``skills`` stay ``None`` — compilation stops with the readable
+        error naming the assistant and its site.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant Ghost at workflow.assistants.Ghost resolves neither prompt nor skills"),
+        ) as excinfo:
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n"
+                "  Ghost:\n"
+                "    agent: a1\n"
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      Ghost:\n"
+                "        when: checkpoints\n",
+            )
+
+        assert "Ghost" in str(excinfo.value)
+        assert "workflow.assistants.Ghost" in str(excinfo.value)
+
+    def test_compile_flow_inline_override_without_base_names_stage_site(self, tmp_path: Path) -> None:
+        """An override-style INLINE declaration names the stage site in the error (SC5).
+
+        The attachment ``Ghost: {when: start, agent: a1}`` counts as a
+        declaration under the five-field rule, joins the namespace as an
+        inline member, and fails the content check with the stage-attached
+        site — the inline authoring surface gets its own readable error.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape(
+                "assistant Ghost at workflow.stages.build.assistants.Ghost resolves neither prompt nor skills"
+            ),
+        ) as excinfo:
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n  build:\n    assistants:\n      Ghost:\n        when: start\n        agent: a1\n",
+            )
+
+        assert "Ghost" in str(excinfo.value)
+        assert "workflow.stages.build.assistants.Ghost" in str(excinfo.value)
+
+    def test_content_check_covers_unreferenced_catalog_entry(self, tmp_path: Path) -> None:
+        """The check runs over the whole namespace — an entry no stage references still fails.
+
+        The content check is a property of the namespace, not of the
+        attachments: a catalog override-style entry that no stage attaches
+        still joins the namespace (catalog entries always do) and still
+        stops compilation when it resolves neither prompt nor skills.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant Ghost at workflow.assistants.Ghost resolves neither prompt nor skills"),
+        ):
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n  Ghost:\n    agent: a1\n",
+            )
+
+    def test_content_check_covers_skipped_stage_declaration(self, tmp_path: Path) -> None:
+        """An override-style declaration on a ``skip: true`` stage still fails the check.
+
+        The namespace is built from the workflow document, not from the
+        post-skip working body (the attachment checks' domain): a skipped
+        stage's declaration is still authored content, so it joins the
+        namespace and its unresolved content stops compilation naming the
+        stage site — unlike a dangling REFERENCE on a skipped stage, which
+        stays silent.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape(
+                "assistant Ghost at workflow.stages.review.assistants.Ghost resolves neither prompt nor skills"
+            ),
+        ):
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n"
+                "  review:\n"
+                "    skip: true\n"
+                "    assistants:\n"
+                "      Ghost:\n"
+                "        when: checkpoints\n"
+                "        agent: a1\n",
+            )
 
 
 def _expected_entry(name: str, instruction: str) -> FlowAssistant:

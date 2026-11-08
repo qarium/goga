@@ -11,8 +11,15 @@ import click
 import yaml
 
 from ...config import HomeConfig, ProjectConfig, load_home_config
-from ...docker import DockerRunner, docker_build_if_not_exist, docker_update, profile_carriage_lines
-from .run_pipeline_container import _check_docker, _write_env_file
+from ...docker import (
+    DockerRunner,
+    docker_build_if_not_exist,
+    docker_update,
+    is_in_docker,
+    profile_carriage_lines,
+    run_direct,
+)
+from .run_pipeline_container import _check_docker, _env_overlay, _write_env_file
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +101,7 @@ def _compose_profile_carriage(home_profiles: dict[str, dict[str, Any]] | None) -
     return profile_carriage_lines(os.environ.get("GOGA_PROFILE", ""), home_profiles)
 
 
-def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
+def run_pipeline_info_container(  # noqa: C901, PLR0912, PLR0913, PLR0917
     name: str | None,
     info: bool,
     config: ProjectConfig,
@@ -162,12 +169,26 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
         when the bundle is non-empty); without cargo nothing is written on
         the host and the launch keeps the minimal read-only shape. The
         cargo env-file is unlinked after the launch.
-    """
-    if not _check_docker():
-        raise click.ClickException("docker not found in PATH")
 
-    if config.image is None:
-        raise click.ClickException("image in .goga/config.yml is not set")
+        Direct substrate (step 7a, ``is_in_docker`` True): the docker-CLI
+        check and the image steps (including the ``config.image`` guard) are
+        skipped — substrate-scoped; the home config still loads. The same
+        minimal env composition (the profile cargo lines only, when cargo
+        exists — parsed into the child env layer, never an env-file) joins
+        the SAME ``_compose_argv`` argv, executed through ``run_direct``
+        (per ``direct-runner``): the child's exit code returns verbatim. No
+        port, no persistent state, no env-file, no caller-side signal
+        handler — the minimal read-only shape holds on both substrates.
+    """
+    # Step 1 — docker-CLI and image gates (host substrate only): inside the
+    # goga image (the GOGA_DOCKER marker) there is no docker launch to check
+    # or image to acquire.
+    if not is_in_docker():
+        if not _check_docker():
+            raise click.ClickException("docker not found in PATH")
+
+        if config.image is None:
+            raise click.ClickException("image in .goga/config.yml is not set")
 
     # Home (machine-wide) config preamble — an empty HomeConfig when the file
     # is absent (no-op). home.env does NOT apply here (the cargo env-file, when
@@ -179,6 +200,21 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
         home: HomeConfig = load_home_config()
     except (ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+    # Step 7a — the direct substrate: the SAME argv composition and the same
+    # minimal cargo rule as the docker path, executed as a child of the
+    # current environment (one composition, two sinks).
+    if is_in_docker():
+        argv = _compose_argv(name, info, workflow, no_workflow, profile, skip)
+        cargo = _compose_profile_carriage(home_profiles)
+
+        # The spawn failure channel (D5): the executor propagates a raw
+        # OSError from Popen; the caller owns the wrapping (clean message +
+        # exit 1).
+        try:
+            return run_direct(["python3", *argv], env=_env_overlay(cargo) if cargo else None)
+        except OSError as exc:
+            raise click.ClickException(str(exc)) from exc
 
     # In-container argv composition per the form (see _compose_argv): the card
     # form carries the workflow decision "as given" — explicit -w,

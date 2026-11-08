@@ -122,6 +122,8 @@ class TestPipelineLogic:
             skip=(),
             parallel=None,
             home_profiles=None,
+            fail_on_error=False,
+            port=None,
         )
 
     def test_pipeline_passes_extra_env_to_run_pipeline_container(self) -> None:
@@ -152,6 +154,8 @@ class TestPipelineLogic:
             skip=(),
             parallel=None,
             home_profiles=None,
+            fail_on_error=False,
+            port=None,
         )
 
     def test_pipeline_accepts_long_env_option(self) -> None:
@@ -179,6 +183,8 @@ class TestPipelineLogic:
             skip=(),
             parallel=None,
             home_profiles=None,
+            fail_on_error=False,
+            port=None,
         )
 
     def test_pipeline_accepts_skip_and_clean_short_aliases(self) -> None:
@@ -316,3 +322,65 @@ class TestPipelineBoundary:
         assert "from ...config import load_project_config" in source
         assert "from .run_pipeline_container import run_pipeline_container" in source
         assert "from .run_pipeline_info_container import run_pipeline_info_container" in source
+
+
+class TestPipelinePortOption:
+    """The ``--port`` flag: a pinned dashboard port forwarded to the launcher."""
+
+    def test_pipeline_forwards_given_port(self) -> None:
+        """``--port 7000`` reaches the launcher as ``port=7000`` (no allocation there)."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "--port", "7000"])
+
+        assert result.exit_code == 0
+        assert mock_rpc.call_args.kwargs["port"] == 7000
+
+    @pytest.mark.parametrize("bad", ["0", "65536", "-1", "not-a-port"])
+    def test_pipeline_rejects_out_of_range_port(self, bad: str) -> None:
+        """Values outside 1-65535 (or non-integers) exit non-zero before any launch."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "--port", bad])
+
+        assert result.exit_code != 0
+        mock_rpc.assert_not_called()
+
+    def test_pipeline_port_boundary_values_accepted(self) -> None:
+        """1 and 65535 — the IntRange boundaries — are accepted."""
+        config = _make_config()
+        runner = CliRunner()
+        for good in ("1", "65535"):
+            with (
+                mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+                mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+            ):
+                result = runner.invoke(pipeline, ["deploy", "--port", good])
+
+            assert result.exit_code == 0, good
+            assert mock_rpc.call_args.kwargs["port"] == int(good)
+
+    def test_pipeline_list_form_ignores_port(self) -> None:
+        """The listing form accepts ``--port`` without effect — no launcher call."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+            mock.patch.object(
+                _pipeline_module, "run_pipeline_info_container", return_value=0
+            ) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["--list", "--port", "7000"])
+
+        assert result.exit_code == 0
+        mock_rpc.assert_not_called()
+        assert "port" not in mock_info.call_args.kwargs

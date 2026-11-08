@@ -20,6 +20,7 @@ from ..history import (
     resolve_topic_status,
 )
 from .afm_config import write_afm_config
+from .afm_skin import materialize_afm_skin
 from .apply_skip_stages import apply_skip_stages
 from .compiler import PipelineRoles, compile_flow, parse_dsl, translate_role
 from .hooks import (
@@ -214,6 +215,7 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
     profile: str | None = None,
     skip: list[str] | None = None,
     parallel: int | None = None,
+    fail_on_error: bool = False,
 ) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
 
@@ -223,8 +225,10 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
             ``<cwd>/.goga/pipelines/``).
         user_dir: user-level pipelines directory (absolute; typically
             ``~/.goga/pipelines/``).
-        port: TCP port forwarded to ``afm run --port``. Allocated by the caller
-            (typically :func:`goga.commands.pipeline.run_pipeline_container`).
+        port: TCP port forwarded to ``afm run --port``. Resolved by the caller
+            (typically :func:`goga.commands.pipeline.run_pipeline_container`):
+            the ``--port`` CLI value when the user pinned one, else an
+            allocated free ephemeral port.
         workflow: optional explicit workflow name — the CLI ``-w/--workflow``
             value the run coordination forwards. Resolved via the shared rule
             set: ``no_workflow`` wins, then this name, then the basename
@@ -249,6 +253,12 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
             receives ``--max-parallel <parallel>``). ``None`` (the default) is
             forwarded unchanged and the flag is omitted — compilation never
             depends on it.
+        fail_on_error: the CLI fail-fast decision from the ``--fail-on-error``
+            flag of the in-container run subcommand; forwarded to
+            :func:`goga.afm.run_flow` as its ``exit_on_fail`` argument (so afm
+            receives ``--exit-on-fail``) — a failed stage ends the run with
+            the engine's failure exit code. ``False`` (the default) changes
+            nothing: no flag, no env variable.
 
     Returns:
         ``0`` on success; ``1`` when the project configuration fails to load
@@ -273,7 +283,14 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
             raised before the prompts directory is wiped.
         OSError: Propagated unchanged from :func:`write_afm_config` when the
             in-container home directory is unwritable (step 16, before the
-            run-creation facts — no events have fired).
+            run-creation facts — no events have fired); also propagated from
+            :func:`materialize_afm_skin` (step 16a) when the skins directory
+            cannot be written.
+        ValueError: When the packaged goga dashboard skin is missing or empty
+            (step 16a), propagated unchanged from
+            :func:`materialize_afm_skin` before the target directory is
+            touched and before the run-creation facts — no events have fired,
+            afm never launches.
         WorkflowSyntaxError: On a structural defect in a resolved workflow-file,
             propagated unchanged from :func:`parse_workflow` (step 8) when
             ``no_workflow`` is ``False`` and the resolved workflow-file exists
@@ -454,22 +471,30 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
     # Step 15: materialize the four agent prompt files into <AFM_DIR>/prompts/.
     _materialize_prompts(afm_dir, pipeline_doc.header.roles)
 
-    # Step 16: write the afm configuration file with the effective pipeline
-    # agent, the compiled flow document, and the overlay workflow — the whole
-    # file at the fixed in-container home path, before the launch. The two
-    # documents are the very objects the flow-file was serialized from and
-    # compiled from (the merged workflow when a tool contributed, the
-    # skip-merged resolved workflow otherwise, ``None`` when nothing
-    # resolved), so the engine config's collaboration plumbing (the generated
-    # profiles and limits) can never diverge from the compiled flow-file. The
-    # section is guaranteed present (the host structural guard and the
-    # set/force-only amendments materialize it), so no in-container section
-    # guard exists. An ``OSError`` (an unwritable home) and a collaboration
-    # ``ValueError`` (an assistant resolving no agent, an illegal env name, an
-    # unknown flow reference — every variant before any file is written)
-    # propagate — declared error semantics; this precedes the run-creation
-    # facts, so no events have fired.
+    # Step 16: author the afm home — write the afm configuration file with the
+    # effective pipeline agent, the compiled flow document, and the overlay
+    # workflow — the whole file at the fixed in-container home path, before
+    # the launch. The two documents are the very objects the flow-file was
+    # serialized from and compiled from (the merged workflow when a tool
+    # contributed, the skip-merged resolved workflow otherwise, ``None`` when
+    # nothing resolved), so the engine config's collaboration plumbing (the
+    # generated profiles and limits) can never diverge from the compiled
+    # flow-file. The section is guaranteed present (the host structural guard
+    # and the set/force-only amendments materialize it), so no in-container
+    # section guard exists. An ``OSError`` (an unwritable home) and a
+    # collaboration ``ValueError`` (an assistant resolving no agent, an
+    # illegal env name, an unknown flow reference — every variant before any
+    # file is written) propagate — declared error semantics; this precedes the
+    # run-creation facts, so no events have fired.
     write_afm_config(config.pipeline.agent, flow_doc, overlay.workflow)
+
+    # Step 16a: materialize the packaged goga dashboard skin into the skins
+    # directory the just-written ``skin_dir`` field points at — the flat
+    # per-launch copy the engine serves wholesale as the active skin. Same
+    # failure window as the config write: a
+    # missing packaged skin (a ``ValueError``) or an unwritable home (an
+    # ``OSError``) is a clean pre-run error — no events have fired yet.
+    materialize_afm_skin()
 
     # Step 17: the composition — one row per ordered compiled stage, as the card
     # shows them, built from the same compilation the run executes.
@@ -535,8 +560,10 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
 
     # Step 21: launch. The composed layer applies to the afm subprocess only —
     # an empty layer passes as-is (run_flow treats it as pure inheritance).
+    # The CLI fail-fast decision rides the same call as exit_on_fail — False
+    # forwards unchanged and run_flow omits --exit-on-fail.
     # Spawn failures are return codes (126/127), not raises.
-    exit_code = run_flow(flow_path, port, max_parallel=parallel, env=launch_layer)
+    exit_code = run_flow(flow_path, port, max_parallel=parallel, exit_on_fail=fail_on_error, env=launch_layer)
 
     # Steps 22-23: on every return of run_flow — zero, non-zero, and spawn
     # failures alike — recompute the statuses at the completion moment (one

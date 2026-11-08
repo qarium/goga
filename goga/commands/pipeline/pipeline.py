@@ -7,6 +7,7 @@ import yaml
 
 from ...config import load_project_config
 from ...config.hooks import ConfigHooks
+from ...docker import is_in_docker
 from ...pipeline.workflow import load_home_profiles
 from ...topics import ensure_topic
 from .run_pipeline_container import run_pipeline_container
@@ -119,6 +120,20 @@ from .run_pipeline_info_container import run_pipeline_info_container
     default=None,
     help="cap concurrently executing stages (run mode only; threads to afm --max-parallel)",
 )
+@click.option(
+    "--fail-on-error",
+    "fail_on_error",
+    is_flag=True,
+    default=False,
+    help="exit non-zero when a stage fails (run mode only; threads to afm --exit-on-fail)",
+)
+@click.option(
+    "--port",
+    "port",
+    type=click.IntRange(1, 65535),
+    default=None,
+    help="Run the dashboard on this fixed port instead of an allocated free one (run mode only)",
+)
 @click.pass_context
 def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     ctx: click.Context,
@@ -137,6 +152,8 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     profile: str | None,
     skip: tuple[str, ...],
     parallel: int | None,
+    fail_on_error: bool = False,
+    port: int | None = None,
 ) -> None:
     """Run a goga pipeline, or inspect the available ones.
 
@@ -156,7 +173,12 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     requires --topic).
 
     All forms launch the goga Docker container and delegate there — the host
-    never reads pipeline files directly.
+    never reads pipeline files directly. Inside the goga container itself
+    (the GOGA_DOCKER=1 marker) every form instead executes the SAME composed
+    in-container command directly as a child process; the host-only options
+    (-t/--topic, --todo, -u/--update, -e/--env, --add-host, --proxy) are
+    rejected there with an error naming the option before any other work —
+    they configure the docker launch, which does not exist in-container.
     """
     try:
         authored = load_project_config()
@@ -194,6 +216,32 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     # run coordination resolves the agent into the afm configuration file it
     # authors and applies pipeline.env as the afm launch env layer, letting
     # per-stage workflow agents (or afm's own defaults) cover an absent agent.
+
+    # Step 1a — resolve the execution substrate once; on the direct path
+    # (inside the goga image, the GOGA_DOCKER marker) reject every host-only
+    # option BEFORE any other work — no topic procedure, no form validation
+    # side effects, no port allocation, no launch. Each option configures the
+    # docker launch, which does not exist inside the container; nothing is
+    # silently ignored. The host path (marker absent) skips this step
+    # entirely.
+    direct = is_in_docker()
+
+    if direct:
+        host_only = [
+            ("--topic/-t", topic is not None),
+            ("--todo", todo),
+            ("--update/-u", update),
+            ("--env/-e", bool(extra_env)),
+            ("--add-host", bool(add_host)),
+            ("--proxy", proxy is not None),
+        ]
+
+        for flag, passed in host_only:
+            if passed:
+                raise click.ClickException(
+                    f"{flag} is host-only: it configures the docker launch, "
+                    f"which does not exist inside the goga container"
+                )
 
     # Step 2 — form validation, BEFORE any docker activity (no image refresh,
     # no first-run build, no container launch can precede a form error). The
@@ -362,6 +410,12 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         # anything in the info forms (they dispatch above). The profile value
         # and the home bundle join the full argument set — the launcher owns
         # their carriage (the --profile argv token and the env-file lines).
+        # The fail-fast decision joins the run form only — the listing and
+        # card dispatches above accept --fail-on-error without effect. The
+        # pinned port joins the run form the same way: the launcher replaces
+        # its ephemeral allocation with the given value (the listing and card
+        # forms accept --port without effect — no dashboard is launched
+        # there).
         exit_code = run_pipeline_container(
             name=name,
             config=config,
@@ -376,6 +430,8 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             skip=skip,
             parallel=parallel,
             home_profiles=home_bundle,
+            fail_on_error=fail_on_error,
+            port=port,
         )
 
     ctx.exit(exit_code)

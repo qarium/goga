@@ -37,20 +37,23 @@ Imports:
       - encode_extra_env
       - profile_carriage_lines
       - translate_params
+      - is_in_docker
+      - run_direct
     Usages:
       - docker-builder
       - docker-runner
       - docker-image-version
       - extra-env-carriage
       - home-profiles-carriage
+      - direct-runner
     From: goga/docker
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - Working with the codebase
   - Organizing the REPL development cycle
   - Debugging and testing
@@ -153,6 +156,27 @@ Annotations: |
   pipeline-run launcher owns it). The build feedback line prints
   in-container; this launcher prints none.
 
+  Dual execution substrate: inside the goga image (the `is_in_docker`
+  marker True) the command executes the
+  SAME composed in-container command line (python3 -m goga.build PLAN
+  + cli_flags) and env contract directly as a child process of the
+  current environment — through `run_direct` (per the `direct-runner`
+  practice) — instead of through docker run. The
+  composition code the host path uses is the code the direct path
+  reuses; divergence between the two surfaces is a defect. On the
+  direct path the docker-CLI check is not performed and image
+  acquisition never runs; the host-only options (-e/--env, --add-host,
+  --proxy, --update) fail with an explicit error naming the option —
+  nothing is silently ignored. --clean on the direct path wipes the
+  directory ralphex actually uses without the nested bind-mount — the
+  cwd-relative .ralphex of the project — and the no-.ralphex-in-project
+  invariant holds on every exit path; ralphex state does not persist
+  across direct runs (no host runtime mount exists on that path) — an
+  accepted property of the direct surface, documented as such.
+  --dry-run on the direct path prints the direct command shell-quoted
+  and exits 0. The exit semantics of the command stay those of the
+  build itself — this command carries no --fail-on-error flag.
+
 ---
 
 "build(ctx: click.Context, plan: str, dry_run: bool, skip_manifest_check: bool, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, base_ref: str | None, workflow: str | None, profile: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool, skip_review: bool | None)":
@@ -245,7 +269,7 @@ Annotations: |
     - --update / -u (flag) — pull the image before launching the container
 
     Apply the `click` practice for the command surface and option declarations.
-    Apply the `conventions` CLI command docstring rule for the command's --help
+    Apply the `convention` CLI command docstring rule for the command's --help
     text (rendered verbatim by Click; omit Args/Returns/Raises) and intra-package
     imports.
     Apply the `build-usage` practice for the in-container build invocation contract.
@@ -261,7 +285,18 @@ Annotations: |
     is absent (no-op). home.env is the lowest-priority env layer (step 7);
     home.docker.run is appended to every docker run (step 13/17);
     home.docker.build is forwarded to image build (steps 15/16, build branch).
-    1. Verify docker availability; raise ClickException when missing
+    1. Verify docker availability; raise ClickException when missing —
+       HOST PATH ONLY: the direct path of 1a skips it entirely (no
+       docker-CLI check inside the image)
+    1a. Resolve the execution substrate once via `is_in_docker` —
+        BEFORE the docker-CLI check of step 1; on the direct path
+        step 1 is skipped entirely. On the direct path, reject every
+        host-only option BEFORE any other work — each of `extra_env`,
+        `add_host`,
+        `proxy`, `update` that was passed is one clean error naming the
+        option (stderr, exit 1; nothing to stdout; no env assembly, no
+        launch). The host path skips this rejection and runs step 1 as
+        today
     2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`;
        deliver the config amendment checkpoint per the `checkpoints`
        practice right after the authored load via the `ConfigHooks`
@@ -363,6 +398,24 @@ Annotations: |
         same param→flag translation (`translate_params` from Imports) and argv
         order a launch would use, shell-quoted, to stderr — and exit 0 without
         launching
+    14a. Direct path (`is_in_docker` True): skip the env-file write
+        (step 9), the docker-run input assembly (steps 12-13), the
+        docker-CLI check, `docker_build_if_not_exist`, `docker_update`,
+        and `DockerRunner` (the docker steps 15-17); the composed env
+        contract applies to the child process environment directly —
+        no env-file is written, nothing to unlink.
+        Compose the env layers through the SAME composition code that
+        builds the env-file lines (home.env base, git identity, the
+        proxy triple when a proxy resolved from config, GOGA_EXTRA_ENV,
+        GOGA_PROFILE, GOGA_HOME_PROFILES) and apply them as the env
+        layer of `run_direct`; when `clean` is True, wipe
+        <cwd>/.ralphex before the run; spawn the composed argv
+        (python3 -m goga.build <plan> + cli_flags) through `run_direct`
+        — streaming output, SIGTERM/SIGINT forwarded to the child,
+        exit 128 + signum, the child's exit code returned verbatim. On
+        dry_run print the direct command shell-quoted and exit 0. In
+        finally: remove .ralphex/ from the project directory via
+        `_cleanup_ralphex_in_project` as on the host path
     15. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
         and extra_args=home.docker.build — the first-run safety net, runs
         UNCONDITIONALLY at launch entry. No-op when the image already exists or
@@ -462,6 +515,18 @@ Annotations: |
     - The host does NOT resolve --base-ref precedence against config —
       forwarding only; the unset case resolves in-container (CLI >
       build.review.base_ref > omit)
+    - The direct path and the container path compose the argv and env
+      from the same code — the only difference is the execution
+      substrate
+    - On the direct path, every host-only option is a named clean error
+      before any activity; --update never reaches the direct branch
+    - --clean on the direct path wipes <cwd>/.ralphex (the location
+      ralphex uses without the nested bind-mount); the host runtime
+      directory steps are docker-only
+    - The no-.ralphex-in-project invariant holds under every exit path
+      on both substrates
+    - Signals on the direct path terminate the child and exit 128 +
+      signum
 
     Constraints:
     - Do not refresh an EXISTING image by default — refresh only when `update`
@@ -496,6 +561,11 @@ Annotations: |
       know about ~/.goga/runtime/builds/...
     - The in-container `run_build` keeps using cwd-relative .ralphex/; the
       nested mount resolves that into the host runtime directory transparently
+    - Do not perform the docker-CLI check, image acquisition, or
+      DockerRunner launch on the direct path — the branch ends at the
+      child process
+    - Do not add --fail-on-error to this command — build keeps its own
+      exit semantics
 
 "resolve_build_runtime_dir() -> runtime_dir: Path":
   location: build.py
@@ -508,7 +578,7 @@ Annotations: |
     `runtime_dir`: absolute host path under
                    ~/.goga/runtime/builds/<normalized_project>/<branch>/
 
-    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `convention` practice for docstring style and intra-package imports.
 
     Algorithm:
     1. Delegate to `resolve_runtime_dir`("builds") — no suffix
@@ -532,7 +602,7 @@ Annotations: |
 
     `host_dir`: host path computed by `resolve_build_runtime_dir`
 
-    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `convention` practice for docstring style and intra-package imports.
 
     Algorithm:
     1. When the directory exists, remove it recursively
@@ -558,7 +628,7 @@ Annotations: |
 
     `project_dir`: host project directory potentially containing ``.ralphex/``
 
-    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `convention` practice for docstring style and intra-package imports.
 
     Algorithm:
     1. Remove ``project_dir``/.ralphex recursively if it exists; tolerate a

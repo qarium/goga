@@ -1,0 +1,7 @@
+@import url("./goga.css");
+
+:root {
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}

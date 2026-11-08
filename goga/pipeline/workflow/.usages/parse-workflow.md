@@ -90,7 +90,7 @@ every cycle semantic.
 | notes | map[str]str | note buttons — map "note name → prompt text"; compiled into the stage's `buttons` field; stages block only; declarative |
 | reflect | map {file, mode?} | memory-reflection instruction — reflect method only; compiled into the stage's `reflect` field; stages block only; declarative |
 | memory | bool | memory-participation instruction — alignment method only; `true` participates, `false` equals absence; compiled into the stage's `memory_use` field; stages block only; declarative |
-| assistants | map | the stage's assistant attachments keyed by assistant name — a reference (`gate`/`when`) or a full inline declaration; `when` is required on every entry; an empty map equals absence; stages block only; declarative |
+| assistants | map | the stage's assistant attachments keyed by assistant name — a reference (`gate`/`when`) or a full inline declaration; `when` is required on every entry; an empty map equals absence; stages block only; declarative (override-style entries — no prompt/skills — are valid declarations; content resolves at compilation) |
 
 ## The notes field
 

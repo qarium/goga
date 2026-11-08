@@ -7,11 +7,11 @@ Imports:
     From: goga/contract/data
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   tree-sitter-python: .goga/usages/cooks/tree-sitter-python.md
 
 Annotations: |
-  During development and testing, use practice `conventions`.
+  During development and testing, use practice `convention`.
   For parsing Python files, use practice `tree-sitter-python`.
 
 ---

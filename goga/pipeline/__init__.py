@@ -6,6 +6,7 @@ from types import ModuleType
 from typing import Any
 
 from .afm_config import write_afm_config
+from .afm_skin import materialize_afm_skin
 from .apply_skip_stages import apply_skip_stages
 from .cli import pipeline_cli
 from .describe_pipelines import describe_pipelines
@@ -32,6 +33,7 @@ __all__: list[str] = [
     "describe_pipelines",
     "list_pipelines",
     "map_event_action",
+    "materialize_afm_skin",
     "order_stages",
     "pipeline_cli",
     "resolve_workflow",

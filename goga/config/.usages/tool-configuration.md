@@ -31,3 +31,18 @@ when the file is absent. The path standard is fixed on both sides:
 The onboarding engine is the single writer: it buffers verbatim file
 names and writes them under the same path. Reading follows the write
 side exactly — no suffix rules, no fallbacks.
+
+## Environment references (!ENV)
+
+Tool config files resolve `!ENV NAME` scalars the same way the project
+configuration does — at load time, to the variable's string value.
+
+    # .goga/tools/coverage/config.yml
+    fail_under: !ENV COVERAGE_THRESHOLD
+
+- Unset variable → the empty string `""`; the interpreting tool applies
+  its own semantics to it.
+- Resolution is a string, never a number or bool — a tool expecting an
+  int must parse it itself.
+- Malformed use fails the read with the yaml library's own error naming
+  the file position.

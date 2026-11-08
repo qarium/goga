@@ -5,6 +5,7 @@ from pathlib import Path
 
 import goga.config.home as home_mod
 import pytest
+import yaml
 from goga.config.home import (
     DockerArgsConfig,
     HomeConfig,
@@ -153,6 +154,19 @@ class TestLoadHomeConfigLogic:
         # tmp_path has no ~/.goga/config.yml — must not raise, any path form.
         config = load_home_config()
         assert isinstance(config, HomeConfig)
+
+    def test_home_config_env_tag_still_unsupported(self, tmp_path, monkeypatch):
+        """A !ENV tag stays an unknown-tag parse error under the home loader (C3).
+
+        The home configuration is deliberately NOT migrated to the
+        env-aware loader — an accidental migration would make this pass
+        silently.
+        """
+        _write_home_yml(tmp_path, "env: !ENV X\n")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with pytest.raises(yaml.YAMLError):
+            load_home_config()
 
 
 # --- Shell-tokenization of docker.run / docker.build entries ---

@@ -192,3 +192,20 @@ By default, ralphex writes its state (config, prompts, agents, progress files) r
 **Crash safety:** because the runtime state lives under `~/.goga/runtime/`, interrupting a build (Ctrl+C, SIGKILL on docker) leaves no `.ralphex/` behind in the project directory. The host launcher removes any `.ralphex/` that Docker creates in the project directory on every exit path, including crash/SIGKILL. `.ralphex/` is never legitimate user data in the project directory — removal is unconditional when the directory exists.
 
 **Concurrent builds:** two simultaneous `goga build` invocations on the same project + same branch share the same runtime directory and may collide on ralphex progress files. Run on different branches, or use `--clean` in only one of the invocations, to avoid the collision.
+
+## Direct in-container execution (GOGA_DOCKER=1)
+
+Inside the goga image the same command runs without docker: the
+composed in-container argv and env contract execute as a child process.
+
+    # in-container
+    goga build plan.md              # direct build
+    goga build plan.md --clean      # wipes <cwd>/.ralphex first
+    goga build plan.md --dry-run    # prints the direct command, exits 0
+
+- Host-only options are errors on this path: -e/--env, --add-host,
+  --proxy, --update — each fails naming the option.
+- ralphex state does not persist across direct runs (the host runtime
+  bind-mount exists only under docker); the project directory stays
+  clean in every case.
+- On the host (no marker) nothing changes — docker run as always.

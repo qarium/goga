@@ -3,14 +3,16 @@
 Covers the three authoring surfaces of the assistants contract: the TOP-LEVEL
 ``assistants:`` catalog and ``delegation:`` block (steps 6.5/6.6 — the
 name-keyed entry-map grammar, the name grammar/reserved rules, the
-at-least-one-of-prompt-or-skills rule, materialized defaults, the depth/
-max_tasks int checks with the materialized ``max_tasks: 50`` default and the
-authored-zero value), the PER-STAGE attachment map grammar (step 6.7 — the
-map-keyed reference and full inline declaration forms, the required ``when``,
-the seven-key declaration set, the ``gate``/``when`` parameter domains), the
-extend-entry prohibition (step 6.8), and the document-wide duplicate-name
-pass. Both surfaces are name-keyed maps — the retired list-of-mappings forms
-are hard-rejected with rename errors naming the map form.
+override-style entries that carry none of the five declaration fields, the
+presence-preserving field discipline, the depth/max_tasks int checks with the
+materialized ``max_tasks: 50`` default and the authored-zero value), the
+PER-STAGE attachment map grammar (step 6.7 — the map-keyed reference and full
+inline declaration forms, the required ``when``, the seven-key declaration
+set, the ``gate``/``when`` parameter domains), the extend-entry prohibition
+(step 6.8), and the document-wide duplicate-name pass under the five-field
+declaration discriminator. Both surfaces are name-keyed maps — the retired
+list-of-mappings forms are hard-rejected with rename errors naming the map
+form.
 """
 
 from __future__ import annotations
@@ -125,19 +127,19 @@ class TestAssistantCatalog:
 
         assert list(document.assistants.keys()) == ["zed", "alpha"]
 
-    def test_parse_assistants_catalog_empty_skills_satisfies_at_least_one(self) -> None:
-        """An authored ``skills: []`` satisfies the at-least-one rule (presence, not truthiness)."""
+    def test_parse_assistants_catalog_empty_skills_is_explicit_override(self) -> None:
+        """An authored ``skills: []`` parses as a declaration carrying the explicit empty list."""
         document = parse_workflow("assistants:\n  r:\n    skills: []\n")
 
         reviewer = document.assistants["r"]
         assert reviewer.skills == []
         assert reviewer.prompt is None
 
-    def test_parse_assistants_catalog_empty_env_map_equals_absence(self) -> None:
-        """An authored ``env: {}`` builds the entry with env=None."""
+    def test_parse_assistants_catalog_empty_env_map_is_explicit_override(self) -> None:
+        """An authored ``env: {}`` builds the entry with env={} (an override that clears)."""
         document = parse_workflow("assistants:\n  r:\n    prompt: p\n    env: {}\n")
 
-        assert document.assistants["r"].env is None
+        assert document.assistants["r"].env == {}
 
     def test_parse_empty_assistants_catalog_equals_absence(self) -> None:
         """``assistants: {}`` parses to an empty dict and does not rescue an empty workflow."""
@@ -154,6 +156,104 @@ class TestAssistantCatalog:
 
         assert list(document.assistants.keys()) == ["r"]
         assert document.stages == {}
+
+    def test_parse_workflow_preserves_explicit_empty_env_and_skills(self) -> None:
+        """An assistant's authored ``skills: []``/``env: {}`` stay explicit; the stage env rule is untouched.
+
+        The catalog entry carries ``prompt: p, skills: [], env: {}`` and a
+        stage carries ``env: {}`` — the assistant fields parse as the
+        explicit empty overrides the overlay merge keys on, while the
+        per-STAGE env keeps its empty-equals-absence rule (the presence
+        discipline applies to the assistant fields only).
+        """
+        document = parse_workflow(
+            "assistants:\n"
+            "  X:\n"
+            "    prompt: p\n"
+            "    skills: []\n"
+            "    env: {}\n"
+            "stages:\n"
+            "  s1:\n"
+            "    prompt: go\n"
+            "    env: {}\n",
+        )
+
+        assert document.assistants["X"].skills == []
+        assert document.assistants["X"].env == {}
+        assert document.stages["s1"].env is None
+
+    def test_parse_workflow_delegate_default_is_none(self) -> None:
+        """A catalog entry without ``delegate`` parses with delegate None (was False before).
+
+        Absent and explicit-``false`` must stay distinguishable to the
+        overlay merge — None is the inheritable not-authored value.
+        """
+        document = parse_workflow("assistants:\n  X:\n    prompt: p\n")
+
+        assert document.assistants["X"].delegate is None
+
+        authored = parse_workflow("assistants:\n  X:\n    prompt: p\n    delegate: false\n")
+
+        assert authored.assistants["X"].delegate is False
+
+    def test_parse_workflow_empty_catalog_entry_parses_as_override_style(self) -> None:
+        """A catalog ``X: {}`` parses with every field None and joins the namespace.
+
+        The degenerate override — legal parse (the compile content check
+        owns the failure); the entry counts for the duplicate-name rule via
+        the five-field discriminator, while a pure reference still repeats
+        freely.
+        """
+        document = parse_workflow("assistants:\n  X: {}\nstages:\n  s1:\n    prompt: p\n")
+
+        entry = document.assistants["X"]
+        assert entry.prompt is None
+        assert entry.skills is None
+        assert entry.agent is None
+        assert entry.delegate is None
+        assert entry.env is None
+
+        with pytest.raises(WorkflowSyntaxError, match="duplicate assistant name: X"):
+            parse_workflow(
+                "assistants:\n"
+                "  X: {}\n"
+                "stages:\n"
+                "  s1:\n"
+                "    prompt: p\n"
+                "    assistants:\n"
+                "      X:\n"
+                "        prompt: q\n"
+                "        when: start\n",
+            )
+
+        reference_repeat = parse_workflow(
+            "assistants:\n  X: {}\nstages:\n  s1:\n    prompt: p\n    assistants:\n      X:\n        when: start\n",
+        )
+
+        assert list(reference_repeat.stages["s1"].assistants) == ["X"]
+
+    def test_parse_workflow_agent_only_entry_parses_as_override_style(self) -> None:
+        """An ``agent``-only catalog entry parses — the at-least-one raise is gone for it.
+
+        The entry configures delivery fields and inherits its content from
+        a tool-delivered entry of the same name at the overlay merge; the
+        effective-content requirement is enforced at compilation.
+        """
+        document = parse_workflow("assistants:\n  r:\n    agent: c\n")
+
+        reviewer = document.assistants["r"]
+        assert reviewer.agent == "c"
+        assert reviewer.prompt is None
+        assert reviewer.skills is None
+        assert reviewer.delegate is None
+        assert reviewer.env is None
+
+    def test_parse_workflow_rejects_non_bool_delegate(self) -> None:
+        """A non-bool ``delegate`` value still raises the pinned type error after the relaxation."""
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow("assistants:\n  X:\n    delegate: yes-please\n    prompt: p\n")
+
+        assert str(exc_info.value) == "non-bool value in workflow.assistants.X.delegate"
 
     def test_parse_list_form_catalog_rejected_naming_map_form(self) -> None:
         """The retired list-of-mappings catalog is hard-rejected with the rename error."""
@@ -203,7 +303,6 @@ class TestAssistantCatalog:
                 r"unknown key in workflow\.assistants\.r: when; "
                 r"valid keys: prompt, skills, agent, delegate, env",
             ),
-            ("assistants:\n  r:\n    agent: c\n", "assistant r requires at least one of prompt or skills"),
             ('assistants:\n  "bad name!":\n    prompt: p\n', "invalid assistant name: bad name!"),
             ("assistants:\n  assistant:\n    prompt: p\n", "assistant name is reserved"),
             ("assistants:\n  123:\n    prompt: p\n", "invalid assistant name: 123"),
@@ -258,6 +357,30 @@ class TestAssistantCatalog:
                 "        prompt: q\n"
                 "        when: start\n",
             )
+
+    def test_parse_workflow_override_style_inline_counts_for_duplicate_name(self) -> None:
+        """An override-style inline declaration counts for the duplicate rule via its ``agent``.
+
+        The five-field discriminator: the inline entry ``{when: start,
+        agent: y}`` is a DECLARATION (``agent is not None``), so repeating
+        the catalog name raises — under the OLD prompt/skills-only rule it
+        parsed as a reference and its ``agent`` was silently dropped.
+        """
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(
+                "assistants:\n"
+                "  X:\n"
+                "    prompt: p\n"
+                "stages:\n"
+                "  s1:\n"
+                "    prompt: go\n"
+                "    assistants:\n"
+                "      X:\n"
+                "        when: start\n"
+                "        agent: y\n",
+            )
+
+        assert str(exc_info.value) == "duplicate assistant name: X"
 
 
 class TestDelegationBlock:
@@ -371,7 +494,7 @@ class TestStageAttachments:
         assert entry.gate is True
         assert entry.when == "checkpoints"
         assert entry.skills is None
-        assert entry.delegate is False
+        assert entry.delegate is None
         assert entry.env is None
 
     def test_parse_attachment_reference_with_when_only(self) -> None:
@@ -392,6 +515,24 @@ class TestStageAttachments:
         assert entry.skills is None
         assert entry.gate is False
         assert entry.when == "start"
+
+    def test_parse_attachment_when_message_is_accepted(self) -> None:
+        """``when: message`` — the resting engagement — parses and is carried verbatim."""
+        document = parse_workflow(
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        gate: true\n"
+            "        when: message\n",
+        )
+
+        entry = document.stages["build"].assistants["reviewer"]
+        assert entry.when == "message"
+        assert entry.gate is True
 
     def test_parse_attachment_list_and_string_forms_rejected(self) -> None:
         """The retired list and scalar attachment forms are hard-rejected naming the map form."""
@@ -424,14 +565,14 @@ class TestStageAttachments:
 
         assert document.stages["b"].assistants is None
 
-    def test_parse_empty_env_and_empty_skills_forms(self) -> None:
-        """An inline declaration's empty env map equals absence; an authored empty skills list is a declaration."""
+    def test_parse_inline_empty_env_and_empty_skills_forms(self) -> None:
+        """An inline declaration preserves authored ``env: {}`` and ``skills: []`` as explicit overrides."""
         document = parse_workflow(
             "stages:\n  b:\n    assistants:\n      r:\n        env: {}\n        skills: []\n        when: start\n",
         )
 
         entry = document.stages["b"].assistants["r"]
-        assert entry.env is None
+        assert entry.env == {}
         assert entry.skills == []
         assert entry.prompt is None
 
@@ -483,15 +624,11 @@ class TestStageAttachments:
             ),
             (
                 "stages:\n  b:\n    assistants:\n      r:\n        when: later\n",
-                r"when must be one of: start, checkpoints, finish in workflow\.stages\.b\.assistants\.r",
+                r"when must be one of: start, checkpoints, finish, message in workflow\.stages\.b\.assistants\.r",
             ),
             (
                 "stages:\n  b:\n    assistants:\n      r:\n        when: start\n        gate: x\n",
                 r"non-bool value in workflow\.stages\.b\.assistants\.r\.gate",
-            ),
-            (
-                "stages:\n  b:\n    assistants:\n      r:\n        when: start\n        agent: codex\n",
-                r"assistant r requires at least one of prompt or skills",
             ),
             (
                 "stages:\n  b:\n    agent: codex\nextend:\n  n:\n    assistants: {}\n    before: [b]\n",

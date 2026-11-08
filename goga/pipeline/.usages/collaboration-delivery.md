@@ -14,14 +14,33 @@ produces:
 - the **compiled flow-file** — `collaboration: {mode: assistants}`,
   `max_depth` when a depth is authored, the `team` list, and the stage
   `assistants` entries;
-- the **engine configuration** written before every launch — the generated
-  `collaboration.profiles` and `collaboration.limits.max_tasks`.
+- the **engine configuration** written before every launch — the static
+  section head (`collaboration.runtime_context: wrapper` and
+  `collaboration.hide_attach_helpers: true`), the generated
+  `collaboration.profiles` and `collaboration.limits.max_tasks`, plus the
+  top-level `command_names` labels of the generated commands.
 
 The compiled flow is the single source of truth: a profile is
 materialized exactly for the ids the flow references (`goga-<name>` of
 every team member and every stage attachment). The two artifacts cannot
 diverge, and no dead profile remains for an attachment removed by a stage
 skip.
+
+## The static head and the command labels
+
+The `collaboration` section always writes, even without collaboration
+authoring: `runtime_context: wrapper` (every command goga hands the
+engine is an as-claude wrapper or a closure over one) and
+`hide_attach_helpers: true` — the run's dynamic attach-helpers dashboard
+entry point stays hidden, so helpers join a goga-managed run only through
+the authored workflow plumbing.
+
+Every command the write produces — the resolved client wrapper and each
+profile command, wrapper or closure alike — is labeled in the top-level
+`command_names` map with the bare agent id of its underlying
+`<agent>-as-claude.sh` wrapper (`/home/goga/bin/claude-as-claude.sh` →
+`claude`), so the dashboard never falls back to the file base name. The
+map writes only when at least one labeled command exists.
 
 ## Generated profiles
 

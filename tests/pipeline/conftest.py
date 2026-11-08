@@ -37,6 +37,10 @@ _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 # write_afm_config) — resolve the real module for direct attribute patching.
 _afm_config_module = sys.modules["goga.pipeline.afm_config"]
 
+# goga.pipeline.afm_skin carries no facade shadowing, but its module constant
+# is patched the same direct way for symmetry with the two above.
+_afm_skin_module = sys.modules["goga.pipeline.afm_skin"]
+
 # The four materialized afm prompt-file stems. The first three resolve from the
 # overridable roles (planner/executor/reviewer) via translate_role; summary is a
 # separate, always-default channel. These are output-side afm names, not role
@@ -69,7 +73,10 @@ def _in_container_run_context(
       redirects into the tmp tree, so no test writes the real home;
     - the fixed closure-base constant of the collaboration profiles
       redirects into the tmp tree the same way, so no test creates or
-      chmods ``/tmp/goga-assistant-env`` on the host.
+      chmods ``/tmp/goga-assistant-env`` on the host;
+    - the fixed skins-base constant of the afm skin materialization
+      redirects into the tmp tree too, so no test writes the real
+      ``~/.afm/skins``.
 
     A test's own patching always wins: its ``monkeypatch``/``pin`` calls run
     after this autouse fixture.
@@ -80,6 +87,7 @@ def _in_container_run_context(
     pin_package_environment({})
     monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
     monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", tmp_path / "goga-assistant-env")
+    monkeypatch.setattr(_afm_skin_module, "_SKINS_TARGET_BASE", tmp_path / ".afm-home" / "skins")
 
 
 @pytest.fixture
@@ -168,3 +176,15 @@ def write_defaults(defaults_dir: Path, stems: tuple[str, ...] = PROMPT_STEMS) ->
 def patch_defaults(monkeypatch: pytest.MonkeyPatch, defaults_dir: Path) -> None:
     """Redirect run_pipeline's default-prompt resolver at a tmp defaults dir."""
     monkeypatch.setattr(_run_pipeline_module, "_resolve_defaults_dir", lambda: defaults_dir)
+
+
+def write_skin(source_dir: Path, names: tuple[str, ...] = ("index.css", "title.txt")) -> None:
+    """Write placeholder skin files for the given names into source_dir."""
+    source_dir.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (source_dir / name).write_text(f"skin {name}\n")
+
+
+def patch_skin_source(monkeypatch: pytest.MonkeyPatch, source_dir: Path) -> None:
+    """Redirect the afm skin materializer's packaged-dir resolver at a tmp dir."""
+    monkeypatch.setattr(_afm_skin_module, "_resolve_packaged_skin_dir", lambda: source_dir)

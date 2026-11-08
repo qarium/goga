@@ -50,13 +50,17 @@ Annotations: |
   The overlay merge preserves the collaboration instructions of the
   workflow model. The merge maintains the assistant-namespace invariant
   end to end: each name appears at most once across the merged catalog
-  and every inline declaration. The assistant catalog merges by name: an
-  authored entry wins under its name; a contributing entry adds a fresh
-  name; among contributing tools the later entry wins per name; a
-  contribution entry whose name appears anywhere in the evolving merged
-  assistant namespace — the authored catalog, an inline declaration of
-  an authored stage entry, or an entry of an earlier-accepted
-  contribution (catalog or inline declaration) — is dropped silently, so
+  and every inline declaration. The assistant catalog merges by name
+  with field-level overrides: among
+  contributing tools the later entry wins per name, and that winning
+  delivered entry is the BASE; an authored entry under the same
+  name overrides field by field — every field the authored entry
+  specifies (agent, env, delegate, prompt, skills — presence decides,
+  an explicit empty skills/env is an override) replaces the base value
+  while omitted fields keep flowing from the base. A delivered name with
+  no authored entry adds as a fresh name verbatim. Tool INLINE
+  declarations under an authored name stay silently dropped; every other
+  duplicate-suppression rule of the evolving merged namespace holds —
   the merged document never carries a duplicate assistant name. The
   delegation block is whole: the authored block is unbeatable, and
   with no authored block the later contributing block wins — no
@@ -322,14 +326,21 @@ Annotations: |
        field — it follows 5a instead of the authored-value-wins rule;
        every other stage field follows the field-set-complete merge
        unchanged
-    4a. assistants (catalog): keep the authored entries — a contribution
-        entry under an authored name is not applied; among contributing
-        tools the later entry wins per name; a contribution entry whose
-        name appears anywhere in the evolving merged assistant namespace
-        (the authored catalog, an inline declaration of an authored stage
-        entry, or an entry of an earlier-accepted contribution — catalog
-        or inline declaration) is dropped silently — the merged namespace
-        carries each name exactly once
+    4a. assistants (catalog): resolve the winning delivered entry per
+        name among the contributions in enumeration order (the
+        later-tool-wins rule among contributions). For a name carrying an authored entry
+        (the authored catalog or an authored inline declaration — one
+        authoring surface owns the name): the winning delivered entry of
+        that name is the BASE, and the authored entry overrides field by
+        field — every field it specifies (agent, env, delegate, prompt,
+        skills; presence decides — None is not authored, an explicit
+        empty skills list or env map IS) replaces the base value, every
+        omitted field flows from the base; no delivered entry under the
+        name leaves the authored entry standing alone. A delivered name
+        with no authored entry adds as a fresh name with the winning
+        entry verbatim. Tool inline declarations under an authored name
+        are dropped silently; the namespace carries each
+        name exactly once
     4b. delegation: keep the authored block when present — it is
         unbeatable; otherwise the block of the later contributing tool
         wins; no field-level merging
@@ -384,6 +395,16 @@ Annotations: |
       effective repeat block rides the rebuild verbatim — a rebuild that
       drops it would silently recompile an authored cycle bound as the
       scalar default on tool-amended runs
+    - The override is field-presence based: an authored None means
+      "not authored" (the base value flows), an authored empty
+      skills/env means "clear" (the base value is replaced with the
+      empty value), an authored delegate False is an opt-out while an
+      absent delegate inherits the base value
+    - A name authored inline and delivered in a tool CATALOG follows the
+      same rule — the authored inline declaration overrides the
+      delivered catalog entry field by field
+    - Workflows whose assistant names collide with no tool delivery
+      merge to their authored workflow verbatim
 
     Constraints:
     - Do not read or write the filesystem
@@ -391,6 +412,9 @@ Annotations: |
     - Do not mutate `base`, the contributions, or their maps
     - Do not interpret the repeat block — cycle semantics belong to the
       consumer and the engine; the merge carries the value whole
+    - Do not merge content fields partially — prompt
+      and skills replace whole (no text concatenation, no list union); the
+      field unit is the merge unit
 
 "RunCreated(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, composition: list[CompositionStage], provenance: list[str], work: WorkIdentity, statuses: list[str], runtime_dir: str)":
   location: contexts.py

@@ -509,11 +509,22 @@ inline declaration. Each entry value accepts these keys:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `prompt` | string | — | The assistant's instruction. At least one of `prompt` or `skills` is required. |
-| `skills` | list of strings | — | The assistant's own skills. At least one of `prompt` or `skills` is required. |
+| `prompt` | string | — | The assistant's instruction. Not required at parse time — see the effective-content rule below. |
+| `skills` | list of strings | — | The assistant's own skills. Not required at parse time — see the effective-content rule below. |
 | `agent` | string | global agent | A CLI agent name, resolved implicitly at delivery — no wrapper path is authored. |
-| `delegate` | bool | `false` | Whether the assistant may create child tasks. |
-| `env` | map of str→str | — | The assistant's environment variables, delivered through a generated closure that wraps the assistant's launch command (the same mechanism as per-stage `env`). An empty map equals absence. |
+| `delegate` | bool | not authored | Whether the assistant may create child tasks. Tri-state at parse time: unset inherits from a tool-delivered base in the [override merge](#assistant-overrides) and materializes `false` at delivery; an explicit `false` opts out. |
+| `env` | map of str→str | — | The assistant's environment variables, delivered through a generated closure that wraps the assistant's launch command (the same mechanism as per-stage `env`). An authored empty map (`env: {}`) is an explicit override that clears the field — not an absence. |
+
+An entry may carry **none** of the five content fields — an override-style
+entry whose effective content resolves through the [assistant
+overrides](#assistant-overrides) at compilation. The requirement is on the
+**effective** entry: after the tool contributions merge, every assistant in
+the namespace must resolve a `prompt` or a `skills` list, or compilation
+stops with `assistant <name> at <site> resolves neither prompt nor skills`
+naming the authoring site (`workflow.assistants.<name>` or
+`workflow.stages.<stage>.assistants.<name>`). The check covers the whole
+namespace — an entry no stage references, or one declared on a `skip: true`
+stage, is still authored content and still checked.
 
 `name`, `gate`, and `when` never appear in a catalog entry value — the map
 key is the name itself, and `gate`/`when` are attachment parameters
@@ -540,8 +551,9 @@ attachment parameters. Two entry forms:
    entry; only `gate` and `when` are the attachment's own.
 2. **A full inline declaration** — a value carrying any further key
    (`prompt`, `skills`, `agent`, `delegate`, `env`, plus `gate`/`when`).
-   Independent of the catalog; at least one of `prompt` or `skills` must
-   be present. Note: `skills` authored here has no effect — the engine
+   Independent of the catalog; no content field is required at parse time
+   (the effective-content rule above applies after the merge). Note:
+   `skills` authored here has no effect — the engine
    accepts skills only on run-level team entries, and only catalog
    entries become team members (see the behavior rules below).
 
@@ -574,12 +586,15 @@ Behavior rules:
   inside an `extend`-entry is a structural error — the attachments of a
   new stage are authored in the `stages` block under its name. Authoring
   an `assistants` key in a stage *body* is likewise a structural error.
-- **Defaults are materialized, never inherited.** `gate`,
-  `delegate`, and `max_tasks` always carry their materialized values into
-  the compiled output; `when` has no default — it is authored on every
-  attachment, and the compiled engagement value is always written
-  explicitly. The engine's own defaults (a `one_shot` trigger, a
-  20-task budget) are never relied upon.
+- **Defaults are materialized, never invented.** `gate` and `max_tasks`
+  always carry their materialized values into the compiled output; `when`
+  has no default — it is authored on every attachment, and the compiled
+  engagement value is always written explicitly. `delegate` materializes
+  `false` only at delivery: while authoring it stays tri-state, so an
+  unset value can inherit from a tool-delivered base in the
+  [assistant overrides](#assistant-overrides) — an authored `false` opts
+  out and never inherits. The engine's own defaults (a `one_shot` trigger,
+  a 20-task budget) are never relied upon.
 - **Skills deliver through the catalog.** The engine accepts `skills` only
   on run-level team entries, and the team is built from the `assistants:`
   catalog alone — so `skills` authored on a catalog entry reaches the
@@ -601,6 +616,38 @@ Behavior rules:
   source, so the same authoring takes effect on consecutive runs.
 - If the environment disables collaboration, declared helpers are skipped
   with engine warnings and the run proceeds.
+
+### Assistant overrides
+
+An authored entry — catalog or inline — whose name matches an assistant a
+tool delivered **overrides it field by field**: every field the author set
+wins whole (`prompt`, `skills`, `agent`, `delegate`, `env`; presence
+decides, never truthiness — `skills: []` and `env: {}` are authored values
+that clear the field), and every field the author left unset flows from the
+tool's delivery. `gate`/`when` are always the authored ones. The authored
+entry keeps its position — a catalog entry stays a catalog entry (and a
+team member), an inline declaration stays on its stage.
+
+This is the authoring surface over the tool contributions: a tool that
+delivers an assistant through its `pipeline.amend_workflow` contribution
+(see [Hooks](hooks.md)) can be retuned per project without forgoing the
+delivery — author a same-named entry and set only the fields you want to
+change.
+
+```yaml
+# the tool delivers "reviewer" with its own prompt, skills, and env;
+# the workflow-file overrides the agent and clears the env, the rest flows
+assistants:
+  reviewer:
+    agent: codex
+    env: {}
+```
+
+An override naming an assistant **no tool delivered** carries no base to
+flow from — its unset fields stay unset, and the effective-content rule
+above stops compilation (`assistant <name> at <site> resolves neither
+prompt nor skills`) naming the authoring site. Give the entry a `prompt`
+or a `skills` list, or drop the entry.
 
 ## Run cycles (`repeat`)
 

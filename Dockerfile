@@ -1,4 +1,4 @@
-ARG AFM_VERSION=2.0.9
+ARG AFM_VERSION=2.2.6
 ARG RALPHEX_VERSION=1.6
 ARG PYTHON_VERSION=3.12
 ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
@@ -58,7 +58,9 @@ ENV AFM_IN_DOCKER=1
 
 USER goga
 
-RUN curl https://cursor.com/install -fsS | bash
+RUN curl -fsSL https://cursor.com/install -o /tmp/cursor-install.sh && \
+    bash /tmp/cursor-install.sh && \
+    rm -f /tmp/cursor-install.sh
 RUN command -v cursor-agent
 
 WORKDIR /workspace

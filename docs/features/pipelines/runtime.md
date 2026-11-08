@@ -12,6 +12,46 @@ container's exit code. Everything that interprets pipelines, drives
 agents, and executes plans ships inside the image — the host needs only
 Docker and the goga package itself.
 
+## Direct in-container execution
+
+The docker launches above are the **host substrate**. Inside the goga image
+itself — where the image's build-time `ENV GOGA_DOCKER=1` marker is set —
+every form of `goga pipeline` and `goga build` takes the **direct substrate**
+instead: the same composed in-container command line and the same env
+contract execute directly as a child process, with no `docker run` at all.
+The marker is exact (`GOGA_DOCKER=1`); any other value or an unset variable
+means the host substrate.
+
+The composition is shared between the substrates — the same argv the docker
+substrate hands to the image entrypoint, prefixed with the `python3` program
+token, and the same env-file lines parsed into the child's env layer instead
+of written to a file. Divergence between the two surfaces is a defect.
+
+What the direct substrate skips (there is no docker launch to perform):
+the Docker-CLI check, the [pre-launch version check](#pre-launch-version-check),
+the `image` guard and image acquisition/refresh, and the env-file write. The
+run form still allocates the port (it is part of the composed contract).
+
+Host-only options — the ones that exist solely to configure the `docker run`
+invocation — are rejected with a clean error naming the option, before any
+other work; nothing is silently ignored:
+
+| Command | Rejected in-container |
+|---|---|
+| `goga pipeline` | `-t/--topic`, `--todo`, `-u/--update`, `-e/--env`, `--add-host`, `--proxy` |
+| `goga build` | `-e/--env`, `--add-host`, `--proxy`, `-u/--update` |
+
+On the direct substrate `--clean` wipes the state directory the in-container
+process actually uses — `/home/goga/pipeline` for `goga pipeline` (the
+in-container `AFM_DIR`), `<cwd>/.ralphex` for `goga build` — before the run,
+never after. Build's ralphex state does not persist across direct runs (no
+host runtime mount exists on this path). `--dry-run` prints the direct
+command line, never a `docker run` line.
+
+The child's stdio is inherited (the same streamed output), SIGTERM/SIGINT are
+forwarded to the child and the launcher exits with `128 + signum`, and the
+child's exit code returns verbatim.
+
 ## The image
 
 The top-level `image` field in `.goga/config.yml` selects the image both

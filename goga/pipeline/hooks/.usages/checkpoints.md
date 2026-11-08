@@ -48,10 +48,14 @@ compile_flow(overlay.workflow, ...)
 - A tool contributes one declarative `WorkflowDocument`; authored intent
   wins per slot — the prompt appends, the memory block is whole, the repeat
   block is whole, stage fields fill only what the author left unset, extend
-  entries add; the assistant catalog adds fresh names (authored names win, a
-  tool name colliding with any name already in the merged assistant
-  namespace is dropped), the delegation block is whole, and stage assistant
-  maps append with name deduplication.
+  entries add; the assistant catalog merges with field-level overrides —
+  the winning tool-delivered entry of a name is the base and the authored
+  entry replaces exactly the fields it specifies (agent, env, delegate,
+  prompt, skills; an explicit empty skills/env clears), omitted fields
+  flow from the tool, a delivered name with no authored entry adds fresh
+  (tool inline declarations under an authored name stay dropped); the
+  delegation block is whole, and stage assistant maps append with name
+  deduplication.
 - The amendment action is hard: the first failing tool stops the command
   with a clean error naming the tool and the action; the tool's whole
   contribution is discarded.

@@ -358,7 +358,8 @@ Annotations: |
 
   Every emitted entry materializes its defaults: mode from gate (true →
   required, false → advisory), trigger from when (start → one_shot,
-  checkpoints → checkpoints, finish → on_completion — always written
+  checkpoints → checkpoints, finish → on_completion, message → on_message —
+  always written
   explicitly, the engine's one_shot default is never relied upon), title
   from the authored name, instruction from the
   authored prompt (the empty string when none). A reference takes its
@@ -968,7 +969,9 @@ Annotations: |
             true, "advisory" otherwise
     `trigger`: the engagement mapping — "one_shot" from start,
                "checkpoints" from checkpoints, "on_completion" from
-               finish
+               finish, "on_message" from message (the resting engagement —
+               no initial request; each message is one turn and the helper
+               stays attached)
 
     The entry carries NO skills field: the engine strict-parses
     stages[].assistants entries and rejects any key outside the five
@@ -1003,7 +1006,7 @@ Annotations: |
     "mode -> str": |
       required when the effective gate is true, advisory otherwise.
     "trigger -> str": |
-      one_shot, checkpoints, or on_completion — mapped from when.
+      one_shot, checkpoints, on_completion, or on_message — mapped from when.
 
 "FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, repeat: FlowRepeat | None = None, memory: FlowMemory | None = None, collaboration: FlowCollaboration | None = None, team: list[FlowTeamMember] | None = None, stages: list[FlowStage])":
   location: flow_document.py
@@ -1658,7 +1661,21 @@ Annotations: |
            skip removal and loop expansion): build the assistant namespace
            = the `WorkflowAssistant` catalog of the workflow document ∪
            the full inline declarations found in the stages-block
-           attachment maps. For each stage of the working body carrying
+           attachment maps.
+           - the content check: EVERY declaration of the effective
+             assistant namespace (the catalog plus every full inline
+             declaration, override-style entries included) must resolve
+             content — its effective prompt is not None OR its effective
+             skills is not None; a declaration resolving neither (an
+             override-style entry no tool delivery supplied content for)
+             raises a structural error naming the assistant and its
+             authoring site (the catalog
+             workflow.assistants.<name> or the stage
+             workflow.stages.<stage>.assistants.<name> whose entry
+             declares it). The check addresses declarations only — a
+             reference (gate/when only) carries no content of its own
+             and resolves against a declaration
+           For each stage of the working body carrying
            a non-empty effective attachment list:
            - an entry naming no namespace member raises a structural
              error "unknown assistant reference in workflow.stages.NAME:
@@ -2091,6 +2108,15 @@ Annotations: |
       exactly ["planning"] are structural errors naming the stage and the
       assistant; the checks run over the working body after skip removal
       and loop expansion — the attachments of a removed stage never count
+    - Every assistant declaration of the effective document resolves
+      prompt or skills — the content requirement moved here from the
+      parser; override-style entries are legal authoring that must be
+      covered by a delivered base
+    - A workflow without same-name assistant collisions compiles exactly
+      as the same workflow carrying no override entries — the content
+      check is the only additional compilation rule
+    - The content-check error names the assistant AND its authoring
+      site through the existing structural-error channel
     - Every emitted collaboration entry materializes its defaults: mode
       from gate, trigger from when (always written explicitly — when is
       authored on every attachment; the engine's one_shot default is never
@@ -2250,6 +2276,8 @@ Annotations: |
     - Do not let collaboration reach `PipelineDocument` — the
       collaboration block, the team list, and the stage attachments are
       output-side only
+    - Do not enforce content presence at parse time or on references —
+      the check runs here, over declarations of the effective document
     - Do not materialize repeat defaults — the engine owns the cycle
       defaults; this cell emits authored values only, plus the scalar form
       when nothing is authored

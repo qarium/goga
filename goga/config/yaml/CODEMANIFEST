@@ -1,0 +1,71 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  yaml_env: .goga/usages/cooks/yaml_env_constructor.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and
+    testing in the project
+
+  This cell owns the environment-aware YAML loading of the configuration
+  family: the !ENV NAME scalar tag resolved at load time through the
+  yaml library's standard constructor mechanism. Use `yaml_env` for the
+  constructor contract — the loader subclass scoping, the string-only
+  resolution, and the library-native error channel. The home
+  configuration loader is explicitly NOT a consumer of this cell: it
+  stays on plain yaml.safe_load by product decision.
+
+---
+
+"parse_env_yaml(text: str) -> data: object":
+  location: loader.py
+  annotations: |
+    Parse a configuration YAML text with environment references
+    resolved: every !ENV NAME scalar resolves from the process
+    environment at load time into a plain string.
+
+    `text`: the raw YAML text of a configuration file
+    `data`: the parsed value as-is — a mapping, a scalar, a list,
+            whatever the YAML parses to; no content models, no validation
+
+    Apply `yaml_env` for the constructor mechanism — the loader
+    subclass, the constructor contract, and the error channel.
+
+    Algorithm:
+    1. Parse `text` through the env-aware loader subclass of the yaml
+       safe loader with the !ENV scalar constructor registered on the
+       subclass only (per `yaml_env`)
+    2. Each tagged scalar resolves to a plain string — the referenced
+       variable's value, "" when unset; no type coercion
+    3. Return the parsed value unchanged
+
+    Requirements:
+    - The resolved value of a tagged scalar is always a string — no
+      coercion; each field's own validation applies downstream
+    - An unset variable resolves to ""
+    - Malformed use (an empty argument, a non-scalar node) raises the
+      yaml library's constructor error carrying the node position —
+      no custom exception type
+    - Registration happens on the loader subclass only — other
+      yaml.safe_load call sites of the process stay unaffected
+
+    Constraints:
+    - Do not register the tag on the global yaml.SafeLoader or
+      yaml.Loader classes
+    - Do not validate, interpret, or normalize the parsed content —
+      interpretation belongs to the consuming configuration loader
+    - Do not log resolved values — they may carry secrets
+
+---
+
+Author: Goga
+CreatedAt: 02/11/26
+Description: |
+  Owner of the environment-aware (!ENV) YAML loading for the goga
+  configuration family — the project and tool configuration loaders
+  parse through this cell; the home configuration stays on plain
+  yaml.safe_load by product decision.

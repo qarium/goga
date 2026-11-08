@@ -6,6 +6,10 @@ optional — when it is absent (the normal state), an empty home config is used
 and nothing changes. A malformed file surfaces as a clean error and exits
 non-zero; a missing file is never an error.
 
+The home file is plain YAML — the [`!ENV` environment-reference
+tag](project.md#environment-references-env) of the project and tool
+configurations does not apply here (the home values are read verbatim).
+
 ```yaml
 # ~/.goga/config.yml — optional, machine-wide
 env:

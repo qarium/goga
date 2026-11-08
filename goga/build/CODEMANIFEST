@@ -58,12 +58,12 @@ Imports:
     From: goga/history
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   ralphex: .goga/usages/cooks/ralphex.md
   agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - Working with the codebase
   - Organizing the REPL development cycle
   - Debugging and testing
@@ -102,7 +102,7 @@ Annotations: |
   through the generated per-role closure wrappers only; the ralphex launch
   carries no env layer and its subprocess inherits the container environment.
 
-  Use the `conventions` practice for development and testing.
+  Use the `convention` practice for development and testing.
   Use the `ralphex` practice for the ralphex config-generation contract (the
   .ralphex/config key layout, the external-review surface, the finalize step
   files) written before launch.
@@ -247,7 +247,7 @@ Annotations: |
         sequence, the relocation outcome, and the recomputed statuses
     17. Return the exit code of the last executed pass
 
-    Apply `conventions` for docstring style and intra-package imports.
+    Apply `convention` for docstring style and intra-package imports.
     Apply `ralphex` for the config-generation contract.
     Apply `agent-wrappers` for the wrapper path semantics.
     Apply `resolve-wrapper-path` when calling `resolve_wrapper_path`.
@@ -316,7 +316,7 @@ Annotations: |
     `exit_code`: process exit code (0 = success, 1 = failure)
 
     Apply the `ensure-in-docker` practice for the container guard.
-    Apply `conventions` for docstring style and intra-package imports.
+    Apply `convention` for docstring style and intra-package imports.
 
     Algorithm:
     0. Call `ensure_in_docker` as the very first statement (per the
@@ -517,7 +517,7 @@ Annotations: |
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per
-      `conventions`
+      `convention`
     - Computed by `resolve_run_settings` — never loaded from YAML directly
   properties:
     "skip -> bool": |
@@ -532,7 +532,7 @@ Annotations: |
   annotations: |
     The resolved tasks-pass part of the run plan.
 
-    Apply the `conventions` practice for the data-model rules and
+    Apply the `convention` practice for the data-model rules and
     intra-package imports.
   properties:
     "agent -> str | None": |
@@ -567,7 +567,7 @@ Annotations: |
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per
-      `conventions`
+      `convention`
   properties:
     "roles -> list[str] | None": |
       The declared reviewer composition; None or empty list mean the full

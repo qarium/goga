@@ -79,13 +79,14 @@ class TestPipelineFacade:
         """__all__ keeps the alphabetical ordering convention (uppercase first)."""
         assert pipeline_facade.__all__ == sorted(pipeline_facade.__all__)
 
-    def test_facade_all_has_nineteen_names(self) -> None:
-        """Fifteen pre-bridge names plus the four bridge routines of the afm hook surface."""
-        assert len(pipeline_facade.__all__) == 19
+    def test_facade_all_has_twenty_names(self) -> None:
+        """Fifteen pre-bridge names, the four bridge routines, and the afm skin materializer."""
+        assert len(pipeline_facade.__all__) == 20
         for name in BRIDGE_FACADE_NAMES:
             assert name in pipeline_facade.__all__
         assert "write_afm_config" in pipeline_facade.__all__
         assert "apply_stage_env_wrappers" in pipeline_facade.__all__
+        assert "materialize_afm_skin" in pipeline_facade.__all__
 
     def test_facade_preserves_pre_existing_names(self) -> None:
         """The six names exported before the pipeline-info work stay exported."""
@@ -111,7 +112,7 @@ class TestPipelineFacade:
         assert sorted(zone_facade.__all__) == ZONE_ALL
         for name in BRIDGE_FACADE_NAMES:
             assert name in pipeline_facade.__all__
-        assert len(pipeline_facade.__all__) == 19
+        assert len(pipeline_facade.__all__) == 20
         assert callable(pipeline_facade.run_pipeline)
         assert callable(pipeline_facade.describe_pipeline)
         assert root_facade.__all__ == ["AST", "app"]

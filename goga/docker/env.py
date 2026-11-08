@@ -1,9 +1,25 @@
-"""In-container environment assertion: guard routine for in-container entrypoints."""
+"""In-container environment markers: the terminal guard and the non-terminal query."""
 
 from __future__ import annotations
 
 import os
 import sys
+
+
+def is_in_docker() -> bool:
+    """Report whether the process runs inside the goga Docker image.
+
+    The non-terminal, branching counterpart of ``ensure_in_docker``: instead
+    of refusing to run, it answers the marker question so dual-surface
+    launchers can choose their execution substrate (``docker run`` on the
+    host, direct child execution inside the image).
+
+    Returns:
+        ``True`` only when ``GOGA_DOCKER`` equals exactly ``"1"`` — the same
+        marker rule ``ensure_in_docker`` enforces; ``False`` for every other
+        value including unset.
+    """
+    return os.environ.get("GOGA_DOCKER") == "1"
 
 
 def ensure_in_docker() -> None:

@@ -1,12 +1,16 @@
 """Contract and logic tests of the collaboration plumbing of ``write_afm_config``.
 
 Covers the collaboration half of the afm configuration authorship: the
-section materializes only when both the compiled flow document and the
-effective workflow document are given; the generated profiles exist exactly
+section writes on every launch — always headed by the static
+``runtime_context: wrapper`` and ``hide_attach_helpers: true`` — while the
+generated profiles materialize only
+when both the compiled flow document and the effective workflow document are
+given; the generated profiles exist exactly
 for the flow-referenced ids (one ``goga-<name>`` profile per team member and
 stage attachment, deduplicated); each profile carries exactly
-``{title, command, delegate}``; an env-declaring assistant resolves to an
-owner-only sh closure whose path becomes the profile's command;
+``{title, command, delegate}``; an assistant carrying a non-empty effective
+env map resolves to an owner-only sh closure whose path becomes the
+profile's command (``None`` and ``{}`` both mean "no closure");
 ``limits.max_tasks`` is written only with a delegation block; and the two
 pre-run errors (an illegal env key, an unresolvable agent) fire before any
 file — config or closure — is written.
@@ -105,30 +109,53 @@ class TestWriteAfmConfigCollaborationContract:
         """write_afm_config is importable from the goga.pipeline facade."""
         assert write_afm_config is not None
 
-    def test_collaboration_section_requires_both_flow_and_workflow(self, config_path: Path) -> None:
-        """Neither document alone writes the collaboration key — the old content shape stays."""
+    def test_collaboration_profiles_require_both_flow_and_workflow(self, config_path: Path) -> None:
+        """The section always writes; the profiles need both documents.
+
+        Without one of the documents the section is exactly the static head
+        (``runtime_context: wrapper`` and ``hide_attach_helpers: true``);
+        with both, the profiles materialize under the head.
+        """
+        head = {"runtime_context": "wrapper", "hide_attach_helpers": True}
         flow = _flow_doc(members=[_member("reviewer")])
         workflow = _workflow_doc(catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")})
 
         write_afm_config("claude")
-        assert "collaboration" not in yaml.safe_load(config_path.read_text())
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == head
 
         write_afm_config("claude", flow=flow)
-        assert "collaboration" not in yaml.safe_load(config_path.read_text())
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == head
 
         write_afm_config("claude", workflow=workflow)
-        assert "collaboration" not in yaml.safe_load(config_path.read_text())
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == head
 
         write_afm_config("claude", flow=flow, workflow=workflow)
-        assert "collaboration" in yaml.safe_load(config_path.read_text())
+        collaboration = yaml.safe_load(config_path.read_text())["collaboration"]
+        assert collaboration["runtime_context"] == "wrapper"
+        assert collaboration["hide_attach_helpers"] is True
+        assert list(collaboration["profiles"]) == ["goga-reviewer"]
 
     def test_collaboration_free_documents_write_empty_profiles(self, config_path: Path) -> None:
-        """Both documents without collaboration content write an empty profiles map."""
+        """Both documents without collaboration content write an empty profiles map under the head."""
         write_afm_config("claude", flow=_flow_doc(), workflow=_workflow_doc())
 
         data = yaml.safe_load(config_path.read_text())
 
-        assert data["collaboration"] == {"profiles": {}}
+        assert data["collaboration"] == {
+            "runtime_context": "wrapper",
+            "hide_attach_helpers": True,
+            "profiles": {},
+        }
+
+    def test_generated_profile_shape_is_exactly_title_command_delegate(self, config_path: Path) -> None:
+        """A generated profile carries exactly ``{title, command, delegate}`` — nothing else."""
+        workflow = _workflow_doc(catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")})
+
+        write_afm_config("claude", _flow_doc(members=[_member("reviewer")]), workflow)
+
+        profile = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]["goga-reviewer"]
+
+        assert set(profile) == {"title", "command", "delegate"}
 
 
 class TestWriteAfmConfigCollaborationLogic:
@@ -241,6 +268,99 @@ class TestWriteAfmConfigCollaborationLogic:
         closure = closure_base / "goga-reviewer"
 
         assert closure.read_text().endswith('exec /home/goga/bin/codex-as-claude.sh "$@"\n')
+
+    def test_write_afm_config_add_stage_disabled(self, config_path: Path) -> None:
+        """The generated config carries ``add_stage.enabled false`` unconditionally.
+
+        Written beside the other statics even with no flow and no
+        workflow — the dashboard of a goga-managed run accepts no
+        out-of-model stage addition; the setting is never configurable.
+        No ``theme`` writes — the engine-builtin theme stays the fallback
+        behind the materialized ``skin_dir`` skin.
+        """
+        write_afm_config(None)
+
+        parsed = yaml.safe_load(config_path.read_text())
+
+        assert parsed["add_stage"] == {"enabled": False}
+        assert "theme" not in parsed
+        assert parsed["open_browser"] is False
+        assert parsed["proxy"] == {"enabled": False}
+        assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
+        assert parsed["skin_dir"] == "/home/goga/.afm/skins/goga"
+
+    def test_afm_config_env_delivery_keys_on_nonempty_map(self, config_path: Path, closure_base: Path) -> None:
+        """An authored ``env: {}`` is a clear — no closure file, no env-key validation.
+
+        ``None`` and ``{}`` both mean "no closure": the empty map raises
+        nothing (no key to validate), leaves no closure under the base, and
+        the profile's command stays the resolved wrapper; a non-empty map
+        creates the closure and makes its path the command.
+        """
+        cleared = _workflow_doc(
+            catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.", agent="codex", env={})},
+        )
+
+        write_afm_config("claude", _flow_doc(members=[_member("reviewer")]), cleared)
+
+        assert not (closure_base / "goga-reviewer").exists()
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+        assert profiles["goga-reviewer"]["command"] == "/home/goga/bin/codex-as-claude.sh"
+
+        declaring = _workflow_doc(
+            catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.", agent="codex", env={"K": "V"})},
+        )
+
+        write_afm_config("claude", _flow_doc(members=[_member("reviewer")]), declaring)
+
+        closure = closure_base / "goga-reviewer"
+
+        assert closure.exists()
+        assert closure.read_text() == '#!/bin/sh\nexport K=V\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+        assert profiles["goga-reviewer"]["command"] == str(closure)
+
+    def test_afm_config_empty_env_no_agent_error_without_clause(self, config_path: Path, closure_base: Path) -> None:
+        """The no-agent error drops the ``declares env but`` clause for an explicitly cleared env.
+
+        ``env: {}`` is no env for the delivery — the wording keys on a
+        non-empty effective map exactly like the closure creation.
+        """
+        cleared = _workflow_doc(
+            catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.", env={})},
+        )
+
+        with pytest.raises(
+            ValueError,
+            match=r"assistant reviewer at workflow.assistants resolved no agent: set its agent or a global agent",
+        ):
+            write_afm_config(None, _flow_doc(members=[_member("reviewer")]), cleared)
+
+        assert not config_path.exists()
+        assert list(closure_base.glob("*")) == []
+
+    def test_afm_config_delegate_materializes_false_when_none(self, config_path: Path) -> None:
+        """The delegate tri-state collapses to the engine bool at the delivery boundary.
+
+        Effective ``None`` (not authored) materializes ``False``; an authored
+        ``True`` and an authored ``False`` pass through verbatim.
+        """
+        workflow = _workflow_doc(
+            catalog={
+                "absent": WorkflowAssistant(name="absent", prompt="Do."),
+                "permitted": WorkflowAssistant(name="permitted", prompt="Do.", delegate=True),
+                "opted_out": WorkflowAssistant(name="opted_out", prompt="Do.", delegate=False),
+            },
+        )
+        flow = _flow_doc(members=[_member("absent"), _member("permitted"), _member("opted_out")])
+
+        write_afm_config("claude", flow, workflow)
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert profiles["goga-absent"]["delegate"] is False
+        assert profiles["goga-permitted"]["delegate"] is True
+        assert profiles["goga-opted_out"]["delegate"] is False
 
     def test_afm_config_max_tasks_only_with_delegation(self, config_path: Path) -> None:
         """limits.max_tasks appears only with a delegation block, carrying its materialized value."""

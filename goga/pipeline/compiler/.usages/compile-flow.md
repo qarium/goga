@@ -202,13 +202,16 @@ surfaces (see `collaboration-emission` for the full contract):
 
 Compilation checks (structural errors naming the workflow location): an
 attachment naming no member of the assistant namespace (the catalog plus
-every full inline declaration); the same assistant name twice in one
-stage's list; an attachment on a stage whose translated body carries
-`script`; an attachment on a stage whose translated agents value is
-exactly `["planning"]`. The checks run over the working body after skip
-removal and loop expansion. An authored `assistants` key in a stage body
-is likewise a structural error — the single authoring source is the
-workflow stages block.
+every full inline declaration); a DECLARATION of the namespace resolving
+no prompt and no skills — every declaration must resolve content, so an
+override-style entry (authored without prompt/skills) is legal only when
+a tool-delivered entry of the same name supplies the content; the same
+assistant name twice in one stage's list; an attachment on a stage whose
+translated body carries `script`; an attachment on a stage whose
+translated agents value is exactly `["planning"]`. The checks run over
+the working body after skip removal and loop expansion. An authored
+`assistants` key in a stage body is likewise a structural error — the
+single authoring source is the workflow stages block.
 
 ## Key presence
 

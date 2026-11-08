@@ -21,7 +21,7 @@ docker launcher through the runpy entrypoint in `__main__.py`.
 
 ### run
 
-`run NAME [--info] [-w WORKFLOW | --no-workflow] [-p PROFILE] [-s NAME]... [--port PORT] [--parallel N]`
+`run NAME [--info] [-w WORKFLOW | --no-workflow] [-p PROFILE] [-s NAME]... [--port PORT] [--parallel N] [--fail-on-error]`
 
 - NAME (positional, required) — pipeline name without extension.
 - `--info`/`-i` (flag) — print the card instead of running: `name:` and `description:` field
@@ -40,13 +40,17 @@ docker launcher through the runpy entrypoint in `__main__.py`.
 - `-s NAME` (repeatable) — stage names to skip, available in BOTH modes: a run applies them to
   the execution, a card reflects them in the composition. Forwarding-only — unknown names
   surface as the compiler's structural error during composition.
-- `--port PORT` (int) — dashboard port, allocated by the host launcher. Required only when
+- `--port PORT` (int) — dashboard port, resolved by the host launcher (its `--port` CLI
+  value when the user pinned one, else an allocated free port). Required only when
   `--info` is absent; ignored in info mode.
 - `--parallel N` (int, optional) — max concurrently executing stages; run mode only.
+- `--fail-on-error` (flag) — fail-fast: a failed stage ends the run
+  with a non-zero engine exit; binds in both modes, effective in run
+  mode only (ignored with --info).
 
 Dispatch: run without `--info` → `run_pipeline(NAME, project_dir, user_dir, PORT,
 workflow=<WF or None>, no_workflow=<bool>, profile=<P or None>, skip=<names or None>,
-parallel=<N or None>)`; run
+parallel=<N or None>, fail_on_error=<bool>)`; run
 with `--info` → `describe_pipeline(NAME, project_dir, user_dir, workflow=<WF or None>,
 no_workflow=<bool>, profile=<P or None>, skip=<names or None>)`.
 

@@ -10,11 +10,11 @@ goga build PLAN [OPTIONS]
 
 ## Description
 
-`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to the build engine running inside a Docker container with the goga in-container process as the entry point.
+`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to the build engine running inside a Docker container with the goga in-container process as the entry point. Inside the goga image itself the same composed command runs directly as a child process instead — see step 1 below and [Runtime — Direct in-container execution](../pipelines/runtime.md#direct-in-container-execution).
 
 The build pipeline performs these steps:
 
-1. **Docker check** -- Verifies Docker is installed and accessible.
+1. **Docker check (host only)** -- Verifies Docker is installed and accessible. Inside the goga image (`GOGA_DOCKER=1`) there is no docker launch to check or acquire: the docker-CLI check, the version check, and the image steps (6, 7, and the `image` guard) are skipped, and the host-only options (`-e/--env`, `--add-host`, `--proxy`, `-u/--update`) are rejected with an error naming the option before any other work. `--clean` there wipes `<cwd>/.ralphex` (the directory the build engine actually uses) before the run, and ralphex state does not persist across direct runs; `--dry-run` prints the direct command line.
 2. **Config loading** -- Reads `.goga/config.yml` for build settings. The optional machine-wide home config (`~/.goga/config.yml`) layers underneath: `home.env` is the base (lowest-priority) layer of the container env-file, `home.docker.run` is appended to every `docker run`, `home.docker.build` is forwarded to image builds. Git identity env (`GIT_AUTHOR_NAME/EMAIL`, `GIT_COMMITTER_NAME/EMAIL`) is layered in, tolerating absent git config.
 3. **Uncommitted manifest check** -- Scans `git status` for uncommitted `CODEMANIFEST` files (can be skipped).
 4. **Agent preconditions** -- Requires a `build` section host-side (a missing section is rejected with exit 1, before any container launch). The tasks agent (`build.agent`) is guarded in-container on the effective configuration: a `None` agent (after amendments) stops the run with exit 1 before any `.ralphex/` state write or pass, and an amendment supplying `build.agent` satisfies the guard. The review agent's wrapper (`build.review.agent`) and, when the strategy engages the external review, the additional agent's wrapper are validated in-container before their pass.
@@ -79,6 +79,8 @@ The build engine writes its persistent state to a `.ralphex/` directory it auto-
 `<normalized_project>` is the project's absolute path with leading slashes stripped and remaining slashes replaced by hyphens; `<branch>` is the current git branch (slashes replaced with hyphens), or `default` when git is unavailable, the directory is not a repository, or HEAD is detached.
 
 The directory survives across runs of the same project on the same branch by default, so an interrupted build can be resumed. Pass `--clean` to wipe and recreate it before launch for a fresh run. The host path never reaches the container except as the `/workspace/.ralphex` mount source — the container sees only `/workspace/.ralphex`.
+
+On the [direct substrate](../pipelines/runtime.md#direct-in-container-execution) (inside the goga image) there is no host runtime mount: the build engine writes its `.ralphex/` under the current working directory, `--clean` wipes that directory, and the no-`.ralphex/`-left-in-the-project invariant holds on every exit path of both substrates.
 
 Note: concurrent builds of the same project on the same branch share one runtime directory; run them on different branches or use `--clean` if isolation is required.
 

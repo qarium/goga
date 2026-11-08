@@ -1,15 +1,349 @@
 from __future__ import annotations
 
 import inspect
+import os
 import signal
+import subprocess
+import sys
+import time
+import typing
+from pathlib import Path
 from unittest import mock
 
 import goga.docker
 import goga.docker.runner
 import pytest
-from goga.docker import DockerRunner
+from goga.docker import DockerRunner, run_direct
 from goga.docker.builder import docker_image_goga_version
 from goga.version import ensure_version_match, host_goga_version, version_check_enabled
+
+
+class TestRunDirectContract:
+    """Contract-surface lock for the direct-execution substrate."""
+
+    def test_run_direct_facade_export(self) -> None:
+        from goga.docker import run_direct
+
+        assert callable(run_direct)
+        assert goga.docker.run_direct is run_direct
+        assert "run_direct" in goga.docker.__all__
+
+    def test_run_direct_declared_signature(self) -> None:
+        from goga.docker import run_direct
+
+        parameters = inspect.signature(run_direct).parameters
+
+        assert list(parameters) == ["argv", "env"]
+        assert all(parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in parameters.values())
+        assert parameters["argv"].default is inspect.Parameter.empty
+        assert parameters["env"].default is None
+        assert typing.get_type_hints(run_direct) == {
+            "argv": list[str],
+            "env": dict[str, str] | None,
+            "return": int,
+        }
+
+
+class _DirectProc:
+    """Fake child exposing the ``run_direct`` handler surface: ``poll``/``send_signal``/``wait``."""
+
+    def __init__(self, poll_result: int | None = None, returncode: int = 0) -> None:
+        self._poll_result = poll_result
+        self._returncode = returncode
+        self.sent: list[int] = []
+
+    def poll(self) -> int | None:
+        return self._poll_result
+
+    def send_signal(self, signum: int) -> None:
+        self.sent.append(signum)
+
+    def wait(self) -> int:
+        return self._returncode
+
+
+class _DirectPopen:
+    """A fake ``subprocess.Popen`` recording ``(argv, env)`` and returning a fake child."""
+
+    def __init__(self, proc: _DirectProc) -> None:
+        self._proc = proc
+        self.calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+    def __call__(self, argv: list[str], env: dict[str, str] | None = None) -> _DirectProc:
+        self.calls.append((list(argv), env))
+        return self._proc
+
+
+class _MidSpawnSignalPopen:
+    """A fake Popen delivering SIGTERM to the launcher WHILE the spawn is in flight.
+
+    The handler runs before ``run_direct`` assigns the child to ``proc`` —
+    exactly the signal-before-spawn-completes window the handler must survive.
+    """
+
+    def __init__(self, fake_signal: _RecordingSignal) -> None:
+        self._fake_signal = fake_signal
+        self.forwarded: _DirectProc | None = None
+
+    def __call__(self, argv: list[str], env: dict[str, str] | None = None) -> _DirectProc:
+        handler = self._fake_signal.current[signal.SIGTERM]
+        self.forwarded = _DirectProc()
+        handler(signal.SIGTERM, None)
+        return self.forwarded
+
+
+def _proc_running(pid: int) -> bool:
+    """Report whether ``pid`` names a runnable process (a post-exit zombie is not running)."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return False
+
+    state = stat.rsplit(")", 1)[1].split()[0]
+
+    return state != "Z"
+
+
+class TestRunDirectLogic:
+    """Behavior coverage for the direct-execution substrate."""
+
+    def test_run_direct_returns_child_exit_code_verbatim(self) -> None:
+        """A real child exiting 7 yields exactly 7 — no exit machinery of its own."""
+        exit_code = run_direct([sys.executable, "-c", "import sys; sys.exit(7)"])
+
+        assert exit_code == 7
+
+    def test_run_direct_env_layer_child_only(self, monkeypatch: pytest.MonkeyPatch, capfd) -> None:
+        """The env layer reaches the child; the launcher's own environment stays unwritten."""
+        monkeypatch.delenv("MARKER", raising=False)
+
+        exit_code = run_direct(
+            [sys.executable, "-c", "import os; print(os.environ.get('MARKER'))"],
+            env={"MARKER": "set"},
+        )
+
+        assert exit_code == 0
+        assert capfd.readouterr().out.strip() == "set"
+        assert "MARKER" not in os.environ
+
+    def test_run_direct_env_none_inherits_ambient(self, monkeypatch: pytest.MonkeyPatch, capfd) -> None:
+        """env=None runs the child with the inherited environment untouched."""
+        monkeypatch.setenv("GOGA_DIRECT_PROBE", "ambient")
+
+        exit_code = run_direct([sys.executable, "-c", "import os; print(os.environ.get('GOGA_DIRECT_PROBE'))"])
+
+        assert exit_code == 0
+        assert capfd.readouterr().out.strip() == "ambient"
+        assert os.environ["GOGA_DIRECT_PROBE"] == "ambient"
+
+    def test_run_direct_composes_child_env_over_inherited(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The child env is the inherited environment with the layer applied on top — not a replacement."""
+        monkeypatch.setenv("GOGA_DIRECT_PROBE", "ambient")
+        fake_popen = _DirectPopen(_DirectProc(returncode=0))
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", fake_popen)
+
+        exit_code = run_direct(["python3", "-m", "goga.pipeline"], env={"MARKER": "set"})
+
+        assert exit_code == 0
+        argv, child_env = fake_popen.calls[0]
+        assert argv == ["python3", "-m", "goga.pipeline"]
+        assert child_env is not None
+        assert child_env is not os.environ
+        assert child_env["GOGA_DIRECT_PROBE"] == "ambient"
+        assert child_env["MARKER"] == "set"
+
+    @pytest.mark.parametrize(
+        ("layer", "expected_env"),
+        [(None, None), ({}, None), ({"MARKER": "set"}, {"MARKER": "set"})],
+        ids=["none-inherits", "empty-layer-inherits", "layer-applied"],
+    )
+    def test_run_direct_layer_branches(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        layer: dict[str, str] | None,
+        expected_env: dict[str, str] | None,
+    ) -> None:
+        """None and the empty layer both mean "inherit untouched"; only a non-empty layer composes."""
+        fake_popen = _DirectPopen(_DirectProc(returncode=0))
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", fake_popen)
+
+        run_direct(["python3"], env=layer)
+
+        _argv, child_env = fake_popen.calls[0]
+
+        if expected_env is None:
+            assert child_env is None
+        else:
+            assert child_env is not None
+            assert child_env["MARKER"] == "set"
+
+    def test_run_direct_missing_program_propagates_oserror_raw(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A spawn failure (missing program token) escapes raw — the caller wraps; handlers still restore."""
+        fake_signal = _RecordingSignal()
+        monkeypatch.setattr(goga.docker.runner.signal, "signal", fake_signal)
+
+        def _raising_popen(argv: list[str], env: dict[str, str] | None = None) -> _DirectProc:
+            raise FileNotFoundError(f"No such file or directory: {argv[0]}")
+
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _raising_popen)
+
+        with pytest.raises(FileNotFoundError):
+            run_direct(["goga-missing-program-token"])
+
+        installed_signums = [signum for signum, _handler in fake_signal.installs]
+        assert installed_signums.count(signal.SIGTERM) == 2
+        assert installed_signums.count(signal.SIGINT) == 2
+
+    def test_run_direct_handler_forwards_to_live_child_then_exits(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The installed handler forwards the signal to the live child, then raises SystemExit(128 + signum)."""
+        live_child = _DirectProc(poll_result=None)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _DirectPopen(live_child))
+        fake_signal = _RecordingSignal()
+        monkeypatch.setattr(goga.docker.runner.signal, "signal", fake_signal)
+
+        assert run_direct(["python3"]) == 0
+
+        term_handlers = [handler for signum, handler in fake_signal.installs if signum == signal.SIGTERM]
+
+        with pytest.raises(SystemExit) as exc_info:
+            term_handlers[0](signal.SIGTERM, None)
+
+        assert exc_info.value.code == 143
+        assert live_child.sent == [signal.SIGTERM]
+
+    def test_run_direct_handler_skips_forward_for_dead_child(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A child that already exited (poll reports a code) gets no duplicate signal — the exit still fires."""
+        dead_child = _DirectProc(poll_result=7)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _DirectPopen(dead_child))
+        fake_signal = _RecordingSignal()
+        monkeypatch.setattr(goga.docker.runner.signal, "signal", fake_signal)
+
+        assert run_direct(["python3"]) == 0
+
+        int_handlers = [handler for signum, handler in fake_signal.installs if signum == signal.SIGINT]
+
+        with pytest.raises(SystemExit) as exc_info:
+            int_handlers[0](signal.SIGINT, None)
+
+        assert exc_info.value.code == 130
+        assert dead_child.sent == []
+
+    def test_run_direct_signal_before_spawn_exits_without_forward(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A signal landing mid-spawn (proc still None) exits 143 without any forward attempt."""
+        fake_signal = _RecordingSignal()
+        mid_spawn = _MidSpawnSignalPopen(fake_signal)
+        monkeypatch.setattr(goga.docker.runner.signal, "signal", fake_signal)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", mid_spawn)
+
+        with pytest.raises(SystemExit) as exc_info:
+            run_direct(["python3"])
+
+        assert exc_info.value.code == 143
+        assert mid_spawn.forwarded is not None
+        assert mid_spawn.forwarded.sent == []
+
+    def test_run_direct_installs_handlers_before_spawn_and_restores_after(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """D7 nesting parity with DockerRunner: prior handlers saved, spawn after install, restore in finally."""
+        sentinel_term = object()
+        sentinel_int = object()
+
+        events: list[str] = []
+
+        class _OrderingDirectPopen(_DirectPopen):
+            def __call__(self, argv: list[str], env: dict[str, str] | None = None) -> _DirectProc:
+                events.append("popen")
+                return super().__call__(argv, env=env)
+
+        class _OrderingDirectSignal(_RecordingSignal):
+            def __call__(self, signum, handler):
+                events.append("signal")
+                return super().__call__(signum, handler)
+
+        ordering_signal = _OrderingDirectSignal(priors={signal.SIGTERM: sentinel_term, signal.SIGINT: sentinel_int})
+        monkeypatch.setattr(goga.docker.runner.signal, "signal", ordering_signal)
+        monkeypatch.setattr(
+            goga.docker.runner.subprocess,
+            "Popen",
+            _OrderingDirectPopen(_DirectProc(returncode=0)),
+        )
+
+        assert run_direct(["python3"]) == 0
+
+        # Both handlers were installed BEFORE the spawn, restored AFTER it.
+        assert events == ["signal", "signal", "popen", "signal", "signal"]
+        term_handlers = [handler for signum, handler in ordering_signal.installs if signum == signal.SIGTERM]
+        int_handlers = [handler for signum, handler in ordering_signal.installs if signum == signal.SIGINT]
+        assert term_handlers[1] is sentinel_term
+        assert int_handlers[1] is sentinel_int
+
+    def test_run_direct_forwards_sigterm_and_exits_128_plus_signum(self, tmp_path: Path) -> None:
+        """SIGTERM to the launcher: the child is forwarded and terminated, the launcher exits 143."""
+        marker = tmp_path / "child-terminated.marker"
+        child = tmp_path / "pausing_child.py"
+        child.write_text(
+            "import os\n"
+            "import signal\n"
+            "import sys\n"
+            "\n"
+            "\n"
+            "def _on_term(_signum, _frame):\n"
+            '    with open(sys.argv[1], "w") as handle:\n'
+            '        handle.write("terminated")\n'
+            "    sys.exit(0)\n"
+            "\n"
+            "\n"
+            "signal.signal(signal.SIGTERM, _on_term)\n"
+            "print(os.getpid(), flush=True)\n"
+            "signal.pause()\n",
+        )
+        driver = tmp_path / "direct_driver.py"
+        driver.write_text(
+            "import sys\n"
+            "\n"
+            "from goga.docker import run_direct\n"
+            "\n"
+            "run_direct([sys.executable, sys.argv[1], sys.argv[2]])\n",
+        )
+
+        launcher = subprocess.Popen(
+            [sys.executable, str(driver), str(child), str(marker)],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            child_pid = int(launcher.stdout.readline().strip())
+            time.sleep(0.3)  # the child reaches signal.pause()
+            launcher.send_signal(signal.SIGTERM)
+
+            launcher_exit = launcher.wait(timeout=15)
+        finally:
+            if launcher.poll() is None:
+                launcher.kill()
+
+        assert launcher_exit == 143
+
+        # The child RECEIVED the forwarded signal (its handler ran and wrote the marker).
+        deadline = time.monotonic() + 15
+
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+
+        assert marker.exists()
+
+        # And it no longer runs (gone, or at most an unreaped zombie).
+        while _proc_running(child_pid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+
+        assert not _proc_running(child_pid)
 
 
 class _FakeProc:

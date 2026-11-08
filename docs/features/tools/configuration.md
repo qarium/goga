@@ -41,4 +41,11 @@ parse failure (`yaml.YAMLError`) or a read failure (`OSError`,
 The same composition the onboarding engine writes under — the write-side
 counterpart of this read.
 
+The raw parse resolves **environment references**: a scalar written as
+`!ENV NAME` arrives as the variable's value (`""` when unset, always a
+string — see [Project Configuration — Environment
+references](../../configuration/project.md#environment-references-env)).
+Non-scalar `!ENV` use fails the load through the same `yaml.YAMLError`
+channel.
+
 The general configuration model of the product is covered in [Configuration](../../configuration/index.md).
