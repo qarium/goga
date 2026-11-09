@@ -439,6 +439,76 @@ complete stage sequence in cycles until a stop condition.
 - The compiled `repeat` is emitted immediately after `description`, before
   `memory`.
 
+## Stage verification (flow-file `stages[].verify`, afm v2.x)
+
+afm supports stage-completion quality gates authored through a per-stage
+`verify` field of the flow-file: a list of check steps the stage must pass
+before it counts as done, plus optional retry-tuning settings. Facts below
+are verified against the published verify documentation
+(<https://akopichin.github.io/afm/verify/>, fetched 2026-11-09).
+
+Two authoring forms:
+
+| Form | Shape | Meaning |
+|---|---|---|
+| list | `verify: [ <step>, ... ]` | Steps only — engine defaults for every setting |
+| container | `verify: { steps: [...], max_failures?, review_patience?, fresh_correction? }` | Steps plus authored settings |
+
+Step fields (both forms; one step per list entry):
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | str | A string with ≥ 1 non-space character; empty/space-only is a parse error. The dashboard label — the engine also numbers steps as a fallback, but `name` is the reliable label. |
+| `run` | str | A shell check step — gated on the exit status. Mutually exclusive with `command`; exactly one of the two is required. |
+| `command` | str | An AI-review step. Mutually exclusive with `run`; exactly one required. An agent alias, resolved by the same command/recipe mechanism as `stage.command` — so an absolute in-container `*-as-claude.sh` wrapper path (the goga convention) is the known-good shape. |
+| `prompt` | str | The AI step's review instruction — valid on `command` (AI) steps only. |
+| `timeout` | str (duration) | Valid on both step kinds (shell and AI). |
+
+Container settings (container form only; `steps` is required):
+
+| Field | Type | Notes |
+|---|---|---|
+| `steps` | list | The step list — required in the container form. No other top-level keys are allowed here: a step field (`run`/`command`/`prompt`/`timeout`) at the container's top level is a parse error; `name` likewise. |
+| `max_failures` | int | The bound of failed correction attempts. |
+| `review_patience` | int | Tolerance for an unchanged correction stalemate. |
+| `fresh_correction` | bool | Whether a correction session starts fresh. |
+
+Exclusions and interplay (engine-owned — goga performs no cross-check):
+
+- Gates are forbidden on `script` stages and on planning-only
+  (`agents: [planning]`) stages — the engine rejects both at parse.
+- `max_failures >= review_patience` interplay, with an effective ceiling of
+  `min(max_failures, 15)`; the engine owns and reports these constraints.
+- Execution semantics that stay with the engine (never re-implemented by an
+  integrator): in-order fail-fast steps; full-list re-runs after a
+  correction; the correction budget; stalemate acceptance; strict JSON
+  verdicts (`pass` / `needs_changes` / `inconclusive`); transient verifier
+  retries; human waiver (a human may waive a failed gate with a recorded
+  reason).
+- Older engines reject a gated flow at load — a downgrade is never silent.
+
+### goga's stance (decided in `.goga/history/2026/add-gates-to-workflow/adr.md`)
+
+- goga authors gates in the workflow-file only — the per-stage check-step
+  list (`workflow.stages.<name>.gates`) and the settings block
+  (`workflow.gates`) — and compiles them one-directionally into the stage
+  `verify`: `script` → `run`, `agent` → `command` (composed into the
+  in-container wrapper path `/home/goga/bin/<agent>-as-claude.sh`, no
+  host-side resolution), `patience` → `review_patience`, `max_iterations`
+  → `max_failures`, `fresh_correction` unchanged.
+- Authored keys only: goga materializes no settings defaults; a shell step
+  without an authored `timeout` carries the goga-side product default `1h`
+  (not an engine contract), an AI step materializes no timeout default.
+  When the settings block authored any key, every gated stage's `verify`
+  is the container form; otherwise the list form.
+- The flow-file is the single delivery channel — goga writes no engine
+  configuration for gates. The settings ride only on gated stages; the
+  settings block without per-stage steps is inert.
+- goga mirrors the engine's own exclusions with its own compile-time
+  messages (gates on script / planning-only stages; `gates` in an
+  extend-entry; `gates`/`verify` keys in a stage body) — strict authoring
+  validation on the goga side, exactly as for memory.
+
 ## Integration pattern — running afm in a container
 
 A host-side launcher runs afm **inside a container image** that ships the `afm` binary.
