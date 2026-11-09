@@ -330,9 +330,9 @@ Annotations: |
   Use `assistants` for the authoring vocabulary of the delivered
   instructions.
 
-  The stage command rewrite runs AFTER compilation as a targeted patch
-  of the flow-file `compile_flow` already wrote: the compiler's direct
-  serialization for env-free stages is untouched, keeping the flow
+  The stage script/command rewrite runs AFTER compilation as a targeted
+  patch of the flow-file `compile_flow` already wrote: the compiler's
+  direct serialization for env-free stages is untouched, keeping the flow
   output byte-identical for runs that declare no stage env (wrappers
   are generated and the file is patched only for stages that declare
   env; with none, the file is neither read nor rewritten).
@@ -872,8 +872,10 @@ Annotations: |
     14. Apply the per-stage env wrappers via `apply_stage_env_wrappers`
         over the compiled stages — the overlay workflow document, the
         effective pipeline agent, and the composed flow path — a
-        post-compile command rewrite of exactly the env-declaring stages in
-        the flow-file `compile_flow` already wrote; a no-op that touches no
+        post-compile script/command rewrite of exactly the env-declaring
+        stages in the flow-file `compile_flow` already wrote (a script
+        stage wraps its script payload, every other stage its resolved
+        agent command); a no-op that touches no
         file when none declare env. Then apply the per-step gate env
         wrappers via `apply_gate_env_wrappers` over the same compiled
         stages and flow path — the same closure delivery for the env maps
@@ -1379,21 +1381,30 @@ Annotations: |
   location: stage_env_wrappers.py
   annotations: |
     Deliver the per-stage env instructions of a compiled flow: generate
-    one sh closure wrapper per env-declaring stage, patch the command
-    fields of exactly those stages in the ALREADY WRITTEN flow-file,
-    and return a new stage list where those stages' command fields
-    point at their wrappers. Stages without an env instruction pass
-    through as the SAME objects, untouched.
+    one sh closure wrapper per env-declaring stage, patch the script or
+    command fields of exactly those stages in the ALREADY WRITTEN
+    flow-file, and return a new stage list where those stages' fields
+    point at their wrappers. The delivery form follows the claimed
+    stage's own compiled fields: a script stage (carrying a script
+    field — the stage's action, with no agent command) receives a
+    payload closure carrying the authored script lines as-is and its
+    script field is patched; every other stage receives an exec closure
+    over the resolved agent wrapper and its command field is patched
+    (inserted when the compiler emitted none). Stages without an env
+    instruction pass through as the SAME objects, untouched.
 
     `stages`: the compiled flow stages
     `workflow`: the effective workflow document (its stages map carries
                 the env instructions), or None (no stage is wrapped)
     `global_agent`: the effective global pipeline agent — the fallback
-                    exec target; None when no global agent resolved
+                    exec target of a non-script claim; None when no
+                    global agent resolved (a script claim needs no
+                    agent at all)
     `flow_path`: the path of the flow-file written by `compile_flow` —
-                 the target of the post-compile command patch
-    `stages`: the new stage list — wrapped stages carry command fields
-              pointing at their generated wrappers
+                 the target of the post-compile script/command patch
+    `stages`: the new stage list — claimed script stages carry script
+              fields and every other claimed stage carries command
+              fields pointing at their generated wrappers
 
     Apply `resolve-wrapper-path` when resolving each exec target.
 
@@ -1405,39 +1416,55 @@ Annotations: |
        copy descended from an env-declaring loop stage (its id carries
        the expansion suffix of the workflow stage name) is selected and
        receives its own wrapper carrying the same env values
-    2. Per selected stage, resolve the exec target with the compiler's
-       agent precedence: the stage agent's wrapper, else the extend-entry
-       agent's wrapper of the same workflow stage name (the compiler's
-       per-field default — loop-expansion suffix claims resolve through
-       their base name), else the global agent's wrapper, else raise one
-       strict pre-run error naming the stage
-    3. Validate every declared env key as a legal environment variable
+    2. Classify every selected stage by its own compiled fields: a
+       stage carrying a script field is a script claim (the stage's
+       action — the compiler assembles no command beside it); every
+       other stage is an agent claim
+    3. Per agent claim, resolve the exec target with the compiler's
+       agent precedence: the stage agent's wrapper, else the
+       extend-entry agent's wrapper of the same workflow stage name
+       (the compiler's per-field default — loop-expansion suffix claims
+       resolve through their base name), else the global agent's
+       wrapper, else raise one strict pre-run error naming the stage.
+       A script claim resolves no exec target — its closure carries the
+       authored script itself
+    4. Validate every declared env key as a legal environment variable
        name (POSIX shape) BEFORE writing any file — an illegal key (a
        shell metacharacter, a non-string key) would inject into or break
        the generated export line; raise one strict pre-run error naming
        the stage and the key
-    4. Generate one sh closure per selected stage in a container-local
+    5. Generate one sh closure per selected stage in a container-local
        temp directory (owner-only access, 0o700): export the stage's env
-       values, then exec the resolved wrapper path
-    5. Patch `flow_path`: rewrite ONLY the command fields of the
-       selected stages in the serialized flow-file to the absolute
-       wrapper paths — every other byte of the file stays untouched.
-       The stage-block search is bounded to the top-level stages:
-       section — the team: list that precedes it serializes member
-       headers (``- id: NAME`` at column 0) indistinguishable from
-       stage headers, and an assistant named like a stage must never
-       capture the stage's patch
-    6. Return the new list: selected stages carry command = the
-       absolute wrapper path; every other stage is the SAME input
-       object
+       values, then carry the payload — the authored script lines as-is
+       on a script claim (the gate script-step closure shape), or the
+       exec of the resolved wrapper path forwarding ``"$@"`` on an
+       agent claim
+    6. Patch `flow_path`: rewrite ONLY the script fields of the script
+       claims and the command fields of the agent claims in the
+       serialized flow-file to the absolute wrapper paths — every other
+       byte of the file stays untouched. The script patch matches the
+       exact two-space ``script:`` field prefix (script_before /
+       script_after never match) and consumes a block-literal value
+       whole; a command patch rewrites the line in place or inserts it
+       at the canonical position when absent. The stage-block search is
+       bounded to the top-level stages: section — the team: list that
+       precedes it serializes member headers (``- id: NAME`` at column
+       0) indistinguishable from stage headers, and an assistant named
+       like a stage must never capture the stage's patch
+    7. Return the new list: claimed script stages carry script = and
+       every other claimed stage carries command = the absolute wrapper
+       path; every other stage is the SAME input object
 
     Requirements:
     - The input list and its stage objects are never mutated
     - Wrappers are generated ONLY for env-declaring stages — env-free
       runs keep byte-identical flow output (the flow-file is neither
       read nor rewritten when no stage declares env)
-    - The file patch touches only the command fields of the selected
-      stages; the rest of the serialized flow-file is byte-identical
+    - The file patch touches only the script fields of the script
+      claims and the command fields of the agent claims; the rest of
+      the serialized flow-file is byte-identical
+    - A script claim inserts no command field — the stage keeps its
+      script-action form
     - Per-stage values layer above all global env layers (the wrapper
       exports them last)
     - A declared env key that is not a legal environment variable name

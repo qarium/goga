@@ -24,6 +24,18 @@ stages:
       REVIEW_STRICTNESS: strict
 ```
 
+`env` applies to a stage of EITHER action form — an agent stage and a
+script stage alike. A script stage authors its `script` body in the
+pipeline-file and its env in the workflow stages block:
+
+```yaml
+# pipeline-file stage body        # workflow-file stages block
+build:                            stages:
+  title: Build                      build:
+  script: |                          env:
+    ./release.sh --canary              CHANNEL: canary
+```
+
 `env` is valid ONLY under `stages.<name>` — never in an extend-entry.
 An empty map equals absence. Keys must be legal environment variable
 names (POSIX shape: a letter or underscore, then letters, digits, or
@@ -32,13 +44,15 @@ and the key, raised before any wrapper is written.
 
 ## Delivery mechanism
 
-afm stages carry a `command:` field following the absolute-executable-
-path convention — so per-stage env travels through a generated sh
-closure wrapper the field points at. After compilation goga patches
-the `command:` field of exactly the env-declaring stages in the written
-flow-file to point at their wrappers — a targeted patch; every other
-byte of the flow-file stays untouched, and an env-free workflow is not
-rewritten at all (byte-identical). The wrapper:
+The delivery form follows the claimed stage's own compiled fields —
+per-stage env always travels through a generated sh closure wrapper
+the patched field points at. After compilation goga patches exactly the
+env-declaring stages in the written flow-file — a targeted patch; every
+other byte of the flow-file stays untouched, and an env-free workflow
+is not rewritten at all (byte-identical).
+
+**An agent stage** (the default form) carries a `command:` field
+following the absolute-executable-path convention; the wrapper:
 
 1. exports the stage's env values (above every global env layer),
 2. execs the stage agent's wrapper — else the extend-entry agent's
@@ -46,6 +60,21 @@ rewritten at all (byte-identical). The wrapper:
    when composing the command) — else the effective global wrapper
    (the same agent the run would use globally) — else the run fails
    strictly before launch, naming the stage.
+
+**A script stage** (a pipeline stage whose body authors `script` — the
+stage's action; the compiler emits no agent command beside it) carries
+its payload in the `script:` field; the wrapper:
+
+1. exports the stage's env values (above every global env layer),
+2. carries the authored script lines as-is — the same shell, working
+   directory, and exit status the engine gives the authored value (the
+   gate script-step closure shape).
+
+A script stage resolves no agent at all — no stage, extend-entry, or
+global agent is required for its env delivery. The patch rewrites the
+`script:` line in place (a multi-line block-literal value is consumed
+whole); `script_before`/`script_after`/`script_timeout` ride the stage
+unchanged and are never captured by the patch.
 
 Wrappers are generated per run in a container-local temp directory and
 never touch the project directory. No contributor-side wrapper scripts
