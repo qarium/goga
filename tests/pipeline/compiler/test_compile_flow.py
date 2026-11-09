@@ -1011,6 +1011,23 @@ class TestCompileFlowScriptDirectives:
         ):
             compile_flow(pipeline_path, flow_path)
 
+    def test_compile_script_payload_error_follows_exclusivity_error(self, tmp_path: Path) -> None:
+        """With two violations, the exclusivity check fires first — deterministic order.
+
+        A malformed list ``script`` payload and the ``script + prompt``
+        conflict both fail; the contract fixes the payload validation AFTER
+        the exclusivity check, so the exclusivity message is the one raised.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\na:\n  title: A\n  script: [run, '']\n  prompt: p\n")
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(
+            StructuralError,
+            match=r"script is mutually exclusive with prompt/skills in stage a",
+        ):
+            compile_flow(pipeline_path, flow_path)
+
     def test_compile_no_approve_baseline_byte_identical(self, tmp_path: Path) -> None:
         """A pipeline-file without approve/script directives compiles byte-identically.
 
