@@ -242,6 +242,30 @@ class TestCompileFlowGatesEmission:
         assert verify.review_patience is None
         assert verify.fresh_correction is None
 
+    def test_list_form_gate_script_compiles_to_joined_run(self, tmp_path: Path) -> None:
+        """A list-form gate ``script`` compiles to the newline-joined multi-line ``run``.
+
+        The parser joins the authored lines into one script string, so the
+        emitted shell step carries the same multi-line payload a block
+        scalar authors — serialized as a block literal.
+        """
+        workflow_text = (
+            "stages:\n"
+            "  build:\n"
+            "    gates:\n"
+            "      - name: checks\n"
+            "        script:\n"
+            "          - pytest ./\n"
+            "          - ruff check .\n"
+        )
+        _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
+
+        build_stage = next(stage for stage in flow_doc.stages if stage.id == "build")
+        verify = build_stage.fields["verify"]
+
+        assert verify.steps[0].run == "pytest ./\nruff check ."
+        assert "    run: |-\n      pytest ./\n      ruff check ." in text
+
     def test_ai_step_command_composed_from_agent_wrapper_path(self, tmp_path: Path) -> None:
         """An AI gate step composes the wrapper-path command and keeps its authored fields verbatim."""
         workflow_text = (

@@ -292,9 +292,16 @@ Annotations: |
   and serializes the field. Output-side only — `PipelineDocument` stays the
   faithful mirror of the source pipeline-file.
 
-  Stage script directives: before_script, script, after_script are string
-  stage-body directives translated to script_before, script, script_after (the
-  authoring keys are consumed, not passed through). A stage body that carries
+  Stage script directives: before_script, script, after_script are string or
+  string-list stage-body directives translated to script_before, script,
+  script_after (the authoring keys are consumed, not passed through). A
+  payload is either a string (carried verbatim) or the script's lines — a
+  non-empty list of non-empty strings joined with newlines into ONE
+  multi-line string (shell-identical to authoring the same text as a block
+  scalar; the output field is always a string). Any other value is a
+  structural error "before_script|script|after_script must be a string or a
+  non-empty list of non-empty strings in stage <name>" — the message names
+  the AUTHORED key. A stage body that carries
   script together with prompt and/or skills is a structural error "script is
   mutually exclusive with prompt/skills in stage <name>"; a body carrying
   script together with a verbatim command key (not pipeline vocabulary — it
@@ -410,7 +417,9 @@ Annotations: |
 
   Gates compilation: the cell compiles a stage's authored check steps into the
   engine's stage-completion gate — the verify field of the flow-file. The
-  translation is one-directional into the engine vocabulary: script → run,
+  translation is one-directional into the engine vocabulary: script → run
+  (a list-form script payload arrives from the parser already joined with
+  newlines into one multi-line string),
   agent → command (the authored agent name composed into the in-container
   wrapper path /home/goga/bin/<agent>-as-claude.sh — composed directly, no
   host-side resolution, no agent-name existence checks), patience →
@@ -774,7 +783,9 @@ Annotations: |
               trigger is manual — the value is always False; auto_run: true
               is never assembled. script_before/script/script_after (str)
               are present only when the corresponding stage directive was
-              authored; script_timeout (str) is present only when the
+              authored — a list payload arrives already joined with newlines
+              into one multi-line string (the output field is always a
+              string); script_timeout (str) is present only when the
               corresponding directive was authored. reflect (map of file +
               mode) is present only when the block is emitted and the
               stage's reflect instruction is effective — the authored file
@@ -1097,8 +1108,9 @@ Annotations: |
     `serialize_flow`.
 
     `name`: the check's dashboard label — the authored name verbatim
-    `run`: the shell command of a shell step (from the authored script),
-           or None
+    `run`: the shell command of a shell step (from the authored script — a
+           list-form payload arrives already joined with newlines into one
+           multi-line string), or None
     `command`: the launch command of an AI step — the authored agent name
                composed into the in-container wrapper path
                /home/goga/bin/<agent>-as-claude.sh, or None
@@ -1962,7 +1974,14 @@ Annotations: |
        - Stage script directives: translate present body keys
          before_script → script_before, script → script, after_script →
          script_after (the authoring keys are consumed, not passed through
-         to output)
+         to output). Validate each translated value in the same pass: a
+         string passes verbatim; a non-empty list of non-empty strings
+         joins with newlines into ONE multi-line string (the script's
+         lines); anything else raises a structural error "before_script|
+         script|after_script must be a string or a non-empty list of
+         non-empty strings in stage <name>" naming the AUTHORED key — the
+         check runs AFTER the script exclusivity check and BEFORE the
+         timeout directive of the same pass
        - Stage timeout directives: validate and translate the timeout key of the
          (effective) body of every stage (pipeline-file stages, embedded
          extend-stages, and every loop-expanded copy) in the same pass as the
@@ -2063,7 +2082,9 @@ Annotations: |
          auto_approve (bool) is present only when the effective approve
          directive drives the roles effect ("auto"/"dialog") + planner-in-roles
          fired; script_before / script / script_after / script_timeout (str)
-         are present only when the corresponding stage directive was authored.
+         are present only when the corresponding stage directive was authored
+         (a list-form script payload is already joined into one multi-line
+         string — the output field is always a string).
          Stage-body field translation: the input communication key
          maps to the output interactive key in its canonical slot; an input
          interactive key (pipeline-file stage OR embedded extend-stage) is a

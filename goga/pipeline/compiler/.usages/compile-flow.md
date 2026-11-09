@@ -156,8 +156,26 @@ from the body — the compiler joins them. PipelineDocument is unaffected
 
 ## Stage script directives
 
-before_script, script, after_script are string stage-body directives that
-translate (word-order reversal) to script_before, script, script_after.
+before_script, script, after_script are stage-body directives that translate
+(word-order reversal) to script_before, script, script_after. Each payload is
+a string or the script's lines — a list:
+
+```yaml
+build:
+  title: Build
+  before_script: [echo prep1, echo prep2]
+  script:
+    - pytest ./
+    - ruff check .
+```
+
+- a string payload passes verbatim
+- a non-empty list of non-empty strings joins with newlines into ONE
+  multi-line string — shell-identical to authoring the same text as a block
+  scalar; the serializer emits the multi-line result as a block literal
+- any other value → structural error "before_script|script|after_script must
+  be a string or a non-empty list of non-empty strings in stage <name>"
+  (the message names the authored key)
 
 Structural error: a stage body that carries script together with prompt
 and/or skills is rejected at compile time — "script is mutually exclusive with

@@ -31,14 +31,16 @@ A list of check steps; an empty list equals absence. Each step is a mapping:
 | Key | Type | Required | Note |
 |-----|------|----------|------|
 | `name` | str | yes | the dashboard label; required — the step numbering fallback is never relied on |
-| `script` | str, non-empty | xor `agent` | a shell check step |
-| `agent` | str, non-empty | xor `script` | an AI-review step; the same agent-name vocabulary as the per-stage agent override |
+| `script` | str, non-empty — or a non-empty list of non-empty strings | xor `agent` | a shell check step; a list is the script's lines, joined with newlines into one multi-line script (shell-identical to authoring the same text as a block scalar) |
+| `agent` | str, non-empty | xor `script` | an AI-review step; the same agent-name vocabulary as the per-stage agent override — a single string, never a list |
 | `timeout` | str | no | carried verbatim; the duration grammar is engine-owned |
 | `prompt` | str | no | the review instruction of an AI step — agent steps only (forbidden on a `script` step) |
 | `env` | map str→str | no | environment variables for the step — valid on BOTH step kinds; an empty map equals absence |
 
 Exactly one of `script`/`agent` per step — both or neither is a structural
-error. The steps compile in authored order.
+error. The steps compile in authored order. A list-form `script` payload is
+joined at parse time — the model carries one multi-line string, and the
+compiled `run` payload is the same either way.
 
 A step's `env` never reaches the flow-file as an emitted field (the engine's
 verify-step schema has no `env`) — the pipeline run coordination delivers it
@@ -82,6 +84,18 @@ stages:
         timeout: 30m
 ```
 
+A multi-command check authors as the script's lines — a list:
+
+```yaml
+stages:
+  build:
+    gates:
+      - name: checks
+        script:
+          - pytest ./
+          - ruff check .
+```
+
 ## Structural errors (parse time)
 
 - "non-mapping gates block in workflow" — a scalar/list settings value
@@ -93,7 +107,8 @@ stages:
 - "unknown key in workflow.stages.NAME.gates[i]: KEY; valid keys: name, script, agent, timeout, prompt, env"
 - "gates step without name in workflow.stages.NAME.gates[i]"
 - "gates step must carry exactly one of script/agent in workflow.stages.NAME.gates[i]"
-- "script must be a non-empty string in workflow.stages.NAME.gates[i]" (and the agent counterpart)
+- "script must be a non-empty string in workflow.stages.NAME.gates[i]" (and the agent counterpart — an agent alias is a single string)
+- "script must be a non-empty list of non-empty strings in workflow.stages.NAME.gates[i]" — a list-form script payload that is empty or carries a non-str/empty element
 - "prompt is forbidden on a script gate step in workflow.stages.NAME.gates[i]" — prompt belongs to AI steps
 - "non-mapping env in workflow.stages.NAME.gates[i]" / "non-str key in
   workflow.stages.NAME.gates[i].env" / "non-str value in

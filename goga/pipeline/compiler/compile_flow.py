@@ -53,7 +53,10 @@ logger = logging.getLogger(__name__)
 # assembled; afm pauses such a stage until a manual launch). The author
 # script directives (``before_script``/``script``/``after_script``) are translated
 # to ``script_before``/``script``/``script_after`` and slotted after ``skills``;
-# they appear only when authored, so flow-files without them compile byte-identically.
+# a list payload is the script's lines, joined with newlines into one
+# multi-line string (shell-identical to authoring the same text as a block
+# scalar); they appear only when authored, so flow-files without them compile
+# byte-identically.
 # ``script_timeout`` (str) sits immediately after ``script_after`` — the
 # translated form of the authoring ``timeout`` directive — and is likewise
 # present only when authored (or directly authored under its output name).
@@ -461,6 +464,51 @@ def _reject_conflicting_stage_action(body: dict[str, Any], stage_name: str) -> N
         raise StructuralError(f"script is mutually exclusive with command in stage {stage_name}")
 
 
+# The authored name of each translated script-directive output key — the
+# structural error names what the author wrote, not the translation target.
+_SCRIPT_DIRECTIVE_AUTHORED_KEYS = {
+    "script_before": "before_script",
+    "script": "script",
+    "script_after": "after_script",
+}
+
+
+def _normalize_script_directives(body: dict[str, Any], stage_name: str) -> None:
+    """Validate the translated script directive values and join list payloads in place.
+
+    Args:
+        body: The REBUILT body dict (authoring keys already translated to
+            ``script_before``/``script``/``script_after``) — mutated in place
+            by the assignment; a list payload is replaced with its
+            newline-joined string.
+        stage_name: The stage id (used in the structural error message — for
+            loop-expanded copies this is ``NAME-i``).
+
+    Raises:
+        StructuralError: When a script directive value is neither a ``str``
+            (carried verbatim) nor a non-empty list of non-empty strings
+            (joined with newlines — shell-identical to authoring the same
+            text as a block scalar). The message names the AUTHORED key.
+    """
+    for output_key, authored_key in _SCRIPT_DIRECTIVE_AUTHORED_KEYS.items():
+        if output_key not in body:
+            continue
+
+        value = body[output_key]
+
+        if isinstance(value, list):
+            if not value or not all(isinstance(line, str) and line for line in value):
+                raise StructuralError(
+                    f"{authored_key} must be a string or a non-empty list of non-empty strings in stage {stage_name}",
+                )
+
+            body[output_key] = "\n".join(value)
+        elif not isinstance(value, str):
+            raise StructuralError(
+                f"{authored_key} must be a string or a non-empty list of non-empty strings in stage {stage_name}",
+            )
+
+
 def _canonical_fields(  # noqa: PLR0913, PLR0917 — the six companion parameters are the step-5 assembly contract
     body: dict[str, Any],
     stage_name: str,
@@ -478,7 +526,9 @@ def _canonical_fields(  # noqa: PLR0913, PLR0917 — the six companion parameter
             (or the single ``["auto"]`` default), ``communication`` →
             ``interactive``, ``trigger: manual`` → ``auto_run: false``,
             ``timeout`` → ``script_timeout``, ``before_script``/``script``/
-            ``after_script`` → ``script_before``/``script``/``script_after`` —
+            ``after_script`` → ``script_before``/``script``/``script_after``
+            (a list payload joined with newlines into one multi-line
+            string) —
             and never reach the output as unknown keys; the sentinel is read
             (not popped) and dropped. In a body carrying ``script`` no
             ``agents`` key is assembled at all (afm rejects the combination).
@@ -544,7 +594,10 @@ def _canonical_fields(  # noqa: PLR0913, PLR0917 — the six companion parameter
             closed set ``on_success``/``manual`` (a ``None`` value counts as
             absent). Or if
             ``body`` carries ``script`` together with ``prompt`` and/or ``skills``
-            — they are mutually exclusive. Or if ``body`` carries a present
+            — they are mutually exclusive. Or if a script directive value
+            (``before_script``/``script``/``after_script``) is neither a
+            ``str`` nor a non-empty list of non-empty strings. Or if ``body``
+            carries a present
             non-string ``timeout`` value, or a ``timeout`` without ``script``
             in the same body (``script_timeout`` scopes to the script action).
     """
@@ -591,6 +644,12 @@ def _canonical_fields(  # noqa: PLR0913, PLR0917 — the six companion parameter
     # translated ``script`` key, so it fires whether ``script`` was authored
     # directly or — it cannot be — derived).
     _reject_conflicting_stage_action(body, stage_name)
+
+    # The script directive payloads — a list value is the script's lines,
+    # joined with newlines into one multi-line string; any other non-str
+    # value is a structural error naming the authored key (see
+    # ``_normalize_script_directives``).
+    _normalize_script_directives(body, stage_name)
 
     # The stage timeout directive — validated and translated by the same pass
     # as script exclusivity (non-string → requires-script → assign; see
@@ -2145,7 +2204,10 @@ def compile_flow(
             ``parse_dsl``), on an empty body, on a workflow repeat block over
             a non-repeatable pipeline header (the step-4.0 cross-check —
             fired BEFORE every reconstruction error), on a legacy ``agents``
-            key in a stage body, on an authoring ``interactive``/``auto_run``
+            key in a stage body, on a script directive value
+            (``before_script``/``script``/``after_script``) that is neither a
+            ``str`` nor a non-empty list of non-empty strings, on an
+            authoring ``interactive``/``auto_run``
             key in a stage body (the authoring-side fields are
             ``communication``/``trigger``), on an authoring
             ``reflect``/``memory_use`` key in a stage body (the memory stage

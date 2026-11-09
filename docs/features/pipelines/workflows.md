@@ -772,8 +772,8 @@ Each check step is a mapping with up to six keys:
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
 | `name` | string | yes | The step's dashboard label — required on every step. |
-| `script` | non-empty string | xor `agent` | A shell check step. |
-| `agent` | non-empty string | xor `script` | An AI-review step — the same agent-name vocabulary as the per-stage `agent` override. |
+| `script` | non-empty string, or a non-empty list of non-empty strings | xor `agent` | A shell check step. A list is the script's lines, joined with newlines into one multi-line script — identical in shell semantics to writing the same lines as a block scalar. |
+| `agent` | non-empty string | xor `script` | An AI-review step — the same agent-name vocabulary as the per-stage `agent` override. A single string, never a list. |
 | `timeout` | string | no | Carried verbatim; the duration grammar is engine-owned. |
 | `prompt` | string | no | The review instruction of an AI step — forbidden on a `script` step (`prompt is forbidden on a script gate step in workflow.stages.<NAME>.gates[<i>]`). |
 | `env` | map of string → string | no | Environment variables of the step — valid on both step kinds; an empty map equals absence. |
@@ -782,12 +782,30 @@ A shell step without an authored `timeout` carries the materialized default
 `1h`; an AI step materializes no timeout default. The `1h` is a goga-side
 product default, not an engine contract.
 
+A multi-command check authors as the script's lines — a list, joined with
+newlines into one multi-line script at parse time:
+
+```yaml
+stages:
+  build:
+    gates:
+      - name: checks
+        script:
+          - pytest ./
+          - ruff check .
+```
+
 Rules:
 
 - **Exactly one of `script`/`agent` per step.** Both or neither is a
   structural error (`gates step must carry exactly one of script/agent in
   workflow.stages.<NAME>.gates[<i>]`); a missing `name` raises `gates step
-  without name in workflow.stages.<NAME>.gates[<i>]`.
+  without name in workflow.stages.<NAME>.gates[<i>]`. A scalar `script`/`agent`
+  defect raises `script must be a non-empty string in
+  workflow.stages.<NAME>.gates[<i>]` (and the `agent` counterpart); a list-form
+  `script` that is empty or carries a non-string/empty element raises `script
+  must be a non-empty list of non-empty strings in
+  workflow.stages.<NAME>.gates[<i>]`.
 - **Empty equals absence.** An empty settings block (`gates: {}`) and an
   empty step list (`gates: []`) are treated as absent keys.
 - **The settings block alone is inert.** A workflow consisting of the

@@ -212,9 +212,11 @@ def parse_workflow(text: str) -> WorkflowDocument:
             ``int >= 0``, or a non-bool ``fresh_correction``), a per-stage
             ``gates`` list is malformed (a non-list value, a non-mapping
             step, an unknown step key, a missing or non-str ``name``, a step
-            carrying both or neither of ``script``/``agent``, a
-            ``script``/``agent`` that is not a non-empty string, a non-str
-            ``timeout``/``prompt``, or a ``prompt`` on a script step),
+            carrying both or neither of ``script``/``agent``, an ``agent``
+            that is not a non-empty string, a ``script`` that is neither a
+            non-empty string nor a non-empty list of non-empty strings, a
+            non-str ``timeout``/``prompt``, or a ``prompt`` on a script
+            step),
             or the workflow provides neither a top-level
             prompt, any stage entry, any extend entry, the memory block, the
             profile key, the build block, the assistants block, nor the
@@ -620,16 +622,20 @@ def _validate_gate_step(name: Any, index: int, step: Any) -> WorkflowGateStep:
     Returns:
         The validated :class:`WorkflowGateStep` — exactly one of
         ``script``/``agent`` carries the authored payload (the other stays
-        ``None``), ``prompt`` is ``None`` on every script step, and ``env``
-        is ``None`` on every step without an authored non-empty map.
+        ``None``), a list-form ``script`` payload is joined with newlines
+        into one multi-line script string, ``prompt`` is ``None`` on every
+        script step, and ``env`` is ``None`` on every step without an
+        authored non-empty map.
 
     Raises:
         WorkflowSyntaxError: If the step is not a mapping, carries an unknown
             key, omits ``name`` or carries a non-str one, carries both or
             neither of ``script``/``agent``, carries a non-empty-string
-            ``script``/``agent``, carries a non-str ``timeout``/``prompt``,
-            authors ``prompt`` on a script step, or carries a malformed
-            ``env`` map (non-mapping, a non-str key, a non-str value).
+            ``agent``, carries a ``script`` that is neither a non-empty
+            string nor a non-empty list of non-empty strings, carries a
+            non-str ``timeout``/``prompt``, authors ``prompt`` on a script
+            step, or carries a malformed ``env`` map (non-mapping, a non-str
+            key, a non-str value).
     """
     scope = f"workflow.stages.{name}.gates[{index}]"
 
@@ -649,9 +655,10 @@ def _validate_gate_step(name: Any, index: int, step: Any) -> WorkflowGateStep:
 
     # Exactly one of the two is authored (the exclusivity check above); the
     # payload validator owns the non-empty-string message with the authored
-    # key landing verbatim in it.
+    # key landing verbatim in it. Only ``script`` accepts the list-of-lines
+    # form — an agent alias is a single string.
     if "script" in step:
-        script = _validate_gate_step_payload(scope, "script", step["script"])
+        script = _validate_gate_step_payload(scope, "script", step["script"], allow_lines=True)
         agent = None
     else:
         script = None
@@ -694,7 +701,7 @@ def _reject_unknown_gate_step_keys(scope: str, step: dict[str, Any]) -> None:
             raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {', '.join(_GATE_STEP_KEYS)}")
 
 
-def _validate_gate_step_payload(scope: str, key: str, field_value: Any) -> str:
+def _validate_gate_step_payload(scope: str, key: str, field_value: Any, *, allow_lines: bool = False) -> str:
     """Validate one gate step's ``script``/``agent`` payload and return it.
 
     Args:
@@ -702,15 +709,28 @@ def _validate_gate_step_payload(scope: str, key: str, field_value: Any) -> str:
         key: The payload field name (``"script"`` or ``"agent"``) — lands
             verbatim in the error message.
         field_value: The raw payload value.
+        allow_lines: Whether the list-of-lines form is accepted (the
+            ``script`` shell payload only — an ``agent`` alias is a single
+            string, never a list).
 
     Returns:
-        The validated non-empty ``str``.
+        The validated non-empty ``str`` — a list payload joined with
+        newlines into one multi-line script (shell-identical to authoring
+        the same text as a block scalar).
 
     Raises:
         WorkflowSyntaxError: If ``field_value`` is not a ``str``, or is an
             empty ``str`` (an authored ``null`` included — the exclusivity
-            check has already passed, so the key IS authored).
+            check has already passed, so the key IS authored). With
+            ``allow_lines``, a list that is empty or carries a non-str or
+            empty element raises the list-form message.
     """
+    if allow_lines and isinstance(field_value, list):
+        if not field_value or not all(isinstance(line, str) and line for line in field_value):
+            raise WorkflowSyntaxError(f"{key} must be a non-empty list of non-empty strings in {scope}")
+
+        return "\n".join(field_value)
+
     if not isinstance(field_value, str) or not field_value:
         raise WorkflowSyntaxError(f"{key} must be a non-empty string in {scope}")
 

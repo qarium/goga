@@ -163,12 +163,18 @@ Annotations: |
   per-stage check-step list in the stages block. This cell validates both
   surfaces structurally (key sets, types, value bounds, step forms, the
   script/agent exclusivity, the required step name, the prompt-to-AI-step
-  binding, the step env string-map form) and extracts them into the
+  binding, the script list-of-lines form, the step env string-map form) and
+  extracts them into the
   document model. The top-level block carries authored values only — an empty
   block equals absence, and a workflow consisting of the block alone is valid.
   A per-stage value is a list of check steps — an empty list equals absence;
   every step carries a required name and exactly one of script (a shell check)
   and agent (an AI review), and prompt belongs to an AI review step only. A
+  script payload is a non-empty string or a non-empty list of non-empty
+  strings — a list is the script's lines, joined with newlines into ONE
+  multi-line string on the model (shell-identical to authoring the same text
+  as a block scalar; the model field stays str). An agent alias is a single
+  string — the list form is a structural error. A
   step may additionally carry env — a str→str map valid on BOTH step kinds
   (an empty map equals absence); the pipeline run coordination's gate wrapper
   generation consumes it (the stage-env delivery precedent), NOT the compiler.
@@ -690,9 +696,12 @@ Annotations: |
     inside `WorkflowStage`.
 
     `name`: the check's dashboard label — required on every step
-    `script`: the shell command of a shell check step, or None
+    `script`: the shell command of a shell check step, or None — a list-form
+              authored payload arrives already joined with newlines into ONE
+              multi-line string (the model carries no list form)
     `agent`: the agent name of an AI-review step, or None — the same name
-             vocabulary as the per-stage agent override
+             vocabulary as the per-stage agent override; a single string,
+             never a list
     `timeout`: the authored timeout value, carried verbatim, or None when
                not authored
     `prompt`: the review instruction of an AI step, carried verbatim, or
@@ -725,9 +734,10 @@ Annotations: |
     "name -> str": |
       The check's dashboard label; required on every authored step.
     "script -> str | None": |
-      The shell command of a shell check step, or None.
+      The shell command of a shell check step, or None. A list-form authored
+      payload is joined with newlines into one multi-line string at parse.
     "agent -> str | None": |
-      The agent name of an AI-review step, or None.
+      The agent name of an AI-review step, or None — a single string.
     "timeout -> str | None": |
       The authored timeout value, carried verbatim, or None when not
       authored.
@@ -1007,9 +1017,16 @@ Annotations: |
            - exactly one of script/agent is required: both or neither
              raises "gates step must carry exactly one of script/agent in
              workflow.stages.NAME.gates[i]"
-           - script/agent must be a non-empty string; otherwise raise
-             "script must be a non-empty string in
-             workflow.stages.NAME.gates[i]" (and the agent counterpart)
+           - agent must be a non-empty string; otherwise raise "agent must
+             be a non-empty string in workflow.stages.NAME.gates[i]". script
+             must be a non-empty string or a non-empty list of non-empty
+             strings — a scalar outside that raises "script must be a
+             non-empty string in workflow.stages.NAME.gates[i]"; a list that
+             is empty or carries a non-str or empty element raises "script
+             must be a non-empty list of non-empty strings in
+             workflow.stages.NAME.gates[i]". A list payload joins with
+             newlines into ONE multi-line script string (shell-identical to
+             authoring the same text as a block scalar)
            - timeout/prompt (when present) must be a str; otherwise
              raise "non-str value in
              workflow.stages.NAME.gates[i].timeout" / ".prompt"

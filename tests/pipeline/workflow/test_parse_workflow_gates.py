@@ -5,8 +5,10 @@ the optional top-level ``gates`` settings block (``patience``/
 ``max_iterations`` non-negative ints — bools are non-ints —, a bool
 ``fresh_correction``, authored keys only, the empty block equals absence),
 the per-stage ``gates`` check-step list (a required ``name``, exactly one of
-``script``/``agent``, optional ``timeout``/``prompt`` with ``prompt``
-forbidden on a script step, the empty list equals absence), the
+``script``/``agent`` — a ``script`` payload is a non-empty string or a
+non-empty list of non-empty strings joined with newlines into one script,
+an ``agent`` alias a single string —, optional ``timeout``/``prompt`` with
+``prompt`` forbidden on a script step, the empty list equals absence), the
 extend-entry prohibition, and the gates-only workflow validity (the block
 counts as content). The contract class pins the surface; the logic classes
 exercise every documented message verbatim.
@@ -90,6 +92,43 @@ class TestParseWorkflowGatesContract:
         assert document.gates.max_iterations == 0
         assert document.gates.patience is not None
         assert document.gates.max_iterations is not None
+
+    def test_step_list_script_joined_into_one_multiline_string(self) -> None:
+        """A list-form ``script`` payload joins with newlines into one script string.
+
+        Each element is one line of the shell check — shell-identical to
+        authoring the same text as a block scalar. The step keeps the plain
+        ``str`` type (the model carries no list form).
+        """
+        document = parse_workflow(
+            "stages:\n"
+            "  a:\n"
+            "    gates:\n"
+            "      - name: checks\n"
+            "        script:\n"
+            "          - pytest -q\n"
+            "          - ruff check .\n",
+        )
+
+        step = document.stages["a"].gates[0]
+
+        assert isinstance(step.script, str)
+        assert step.script == "pytest -q\nruff check ."
+        assert step.agent is None
+
+    def test_step_single_element_list_script_joins_to_the_element(self) -> None:
+        """A one-element list joins to the element itself — no newline is invented."""
+        document = parse_workflow("stages:\n  a:\n    gates: [{name: x, script: [pytest -q]}]\n")
+
+        assert document.stages["a"].gates[0].script == "pytest -q"
+
+    def test_step_agent_list_stays_a_structural_error(self) -> None:
+        """An ``agent`` alias is a single string — the list form is rejected with the scalar message."""
+        with pytest.raises(
+            WorkflowSyntaxError,
+            match=re.escape("agent must be a non-empty string in workflow.stages.a.gates[0]"),
+        ):
+            parse_workflow("stages:\n  a:\n    gates: [{name: x, agent: [codex]}]\n")
 
     def test_step_env_carried_on_both_step_kinds_in_authored_order(self) -> None:
         """A step env map parses onto script and agent steps alike, in authored order."""
@@ -188,6 +227,18 @@ class TestParseWorkflowGatesRejections:
             (
                 'stages: {a: {gates: [{name: x, script: ""}]}}\n',
                 "script must be a non-empty string in workflow.stages.a.gates[0]",
+            ),
+            (
+                "stages: {a: {gates: [{name: x, script: []}]}}\n",
+                "script must be a non-empty list of non-empty strings in workflow.stages.a.gates[0]",
+            ),
+            (
+                "stages: {a: {gates: [{name: x, script: [pytest, '']}]}}\n",
+                "script must be a non-empty list of non-empty strings in workflow.stages.a.gates[0]",
+            ),
+            (
+                "stages: {a: {gates: [{name: x, script: [pytest, 2]}]}}\n",
+                "script must be a non-empty list of non-empty strings in workflow.stages.a.gates[0]",
             ),
             (
                 'stages: {a: {gates: [{name: x, agent: ""}]}}\n',

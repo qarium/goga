@@ -687,7 +687,9 @@ class TestCompileFlowScriptDirectives:
 
     The authoring keys are consumed and translated to the output
     ``script_before``/``script``/``script_after`` keys (never passed through as
-    unknown keys). ``script`` is mutually exclusive with ``prompt``/``skills``
+    unknown keys). Each payload is a string or a list of strings — a list is
+    the script's lines, joined with newlines into one multi-line string.
+    ``script`` is mutually exclusive with ``prompt``/``skills``
     and with a verbatim ``command`` key (a ``StructuralError`` naming the
     stage); ``before_script``/``after_script`` are compatible with
     ``script``/``prompt``/``skills``.
@@ -885,6 +887,129 @@ class TestCompileFlowScriptDirectives:
         by_id = {stage.id: stage.fields for stage in flow_doc.stages}
         assert "agents" not in by_id["b"]
         assert "agents" in by_id["a"]
+
+    def test_compile_script_directives_list_payloads_joined(self, tmp_path: Path) -> None:
+        """A list payload of a script directive is the script's lines, joined with newlines.
+
+        Each list element becomes one line of the compiled ``script_*``
+        string — shell-identical to authoring the same text as a block
+        scalar. A one-element list joins to a single line (no newline), so
+        the serializer keeps the plain scalar form.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n"
+            "a:\n"
+            "  title: A\n"
+            "  before_script:\n    - echo prep\n    - echo prep2\n"
+            "  script:\n    - pytest ./\n    - ruff check .\n"
+            "  after_script:\n    - echo done\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["script_before"] == "echo prep\necho prep2"
+        assert fields["script"] == "pytest ./\nruff check ."
+        assert fields["script_after"] == "echo done"
+
+        text = flow_path.read_text()
+        # Multi-line payloads serialize as block-literal scalars.
+        assert "  script: |-\n    pytest ./\n    ruff check ." in text
+        assert "  script_before: |-\n    echo prep\n    echo prep2" in text
+        # A single-line payload stays a plain scalar.
+        assert "  script_after: echo done" in text
+
+    def test_compile_single_element_list_script_stays_single_line(self, tmp_path: Path) -> None:
+        """A one-element list joins to the element itself — no newline is invented."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\na:\n  title: A\n  script:\n    - run\n")
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        assert flow_doc.stages[0].fields["script"] == "run"
+
+    def test_compile_phases_list_script_joined(self, tmp_path: Path) -> None:
+        """A PHASES-format phase body carries the same list-payload form.
+
+        Both body formats assemble through ``_canonical_fields``, so the
+        join covers a phase body identically.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n"
+            "- name: a\n"
+            "  title: A\n"
+            "  script:\n    - pytest ./\n    - ruff check .\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        assert flow_doc.stages[0].fields["script"] == "pytest ./\nruff check ."
+
+    def test_compile_workflow_extend_list_script_joined(self, tmp_path: Path) -> None:
+        """An extend-stage body carries the same list-payload form.
+
+        Extend bodies assemble through the same ``_canonical_fields`` path,
+        so a list ``script`` of a new stage joins identically.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\na:\n  title: A\n  prompt: p\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "extend:\n"
+            "  b:\n"
+            "    after:\n"
+            "      - a\n"
+            "    title: B\n"
+            "    script:\n"
+            "      - pytest ./\n"
+            "      - ruff check .\n",
+        )
+        workflow = parse_workflow(workflow_path.read_text())
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        by_id = {stage.id: stage.fields for stage in flow_doc.stages}
+        assert by_id["b"]["script"] == "pytest ./\nruff check ."
+
+    @pytest.mark.parametrize(
+        ("directive", "value_yaml", "label"),
+        [
+            ("script", "[]", "empty list"),
+            ("script", "[run, '']", "empty element"),
+            ("script", "[run, 2]", "non-str element"),
+            ("script", "42", "non-str scalar"),
+            ("before_script", "5", "before_script non-str"),
+            ("after_script", "[x, 3]", "after_script list defect"),
+        ],
+    )
+    def test_compile_script_directive_bad_payload_raises(
+        self,
+        tmp_path: Path,
+        directive: str,
+        value_yaml: str,
+        label: str,
+    ) -> None:
+        """A malformed script directive payload is a structural error naming the authored key.
+
+        The message names what the author wrote (``before_script``/
+        ``script``/``after_script``), never the translated output key, and
+        names the stage.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(f"name: T\ndescription: T\n---\n\na:\n  title: A\n  {directive}: {value_yaml}\n")
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(
+            StructuralError,
+            match=rf"{directive} must be a string or a non-empty list of non-empty strings in stage a",
+        ):
+            compile_flow(pipeline_path, flow_path)
 
     def test_compile_no_approve_baseline_byte_identical(self, tmp_path: Path) -> None:
         """A pipeline-file without approve/script directives compiles byte-identically.
