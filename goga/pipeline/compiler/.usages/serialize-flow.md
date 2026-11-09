@@ -8,7 +8,7 @@ flow-style agents, block-style skills/depends_on/top-level prompt).
 
 interactive, auto_approve, auto_run, command, prompt, description, buttons, agents,
 supervisor, supervisor_prompt, skills, script_before, script, script_after,
-script_timeout, reflect, memory_use, assistants, <unknown A-Z>.
+script_timeout, reflect, memory_use, assistants, verify, <unknown A-Z>.
 
 The serializer does NOT reorder — canonical order is fixed at `FlowStage`
 assembly (`compile_flow`); `serialize_flow` iterates `fields` as-is.
@@ -43,6 +43,18 @@ assembly (`compile_flow`); `serialize_flow` iterates `fields` as-is.
   otherwise a block-style mapping, key order max_cycles, keep_runs; plain
   scalars; present keys only
 - empty list values (e.g. explicit empty depends_on) written explicitly
+
+## Stage `verify` emission
+
+- List form (no authored settings): the verify value IS the steps list.
+- Container form (any authored setting): a block mapping — `steps` first,
+  then the authored settings in the fixed order `max_failures`,
+  `review_patience`, `fresh_correction` (present keys only, plain scalars).
+- Each step: key order `name`, `run`|`command`, `timeout`, `prompt`;
+  single-line values as plain scalars, multi-line as block-literal
+  (script-family pattern).
+- A stage without a gate carries no `verify` key — byte-identical output
+  for gate-free workflows.
 
 ## Key presence
 

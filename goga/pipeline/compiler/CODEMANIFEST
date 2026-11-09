@@ -8,10 +8,13 @@ Imports:
       - WorkflowAssistant
       - WorkflowDelegation
       - WorkflowRepeat
+      - WorkflowGates
+      - WorkflowGateStep
     Usages:
       - parse-workflow
       - memory
       - assistants
+      - gates
     From: goga/pipeline/workflow
 
 Usages:
@@ -87,7 +90,8 @@ Annotations: |
   Canonical `FlowStage` fields key order: interactive, auto_approve, auto_run,
   command, prompt, description, buttons, agents, supervisor, supervisor_prompt,
   skills, script_before, script, script_after, script_timeout, reflect,
-  memory_use, assistants, then alphabetically-sorted unknown keys. command is populated
+  memory_use, assistants, verify, then alphabetically-sorted unknown keys.
+  command is populated
   from the agent
   field of `WorkflowStage` (composed as /home/goga/bin/AGENT-as-claude.sh);
   description is populated from the prompt field of `WorkflowStage`. Both
@@ -394,6 +398,52 @@ Annotations: |
   Use `assistants` for the authoring vocabulary of the consumed workflow
   instructions.
 
+  Gates compilation: the cell compiles a stage's authored check steps into the
+  engine's stage-completion gate — the verify field of the flow-file. The
+  translation is one-directional into the engine vocabulary: script → run,
+  agent → command (the authored agent name composed into the in-container
+  wrapper path /home/goga/bin/<agent>-as-claude.sh — composed directly, no
+  host-side resolution, no agent-name existence checks), patience →
+  review_patience, max_iterations → max_failures, fresh_correction unchanged;
+  name, prompt, and an authored timeout pass verbatim. A shell step without an
+  authored timeout carries the materialized "1h"; an AI step materializes no
+  timeout default — a goga-side product default, not an engine contract. When
+  the workflow-level gates settings block authored any key, every gated
+  stage's verify is the container form (the steps plus the authored settings,
+  authored keys only — no materialized settings); with no settings block
+  authored, a gated stage carries the steps alone (the list form). The
+  settings ride only on gated stages: ungated stages and the engine
+  configuration layers are never touched, and the settings block without
+  per-stage steps is inert. The verify key occupies the canonical fields slot
+  after assistants; inside the emitted block: steps, then the settings in the
+  fixed order max_failures, review_patience, fresh_correction; inside a step:
+  name, then run/command, then timeout, prompt. Use `afm` for the emitted
+  verify contract; use `gates` for the authoring vocabulary of the consumed
+  instructions.
+
+  Gates cross-reference checks run here, over the working body after skip
+  removal: gates on a stage compiling to a script stage (its body carries
+  script) and gates on a planning-only stage (translated agents exactly
+  ["planning"]) are strict pre-run errors naming the stage — the engine
+  rejects both, and this cell surfaces them with its own messages. An
+  authoring gates key and a raw verify key in a stage body (pipeline-file
+  stage or embedded extend-stage body) are strict compile errors directing
+  the author to workflow.stages — verify is a compiled-only key, authored
+  exclusively through the workflow stages block. The checks run once on the
+  original — every loop-expanded copy carries the same gate without
+  revalidation; the gates of a skipped stage drop silently (skip removal runs
+  first).
+
+  This cell performs NO engine-interplay validation — no cross-field checks
+  of engine constraints (the failure budget vs the patience value, the
+  effective ceiling) — and never interprets, counts, or re-implements gate
+  execution: sequencing, fail-fast, full-list re-runs, retry budgets, verdict
+  parsing, and waiver are engine behavior. The flow-file is the single
+  delivery channel — this cell writes no engine configuration for gates. A
+  gate-free workflow compiles byte-identically: no verify key anywhere, no
+  other key affected; the pipeline-file and the input representation are
+  never modified by gates authoring.
+
 ---
 
 "BodyFormat()":
@@ -691,7 +741,7 @@ Annotations: |
               auto_approve, auto_run, command, prompt, description, buttons,
               agents, supervisor, supervisor_prompt, skills, script_before,
               script, script_after, script_timeout, reflect, memory_use,
-              assistants, then alphabetically-sorted unknown keys).
+              assistants, verify, then alphabetically-sorted unknown keys).
               buttons (map of str→str) is present only when the workflow
               supplied a non-empty notes instruction for the stage — the map
               passes through verbatim.
@@ -711,6 +761,9 @@ Annotations: |
               stage of a memory-free workflow carries neither key.
               assistants (list) is present only when the stage carries at
               least one effective attachment — uniform across every
+              loop-expanded copy; a skipped stage carries none.
+              verify (a `FlowVerify` gate) is present only when the stage
+              carries authored check steps — uniform across every
               loop-expanded copy; a skipped stage carries none.
               Insertion order of
               this dict IS the output order — the
@@ -761,7 +814,7 @@ Annotations: |
       Extra fields in canonical key order: interactive, auto_approve,
       auto_run, command, prompt, description, buttons, agents, supervisor,
       supervisor_prompt, skills, script_before, script, script_after,
-      script_timeout, reflect, memory_use, assistants, then
+      script_timeout, reflect, memory_use, assistants, verify, then
       alphabetically-sorted unknown
       keys. buttons
       (map of str→str) is present only when the workflow supplied a
@@ -781,7 +834,10 @@ Annotations: |
       memory-free workflow carries neither key. assistants (list) is
       present only when the stage carries at least one effective
       attachment — uniform across every loop-expanded copy; a skipped
-      stage carries none. Insertion order IS the output order — the
+      stage carries none. verify (a `FlowVerify` gate) is present only
+      when the stage carries authored check steps — uniform across every
+      loop-expanded copy; a skipped stage carries none. Insertion order
+      IS the output order — the
       serializer iterates as-is. command/description from WorkflowStage;
       agents default-injected to ["auto"], absent entirely in a body
       carrying script; supervisor/supervisor_prompt only
@@ -1007,6 +1063,94 @@ Annotations: |
       required when the effective gate is true, advisory otherwise.
     "trigger -> str": |
       one_shot, checkpoints, on_completion, or on_message — mapped from when.
+
+"FlowVerifyStep(name: str, run: str | None = None, command: str | None = None, timeout: str | None = None, prompt: str | None = None)":
+  location: flow_verify_step.py
+  annotations: |
+    Emitted verify step — one check of a stage's completion gate. Built by
+    `compile_flow` from one authored check step; consumed by
+    `serialize_flow`.
+
+    `name`: the check's dashboard label — the authored name verbatim
+    `run`: the shell command of a shell step (from the authored script),
+           or None
+    `command`: the launch command of an AI step — the authored agent name
+               composed into the in-container wrapper path
+               /home/goga/bin/<agent>-as-claude.sh, or None
+    `timeout`: the step timeout — the authored value verbatim, or the
+               materialized "1h" on a shell step without an authored
+               timeout; None on an AI step without an authored timeout
+    `prompt`: the AI step's review instruction, carried verbatim, or None
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - Exactly one of `run`/`command` is not None — the step form mirrors
+      the authored exclusivity
+    - Field order is fixed: name, run, command, timeout, prompt — the
+      emission order of the step keys
+
+    Constraints:
+    - Do not decide here whether the timeout is materialized —
+      `compile_flow` applies the shell-step rule when building
+    - Do not interpret the step — execution semantics belong to the
+      engine (per `afm`)
+  properties:
+    "name -> str": |
+      The check's dashboard label; the authored name verbatim.
+    "run -> str | None": |
+      The shell command of a shell step, or None.
+    "command -> str | None": |
+      The AI step's launch command — the authored agent name composed
+      into the in-container wrapper path, or None.
+    "timeout -> str | None": |
+      The authored timeout verbatim, the materialized "1h" on a shell
+      step without one, or None on an AI step without one.
+    "prompt -> str | None": |
+      The AI step's review instruction, carried verbatim, or None.
+
+"FlowVerify(steps: list[FlowVerifyStep], max_failures: int | None = None, review_patience: int | None = None, fresh_correction: bool | None = None)":
+  location: flow_verify.py
+  annotations: |
+    Emitted stage completion gate — the compiled form of a stage's
+    authored check steps and, when the workflow-level settings block
+    authored any key, the authored retry settings under the engine
+    vocabulary. Built by `compile_flow`; carried in the stage fields;
+    consumed by `serialize_flow`.
+
+    `steps`: the compiled check steps in authored order
+    `max_failures`: the authored iteration bound (from max_iterations),
+                    or None when not authored
+    `review_patience`: the authored stalemate tolerance (from patience),
+                       or None when not authored
+    `fresh_correction`: the authored correction-session mode, or None
+                        when not authored
+
+    An instance carrying no authored setting IS the list emission form —
+    the serialization writes the steps alone; any authored setting
+    switches to the container form. This cell materializes no settings
+    defaults.
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - `steps` is required (no default); every setting defaults to None —
+      an authored zero is a value, not an omission
+    - Field order is fixed: steps, max_failures, review_patience,
+      fresh_correction — the emission order of the block keys
+
+    Constraints:
+    - Do not decide here whether the gate is emitted — `compile_flow`
+      decides on the authored check steps
+    - Do not interpret the settings or the steps — execution semantics
+      belong to the engine (per `afm`)
+  properties:
+    "steps -> list[FlowVerifyStep]": |
+      The compiled check steps in authored order.
+    "max_failures -> int | None": |
+      The authored iteration bound, or None when not authored.
+    "review_patience -> int | None": |
+      The authored stalemate tolerance, or None when not authored.
+    "fresh_correction -> bool | None": |
+      The authored correction-session mode, or None when not authored.
 
 "FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, repeat: FlowRepeat | None = None, memory: FlowMemory | None = None, collaboration: FlowCollaboration | None = None, team: list[FlowTeamMember] | None = None, stages: list[FlowStage])":
   location: flow_document.py
@@ -1261,7 +1405,8 @@ Annotations: |
        canonical order — interactive, auto_approve, auto_run, command,
        prompt, description, buttons, agents, supervisor, supervisor_prompt,
        skills, script_before, script, script_after, script_timeout, reflect,
-       memory_use, assistants, then alphabetically-sorted unknown keys), then depends_on
+       memory_use, assistants, verify, then alphabetically-sorted unknown
+       keys), then depends_on
        when it is not None. The serializer does NOT reorder — canonical
        order is fixed at `FlowStage` assembly. Stage memory keys: reflect —
        a block-style mapping of plain scalars (file, mode); memory_use — a
@@ -1272,7 +1417,16 @@ Annotations: |
        plain scalars; NO skills key on a stage entry — the engine
        strict-parses stages[].assistants and rejects unknown fields
        (skills travel only on a team member entry, and the team draws
-       from the catalog alone)
+       from the catalog alone). Stage verify: when the stage fields carry
+       the verify gate — an instance with no authored setting serializes
+       as the list form (the steps list is the verify value); an instance
+       with any authored setting serializes as the container form: a
+       block-style mapping with steps first, then the authored settings
+       in the fixed order max_failures, review_patience, fresh_correction
+       (present keys only, plain scalars); each step is a block-style
+       mapping, key order name, run|command, timeout, prompt;
+       run/command/timeout/prompt are plain scalars when single-line and
+       block-literal scalars when multi-line (the script-family pattern)
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
        flow-style applied to agents and block-style applied to skills,
        depends_on, and the top-level prompt; auto_approve and auto_run as
@@ -1296,7 +1450,7 @@ Annotations: |
       memory (when present), collaboration, team, stages), canonical
       per-stage key order (including auto_approve, auto_run, command,
       description, buttons, script_before/script/script_after/script_timeout,
-      reflect, memory_use, and assistants),
+      reflect, memory_use, assistants, and verify),
       flow-style for agents, block-style for skills and depends_on,
       auto_approve and auto_run as plain bool scalars, single trailing newline
     - a non-repeatable flow document serializes without the repeat key —
@@ -1329,6 +1483,10 @@ Annotations: |
     - A flow document without a team and without stage attachments
       serializes without those keys — byte-identical output except the
       always-present collaboration mode key
+    - A stage without a gate serializes without the verify key
+      (byte-identical output for gate-free workflows); the container form
+      is emitted only when a setting is authored; step scalar style follows
+      the script-family pattern
 
     Constraints:
     - Do not reorder keys — canonical order is fixed at assembly
@@ -1338,6 +1496,8 @@ Annotations: |
     - Do not reorder the new keys — the canonical order (collaboration
       between memory and team, team before stages, stage assistants after
       memory_use) is fixed at assembly
+    - Do not interpret the gate — the runtime behavior belongs to afm (per
+      `afm`)
 
 "compile_flow(pipeline_path: Path, flow_path: Path, workflow: WorkflowDocument | None = None, root_dir: str | None = None, project_name: str | None = None) -> documents: tuple[PipelineDocument, FlowDocument]":
   location: compile_flow.py
@@ -1697,6 +1857,23 @@ Annotations: |
            (the engine rejects it) and only catalog entries become team
            members (the sole skills channel); the warning replaces a
            silent drop and never adds an output-side key
+       4.11. Gates cross-reference checks (over the working body after skip
+           removal and loop expansion):
+           - authoring-key prohibitions (the same pass as the existing
+             authoring-key checks, pipeline-file stage OR embedded
+             extend-stage body): a `gates` key in a stage body raises a
+             structural error "gates key is forbidden in stage body; use
+             gates in workflow.stages"; a raw verify key in a stage body
+             raises a structural error "verify key is forbidden in stage
+             body; use gates in workflow.stages"
+           - for each stage of the working body whose effective gates list
+             is not None: a stage whose translated body carries script
+             raises a strict error naming the stage; a stage whose
+             translated agents value is exactly ["planning"] raises a
+             strict error naming the stage
+           - the checks run once per stage name on the original —
+             loop-expanded copies inherit the gate without revalidation;
+             the gates of a removed stage never reach the checks
     5. Build FlowStages from the (possibly reconstructed) body:
        - PHASES: for each `PhaseStep`, build a `FlowStage` with depends_on
          derived from list position (first step has none; each subsequent
@@ -1821,11 +1998,30 @@ Annotations: |
          extend-stage body) raises a structural error "assistants key is
          forbidden in stage body; use assistants in workflow.stages"
          (same pass as the other authoring-key prohibitions)
+       - Stage gates assembly: when a stage's effective gates list is not
+         None — build a `FlowVerify`:
+         * one `FlowVerifyStep` per authored `WorkflowGateStep` of the
+           stage's effective gates list, in authored order: script →
+           run with the timeout materialized to "1h" when not authored;
+           agent → command composed as
+           /home/goga/bin/<agent>-as-claude.sh (composed directly — no
+           host-side resolution, no agent-name existence check); name,
+           prompt, and an authored timeout carried verbatim; an AI
+           step materializes no timeout default
+         * the settings: when the `WorkflowGates` block of the workflow
+           document authored any key, carry the authored keys only,
+           translated (patience → review_patience, max_iterations →
+           max_failures, fresh_correction unchanged); with no settings
+           block authored, every setting stays None (the list form)
+         * assemble into the `FlowStage` fields canonical slot after
+           `assistants`; uniform across every loop-expanded copy;
+           output-side only — the source bodies and `PipelineDocument`
+           stay untouched
        - In both branches, assemble the fields of each `FlowStage` in the
          EXTENDED canonical key order (interactive, auto_approve, auto_run,
          command, prompt, description, buttons, agents, supervisor,
          supervisor_prompt, skills, script_before, script, script_after,
-         script_timeout, reflect, memory_use, assistants, then
+         script_timeout, reflect, memory_use, assistants, verify, then
          alphabetically-sorted unknown keys), copying
          from the (defaults-injected) step body.
          auto_approve (bool) is present only when the effective approve
@@ -2150,6 +2346,37 @@ Annotations: |
       after description and before memory
     - A non-repeatable pipeline compiles byte-identically — no repeat key
       anywhere
+    - Gates on a stage compiling to a script stage and on a planning-only
+      stage are strict pre-run errors naming the stage; the checks run over
+      the working body after skip removal, once on the original
+    - An authoring `gates` key and a raw verify key in a stage body
+      (pipeline-file stage or embedded extend-stage body) are strict compile
+      errors — verify is a compiled-only key; the accidental raw
+      passthrough is closed
+    - A shell step without an authored timeout materializes "1h"; an AI step
+      materializes no timeout default — a goga-side product default, not an
+      engine contract
+    - The settings ride only on gated stages and only when the top-level
+      block authored any key — authored keys only, no materialized settings;
+      the settings block without per-stage steps is inert (no verify key
+      anywhere, no error)
+    - Every loop-expanded copy carries the same gate; the gates of a skipped
+      stage drop silently
+    - The effective-override merge (step 4.5) passes the stages-block gates
+      explicitly — gates is a stages-block-only field (an extend-entry carries
+      none, and the extend-seeded virtual override carries None); a merge that
+      omitted it would silently drop the gate of a stage carrying BOTH an
+      extend-entry and a stages-block entry
+    - A gate-free workflow compiles byte-identically — no verify key
+      anywhere, no other key affected; the pipeline-file and
+      `PipelineDocument` stay untouched
+    - An AI step's command composition mirrors the per-stage agent override
+      composition — direct, no host-side resolution, no agent-name existence
+      checks
+    - A malformed timeout value and the name text pass verbatim
+      (engine-owned grammar)
+    - No cross-field validation of engine interplay constraints; no
+      interpretation of gate execution
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -2235,7 +2462,8 @@ Annotations: |
       order (interactive, auto_approve, auto_run, command, prompt,
       description, buttons, agents, supervisor, supervisor_prompt, skills,
       script_before, script, script_after, script_timeout, reflect,
-      memory_use, assistants, then alphabetically-sorted unknown keys)
+      memory_use, assistants, verify, then alphabetically-sorted unknown
+      keys)
     - Do not leak auto_approve or script_* into `PipelineDocument` — they
       are output-side `FlowStage` fields only
     - Do not emit auto_run: true — the afm contract treats the key's absence
@@ -2284,6 +2512,19 @@ Annotations: |
     - Do not count cycles, decide stop conditions, or prune run
       directories — engine semantics; the run stays a single engine
       invocation
+    - Do not validate the timeout duration grammar or the name text — the
+      engine reports value-format errors at load/preflight
+    - Do not cross-check engine constraints (the failure budget vs the
+      patience value, the effective ceiling) — the engine owns these
+    - Do not interpret, count, or re-implement gate execution — sequencing,
+      fail-fast, re-runs, retry budgets, verdict parsing, and waiver are
+      engine behavior
+    - Do not write any engine configuration for gates — the flow-file is the
+      single delivery channel
+    - Do not re-validate the gates authoring vocabulary — the workflow
+      parser rejected non-conforming authoring before compilation (per
+      `gates`)
+    - Do not leak the verify gate into `PipelineDocument` — output-side only
 
 "translate_role(role: str) -> name: str":
   location: compile_flow.py
@@ -2329,4 +2570,5 @@ Description: |
   optional prompt, root_dir, name, description, repeat, memory,
   collaboration, team, and stages). Optionally applies declarative
   workflow instructions to reconstruct the parsed body before
-  serialization.
+  serialization, and compiles the stage quality gates into the engine
+  verify field.

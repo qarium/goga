@@ -13,7 +13,7 @@ prompt, root_dir, name, description, repeat, memory, collaboration, team, stages
 Output FlowStage fields, canonical order:
 interactive, auto_approve, auto_run, command, prompt, description, buttons, agents, supervisor,
 supervisor_prompt, skills, script_before, script, script_after, script_timeout, reflect,
-memory_use, assistants, <unknown A-Z>.
+memory_use, assistants, verify, <unknown A-Z>.
 
 Authoring key → output key (the authoring key is consumed, not passed through):
 - communication → interactive (value true/false)
@@ -185,6 +185,37 @@ body) translated to the afm per-stage key `script_timeout`.
   `script_timeout` are authored, the translated `timeout` value wins
 - loop-expanded copies inherit `script_timeout` verbatim; `PipelineDocument`
   is unaffected (output-side only)
+
+## Gates compilation (`verify`)
+
+A stage carrying authored check steps compiles a stage-level completion
+gate — the engine `verify` field, in the canonical slot after `assistants`.
+
+Translation (authored → engine):
+
+| Authored | Emitted | Note |
+|----------|---------|------|
+| `script` | `run` | shell step; timeout materializes `1h` when not authored |
+| `agent` | `command` | `/home/goga/bin/<agent>-as-claude.sh` — composed directly, no existence checks |
+| `patience` | `review_patience` | settings, authored keys only |
+| `max_iterations` | `max_failures` | settings, authored keys only |
+| `fresh_correction` | `fresh_correction` | unchanged |
+| `name`/`prompt`/authored `timeout` | same | verbatim |
+
+- No workflow-level settings block → the gate is the steps alone (list
+  form); any authored setting key → the container form (steps + settings).
+  The settings block without per-stage steps is inert.
+- Steps compile in authored order; every loop-expanded copy carries the
+  same gate; a skipped stage emits nothing.
+- Pre-run strict errors (naming the stage): gates on a stage whose body
+  carries `script`; gates on a planning-only stage (translated agents
+  exactly `["planning"]`); an authoring `gates` or raw `verify` key in a
+  stage body — `verify` is compiled-only, authored through
+  `workflow.stages`.
+- Value grammar (durations, name text) passes verbatim — the engine
+  reports malformed values at preflight. goga performs no cross-field
+  checks of engine constraints and never executes or interprets the gate.
+- A gate-free workflow compiles byte-identically.
 
 ## Collaboration emission
 

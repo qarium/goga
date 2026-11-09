@@ -272,9 +272,9 @@ Annotations: |
       Buffer one declarative contribution of this tool.
 
       `document`: the complete contribution — a `WorkflowDocument`-shaped
-                  set of instructions (prompt, stages, extend, memory)
-                  using the same vocabulary an authored workflow-file
-                  uses
+                  set of instructions (prompt, stages, extend, memory,
+                  assistants, delegation, repeat, gates) using the same
+                  vocabulary an authored workflow-file uses
 
       Requirements:
       - The call buffers into the buffer of this tool alone and changes
@@ -282,8 +282,8 @@ Annotations: |
       - The replacement is whole — a later call replaces the earlier
         buffered document
       - A document with no prompt, no stages, no extend, no memory, no
-        assistants, no delegation, and no repeat is an empty contribution —
-        the delivery discards it with a warning
+        assistants, no delegation, no repeat, and no gates block is an
+        empty contribution — the delivery discards it with a warning
 
       Constraints:
       - Do not cancel, redirect, or defer the operation — a
@@ -347,6 +347,9 @@ Annotations: |
     4c. repeat: keep the authored block when present — it is unbeatable;
         otherwise the block of the later contributing tool wins; no
         field-level merging
+    4d. gates (settings block): keep the authored block when present — it
+        is unbeatable; otherwise the block of the later contributing tool
+        wins; no field-level merging
     5. skip is an ordinary stage field: an authored skip — from the
        workflow-file or the merged runner skip — is unbeatable; an
        unset skip takes a contributing skip; skip=False overrides
@@ -359,6 +362,10 @@ Annotations: |
         anywhere in the merged assistant namespace dropped silently the
         same way; a stage with no authored entry takes the appended
         contributing entries the same way
+    5b. stage gates: an ordinary stage field of the field-set-complete
+        stage merge — an authored check-step list is never overwritten; a
+        field the author left unset takes the value of the later
+        contributing tool that sets it
     6. extend: keep the authored entries; a contribution entry under an
        authored name is not applied; among contributing tools the later
        entry wins per name
@@ -368,9 +375,10 @@ Annotations: |
        base is None and no contribution committed; the final document
        assembly carries the profile and build fields of `base` verbatim
        (exactly as memory survives the rebuild), the assistants field of
-       the base together with the appended contributing entries, and the
-       effective repeat — workflow-level instructions never vanish in the
-       overlay
+       the base together with the appended contributing entries, the
+       effective repeat, and the effective gates settings block riding
+       the rebuilt document verbatim — workflow-level instructions never
+       vanish in the overlay
 
     Requirements:
     - Pure — the inputs stay unmutated; the result is a new document
@@ -395,6 +403,10 @@ Annotations: |
       effective repeat block rides the rebuild verbatim — a rebuild that
       drops it would silently recompile an authored cycle bound as the
       scalar default on tool-amended runs
+    - The rebuilt `WorkflowDocument` preserves the gates instructions — the
+      settings block whole and every stage's authored check-step list; a
+      rebuild that drops them would silently strip stage quality checks
+      from tool-amended runs
     - The override is field-presence based: an authored None means
       "not authored" (the base value flows), an authored empty
       skills/env means "clear" (the base value is replaced with the
@@ -412,6 +424,9 @@ Annotations: |
     - Do not mutate `base`, the contributions, or their maps
     - Do not interpret the repeat block — cycle semantics belong to the
       consumer and the engine; the merge carries the value whole
+    - Do not interpret, validate, or rebuild the gates values — the block
+      and the per-stage lists are carried whole; the merge unit is the
+      field/block
     - Do not merge content fields partially — prompt
       and skills replace whole (no text concatenation, no list union); the
       field unit is the merge unit
@@ -690,10 +705,10 @@ Annotations: |
          naming the tool and the action stops the command at the first
          failure; the tool's contribution is discarded
       5. A tool whose buffered document is empty — no prompt, no
-         stages, no extend, no memory, no assistants, no delegation, and
-         no repeat — is a content no-op: a warning naming the tool, the
-         action, and the reason, the contribution discarded, the walk
-         continues
+         stages, no extend, no memory, no assistants, no delegation, no
+         repeat, and no gates block — is a content no-op: a warning
+         naming the tool, the action, and the reason, the contribution
+         discarded, the walk continues
       6. Merge the committed contributions onto `workflow` via
          `merge_workflow_overlay` and return the overlay
 

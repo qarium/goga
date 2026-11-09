@@ -1307,7 +1307,10 @@ Annotations: |
        own attachments are never checked or emitted), but the
        document-wide assistant namespace reads every stage entry, so the
        stage's inline declarations stay resolvable for other stages'
-       references — the same carry an authored skip: true keeps
+       references — the same carry an authored skip: true keeps. The
+       replacement carries NO gates — the compiler removes the skipped
+       stage before the gates walk, and gates declare no document-wide
+       namespace other stages reference
     4. Return a NEW `WorkflowDocument`: prompt = the prompt of `workflow` when
        `workflow` is not None else None; stages = the new map; extend = a copy
        of the extend map of `workflow` when `workflow` is not None else the
@@ -1318,7 +1321,9 @@ Annotations: |
        = the assistants field of the workflow when it is not None else the
        default empty map; delegation = the delegation field of the workflow
        when it is not None else None; repeat = the repeat field of
-       `workflow` when `workflow` is not None else None — carried verbatim.
+       `workflow` when `workflow` is not None else None — carried verbatim;
+       gates = the gates field of `workflow` when it is not None else None
+       — carried verbatim.
        The input `workflow` and its maps are NOT mutated
 
     Requirements:
@@ -1340,6 +1345,13 @@ Annotations: |
       them would silently disable memory participation, change activation,
       lose build instructions, lose collaboration, or recompile an authored
       cycle bound as the scalar default for skip-driven runs
+    - The gates settings block of the input workflow survives the rebuild
+      verbatim — a rebuild that drops it would strip the retry tuning from
+      every remaining gated stage of a skip-driven run
+    - The skip-replacement `WorkflowStage` carries no gates — the skipped
+      stage's checks drop silently downstream
+    - When `workflow` is None and `skip_stages` is non-empty — the
+      constructed `WorkflowDocument` carries gates None
     - Stage-name validation is NOT performed here — the compiler's strict check
       raises a structural error on a name absent from the pipeline body; this
       routine stays declarative
@@ -1353,6 +1365,8 @@ Annotations: |
     - Do not mutate the input `workflow` object or its maps
     - Do not interpret, validate, or rebuild the memory configuration — it is
       carried as an opaque value (per `memory`)
+    - Do not interpret, validate, or rebuild the gates values — the block
+      is carried as an opaque value, whole
 
 "apply_stage_env_wrappers(stages: list[FlowStage], workflow: WorkflowDocument | None, global_agent: str | None, flow_path: Path) -> stages: list[FlowStage]":
   location: stage_env_wrappers.py
