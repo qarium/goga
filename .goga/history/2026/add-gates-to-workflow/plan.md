@@ -846,12 +846,12 @@ skip-merged run keeps the settings block for its remaining gated stages").
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create test file `tests/integration/test_gates_end_to_end.py`
-- [ ] Test cross-entity interaction — amended run compiles with gates: a gates-only tool contribution → `PipelineHooks.amend_workflow` → `merge_workflow_overlay` → `compile_flow` on a `tmp_path` STAGES pipeline whose stage is gated by the contribution's stage entry; assert the emitted flow carries the `verify` block with the contributed settings (container form when the settings block authored a key)
-- [ ] Test cross-entity interaction — skip-driven run: `WorkflowDocument` with a settings block, one gated stage and one `skip` stage → `apply_skip_stages` → `compile_flow`; assert the remaining gated stage carries `verify` with the settings, the skipped stage is absent from the flow and carries no gate, and no error fires
-- [ ] Test edge case — loop copies through the full chain: a gated `loop: 2` stage parsed, skip-merged (nothing skipped), amended with an authored settings block, then compiled; assert both expanded ids carry the same `verify` (the design's uniformity invariant)
-- [ ] Run validation: `python3 -m pytest tests/integration/test_gates_end_to_end.py -v` — all pass
-- [ ] Lint: `python3 -m ruff check tests/` + `python3 -m ruff format --check tests/integration/test_gates_end_to_end.py`
+- [x] Create test file `tests/integration/test_gates_end_to_end.py`
+- [x] Test cross-entity interaction — amended run compiles with gates: a gates-only tool contribution → `PipelineHooks.amend_workflow` → `merge_workflow_overlay` → `compile_flow` on a `tmp_path` STAGES pipeline whose stage is gated by the contribution's stage entry; assert the emitted flow carries the `verify` block with the contributed settings (container form when the settings block authored a key)
+- [x] Test cross-entity interaction — skip-driven run: `WorkflowDocument` with a settings block, one gated stage and one `skip` stage → `apply_skip_stages` → `compile_flow`; assert the remaining gated stage carries `verify` with the settings, the skipped stage is absent from the flow and carries no gate, and no error fires
+- [x] Test edge case — loop copies through the full chain: a gated `loop: 2` stage parsed, skip-merged (nothing skipped), amended with an authored settings block, then compiled; assert both expanded ids carry the same `verify` (the design's uniformity invariant)
+- [x] Run validation: `python3 -m pytest tests/integration/test_gates_end_to_end.py -v` — all pass
+- [x] Lint: `python3 -m ruff check tests/` + `python3 -m ruff format --check tests/integration/test_gates_end_to_end.py`
 
 ### Task 10: Documentation riders — user-facing gates section and afm fact base (infrastructure)
 
