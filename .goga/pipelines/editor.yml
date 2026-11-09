@@ -8,13 +8,12 @@ repeatable: true
   title: "Make changes by request"
   communication: true
   prompt: |
-    Perform user tasks, after you complete a task, do not stop - wait for the next one.
+    Perform user tasks, after you complete a task, do not stop - wait for the next task from user.
 
     Requirements:
     - Always plan any changes and analyze them against the frontier
       boundaries (limits of applicability, system constraints, and edge cases).
     - If you see inconsistencies, ask the user how to resolve them.
-    - Delegate the task execution to subagent.
 
     Constrains:
     - Don't commit changes
