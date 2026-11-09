@@ -62,13 +62,22 @@ following the absolute-executable-path convention; the wrapper:
    strictly before launch, naming the stage.
 
 **A script stage** (a pipeline stage whose body authors `script` — the
-stage's action; the compiler emits no agent command beside it) carries
-its payload in the `script:` field; the wrapper:
+stage's action) carries its payload in the `script:` field; the wrapper:
 
 1. exports the stage's env values (above every global env layer),
 2. carries the authored script lines as-is — the same shell, working
    directory, and exit status the engine gives the authored value (the
    gate script-step closure shape).
+
+A stage's action is ONE — an agent stage or a script stage. A workflow
+`agent` instruction (stages block or extend entry) on a stage whose body
+authors `script`, or a `command` key authored verbatim beside `script`
+in a stage body, is a strict compile error naming the stage: the agent
+instruction compiles into the `command:` field, and a stage carrying
+`command` beside `script` has no defined engine precedence. The bookend
+directives are not the action and stay compatible with both forms:
+`before_script`/`after_script` ride an agent stage (around its agent
+invocation) and a script stage alike.
 
 A script stage resolves no agent at all — no stage, extend-entry, or
 global agent is required for its env delivery. The patch rewrites the

@@ -201,7 +201,11 @@ Annotations: |
   not found here can only be an intentionally skipped one (removed at (4)),
   so the lookup is SILENT; unknown names are errors at (3). The agent
   override FALLS BACK to an extend-entry's inline agent, and a skills merge
-  is applied;
+  is applied. An agent instruction (stages-block or extend-entry inline)
+  targeting a stage whose body authors script is a structural error
+  "agent is forbidden on a script stage in workflow.<name>: <agent>" —
+  the stage action is one, the agent exec target or the script, and the
+  composed command must never ride the flow-file beside a script;
   (6) loop-expansion producing N copies with ids NAME-1..N and chain-style
   internal depends_on, expanding extend-stages when the effective loop for
   that name is >= 2 (stages-block loop OR the extend-entry's inline loop);
@@ -292,8 +296,14 @@ Annotations: |
   stage-body directives translated to script_before, script, script_after (the
   authoring keys are consumed, not passed through). A stage body that carries
   script together with prompt and/or skills is a structural error "script is
-  mutually exclusive with prompt/skills in stage <name>"; before_script /
-  after_script are compatible with prompt / skills / script (no error).
+  mutually exclusive with prompt/skills in stage <name>"; a body carrying
+  script together with a verbatim command key (not pipeline vocabulary — it
+  rides the unknown-key passthrough) is a structural error "script is
+  mutually exclusive with command in stage <name>" — the same exclusivity
+  the per-stage override pass enforces for a workflow agent instruction on
+  a script body. before_script / after_script are compatible with
+  prompt / skills / script and with an agent stage's composed command (no
+  error) — they are the invocation's shell bookends, not the action.
 
   Stage timeout directive: timeout is a string stage-body directive (pipeline-file
   stage AND embedded extend-stage) translated to script_timeout of the assembled
@@ -1720,7 +1730,12 @@ Annotations: |
                 provides it (not None), else the extend-entry's inline
                 agent when this step originated from an extend-entry
                 carrying one, else leave the step's existing command
-                unchanged. When the effective agent is not None — assign the
+                unchanged. When the effective agent is not None and the
+                step body authors script — raise the structural error
+                "agent is forbidden on a script stage in workflow.<name>:
+                <agent>" (the stage action is one, the agent exec target
+                or the script; a composed command never rides the
+                flow-file beside a script). Otherwise assign the
                 wrapper path /home/goga/bin/<agent>-as-claude.sh to the
                 command slot of the step body (the wrapper path is composed
                 directly — do NOT call any host-side wrapper resolver)
@@ -1904,6 +1919,12 @@ Annotations: |
          skills — raise a structural error "script is mutually exclusive with
          prompt/skills in stage <name>" (every stage, incl. loop-expanded
          copies; same pass as the agents/interactive-forbidden checks).
+         if the (effective) body carries script together with command (a key
+         authored verbatim in a stage body or an extend-stage body — it is
+         not pipeline vocabulary but rides the unknown-key passthrough) —
+         raise a structural error "script is mutually exclusive with command
+         in stage <name>" (the workflow agent-instruction path already
+         errored at 4.5 with its own message).
          before_script/after_script do NOT trigger the error
        - In both branches, BEFORE assembling fields, check the
          authoring-buttons prohibition: an authoring buttons key in a stage
@@ -2253,7 +2274,10 @@ Annotations: |
       across loop copies
     - script together with prompt and/or skills is a structural error
       "script is mutually exclusive with prompt/skills in stage <name>";
-      before_script/after_script are compatible (no error)
+      script together with command is a structural error "script is mutually
+      exclusive with command in stage <name>" (and a workflow agent
+      instruction on a script body errors at the override pass);
+      before_script/after_script are compatible with everything (no error)
     - auto_approve, buttons, script_before, script, and script_after appear
       only when their source directive is present; flow-files without those
       directives carry none of these keys

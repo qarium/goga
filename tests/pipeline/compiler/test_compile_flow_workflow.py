@@ -29,7 +29,7 @@ from goga.pipeline.compiler import (
     StructuralError,
     compile_flow,
 )
-from goga.pipeline.workflow import WorkflowDocument, WorkflowExtendStage, WorkflowStage
+from goga.pipeline.workflow import WorkflowDocument, WorkflowExtendStage, WorkflowStage, parse_workflow
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures" / "workflow"
 _FEATURE_PHASES = _FIXTURES / "phases.yml"
@@ -502,6 +502,72 @@ class TestCompileFlowWorkflowOverrideMatrix:
         fields = yaml.safe_load(flow_path.read_text())["stages"][0]
         assert fields["description"] == "only-prompt"
         assert "command" not in fields
+
+
+class TestCompileFlowAgentScriptExclusivity:
+    """A stage's action is one — an agent instruction or a script body.
+
+    A workflow ``agent`` instruction (stages block or extend entry) on a stage
+    whose body authors ``script`` raises ``StructuralError`` naming the stage
+    and the agent: the composed ``command`` would ride the flow-file beside
+    the ``script`` with no defined engine precedence. ``before_script``/
+    ``after_script`` stay compatible with an agent stage — they are the
+    invocation's shell bookends, not the action.
+    """
+
+    def test_workflow_agent_on_script_body_raises(self, tmp_path: Path) -> None:
+        """A stages-block ``agent`` instruction on a script body is rejected."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\nbuild:\n  title: Build\n  script: run\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"build": WorkflowStage(agent="codex")})
+
+        with pytest.raises(
+            StructuralError,
+            match=r"agent is forbidden on a script stage in workflow.build: codex",
+        ):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+    def test_workflow_extend_agent_on_script_body_raises(self, tmp_path: Path) -> None:
+        """An extend entry carrying ``agent`` beside its own ``script`` body is rejected."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\na:\n  title: A\n  prompt: p\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow_text = "extend:\n  b:\n    after:\n      - a\n    title: B\n    agent: codex\n    script: run\n"
+        workflow = parse_workflow(workflow_text)
+
+        with pytest.raises(
+            StructuralError,
+            match=r"agent is forbidden on a script stage in workflow.b: codex",
+        ):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+    def test_workflow_agent_with_before_after_script_compiles(self, tmp_path: Path) -> None:
+        """An agent stage carries ``script_before``/``script_after`` beside its ``command``.
+
+        The exclusivity targets the ACTION (``script`` vs the agent's
+        ``command``); the bookend scripts run around the agent invocation and
+        stay legal on an agent stage.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: p\n"
+            "  before_script: prep\n"
+            "  after_script: cleanup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"build": WorkflowStage(agent="codex")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert fields["script_before"] == "prep"
+        assert fields["script_after"] == "cleanup"
+        assert "script" not in fields
 
 
 def _write_stages_propose_review(tmp_path: Path) -> Path:

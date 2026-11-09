@@ -227,8 +227,9 @@ def _render_payload_closure(env: dict[str, str], script: str) -> str:
         env: The stage's authored env map — exported VERBATIM (no engine-key
             dropping; per-stage layers sit above all global layers).
         script: The stage's authored script — the compiled ``script`` field
-            value (the stage's action; the compiler assembles no ``command``
-            beside it).
+            value (the stage's action; the compiler rejects an agent
+            instruction or a verbatim ``command`` key on a script body, so
+            no command rides beside it).
 
     Returns:
         The script text: the shebang, one ``export`` line per entry (values
@@ -475,8 +476,10 @@ def apply_stage_env_wrappers(
     suffix); each claimed stage receives one sh closure wrapper under a
     container-local temp directory exporting its env values verbatim. The
     delivery form follows the claimed stage's own compiled fields: a script
-    stage (a stage carrying a ``script`` field — the stage's action, with no
-    agent command) receives a payload closure carrying the authored script
+    stage (a stage carrying a ``script`` field — the stage's action; the
+    compiler rejects an agent instruction or a verbatim ``command`` key on a
+    script body, so a script claim never carries a command) receives a
+    payload closure carrying the authored script
     lines as-is and its ``script`` field in the ALREADY WRITTEN flow-file is
     patched to point at the wrapper; every other stage receives an exec
     closure over the resolved agent wrapper and its ``command`` field is

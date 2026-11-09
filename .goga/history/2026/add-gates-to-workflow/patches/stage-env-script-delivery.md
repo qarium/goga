@@ -76,9 +76,11 @@ test); env-free runs keep byte-identical flow output; agent-stage claims
 behave exactly as before. Two behavior changes, both corrections of
 previously broken states, were approved in the plan: a script stage with
 env no longer receives an inserted agent `command` (and no longer fails
-strictly without an agent), and the rare workflow-`agent`-override-on-
-script-body combination now wraps the script (the stage action) instead of
-the composed command.
+strictly without an agent), and the workflow-`agent`-override-on-
+script-body combination is rejected at compile time (see the acceptance
+addendum — the delivery initially wrapped the script instead of the
+composed command; acceptance replaced that with a strict authoring
+error).
 
 ## Risks
 
@@ -95,3 +97,45 @@ the composed command.
 - goga/pipeline/.usages/per-stage-env.md
 - tests/pipeline/test_stage_env_wrappers_logic.py
 - .goga/history/2026/add-gates-to-workflow/patches/stage-env-script-delivery.md (this report)
+
+## Acceptance addendum
+
+The acceptance audit (Requirements & coverage audit stage) confirmed the
+triple consistency of the delivery change (lint/schema/contract clean,
+1954 pipeline-suite tests green) and flagged one WARNING: the
+workflow-`agent`-override-on-`script`-body combination — the compiler
+composed a `command` beside the authored `script` and the new
+classification silently let the script claim win, leaving both fields in
+the flow-file with no defined engine precedence. The delivery wrapped the
+script and left the composed `command` untouched, but nothing pinned the
+combination and no doc stated the precedence rule.
+
+Approved fix (user decision): prohibit the combination instead of
+documenting it. A stage's action is one — an agent stage (`agent`
+instruction → `command`) or a script stage (`script`). Two compile-time
+checks enforce it:
+
+- `compile_flow` override pass — a workflow `agent` instruction (stages
+  block or extend entry) on a body authoring `script` raises
+  `StructuralError` ("agent is forbidden on a script stage in
+  workflow.<name>: <agent>");
+- step-5 canonical assembly — a `script` body carrying a verbatim
+  `command` key (unknown-key passthrough; `command` is not pipeline
+  vocabulary) raises `StructuralError` ("script is mutually exclusive
+  with command in stage <name>"), symmetric with the existing
+  script/prompt/skills exclusivity and the gates script-XOR-agent rule.
+
+`before_script`/`after_script`/`timeout` are unaffected — they are the
+invocation's bookends, not the action, and stay compatible with both
+forms (pinned by a new compiler test). The env delivery itself is
+unchanged; the classification in `apply_stage_env_wrappers` remains as
+defense-in-depth. No in-repo workflow or fixture authored the
+combination (verified by a full-repo scan), so the prohibition breaks
+nothing.
+
+Files touched by the addendum: goga/pipeline/compiler/compile_flow.py,
+goga/pipeline/compiler/CODEMANIFEST, goga/pipeline/CODEMANIFEST,
+goga/pipeline/stage_env_wrappers.py (docstrings),
+goga/pipeline/.usages/per-stage-env.md,
+tests/pipeline/compiler/test_compile_flow.py,
+tests/pipeline/compiler/test_compile_flow_workflow.py.

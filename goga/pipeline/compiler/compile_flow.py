@@ -435,6 +435,32 @@ def _assemble_verify(source: dict[str, Any], verify: FlowVerify | None) -> None:
         source["verify"] = verify
 
 
+def _reject_conflicting_stage_action(body: dict[str, Any], stage_name: str) -> None:
+    """Reject a stage body whose script action conflicts with another action slot.
+
+    Args:
+        body: The translated step body (the ``script_before``/``script``/
+            ``script_after`` output keys; ``prompt``/``skills``/``command`` as
+            carried).
+        stage_name: The stage id (used in the error messages — for
+            loop-expanded copies this is ``NAME-i``).
+
+    Raises:
+        StructuralError: When the body carries ``script`` together with
+            ``prompt``/``skills`` (the script action has no prompt surface),
+            or together with ``command`` — the stage action is one, the agent
+            exec target or the script. A ``command`` key authored verbatim in
+            a stage body rides the unknown-key passthrough (it is not
+            pipeline vocabulary); the workflow agent-instruction path is
+            rejected at the 4a override pass with its own message.
+    """
+    if "script" in body and ("prompt" in body or "skills" in body):
+        raise StructuralError(f"script is mutually exclusive with prompt/skills in stage {stage_name}")
+
+    if "script" in body and "command" in body:
+        raise StructuralError(f"script is mutually exclusive with command in stage {stage_name}")
+
+
 def _canonical_fields(  # noqa: PLR0913, PLR0917 — the six companion parameters are the step-5 assembly contract
     body: dict[str, Any],
     stage_name: str,
@@ -559,12 +585,12 @@ def _canonical_fields(  # noqa: PLR0913, PLR0917 — the six companion parameter
         if key not in (_APPROVE_SENTINEL, "trigger", "timeout")
     }
 
-    # ``script`` is mutually exclusive with ``prompt`` and ``skills``;
-    # ``before_script``/``after_script`` are compatible (checked against the
+    # ``script`` is mutually exclusive with ``prompt``/``skills`` and with
+    # ``command`` — the stage action is one. ``before_script``/
+    # ``after_script`` are compatible with everything (checked against the
     # translated ``script`` key, so it fires whether ``script`` was authored
     # directly or — it cannot be — derived).
-    if "script" in body and ("prompt" in body or "skills" in body):
-        raise StructuralError(f"script is mutually exclusive with prompt/skills in stage {stage_name}")
+    _reject_conflicting_stage_action(body, stage_name)
 
     # The stage timeout directive — validated and translated by the same pass
     # as script exclusivity (non-string → requires-script → assign; see
@@ -1425,6 +1451,26 @@ def _merge_skills(
     return merged if merged else None
 
 
+def _compose_agent_command(body: dict[str, Any], name: str, agent: str) -> None:
+    """Compose one stage's agent override into the working body's ``command`` slot.
+
+    Args:
+        body: The working step body (mutated in place on success).
+        name: The stage name — the authoring site, used in the error message.
+        agent: The effective agent id.
+
+    Raises:
+        StructuralError: When the body authors ``script`` — the stage's
+            action is the script, and the composed ``command`` would ride the
+            flow-file beside it with no defined engine precedence (same
+            exclusivity family as ``_reject_conflicting_stage_action``).
+    """
+    if "script" in body:
+        raise StructuralError(f"agent is forbidden on a script stage in workflow.{name}: {agent}")
+
+    body["command"] = _WRAPPER_PATH_TEMPLATE.format(agent=agent)
+
+
 def _apply_per_stage_overrides(
     steps: list[PhaseStep | StageStep],
     effective: dict[str, WorkflowStage],
@@ -1443,8 +1489,12 @@ def _apply_per_stage_overrides(
             ``True`` forces manual, ``False`` cancels it, ``None`` leaves it.
 
     Raises:
-        StructuralError: When a ``manual: false`` entry targets a stage whose
-            working body carries no ``trigger: manual`` (nothing to cancel).
+        StructuralError: When an ``agent`` instruction targets a stage whose
+            body authors ``script`` (the stage's action is the script — the
+            composed ``command`` would ride the flow-file beside it with no
+            defined engine precedence), or when a ``manual: false`` entry
+            targets a stage whose working body carries no ``trigger: manual``
+            (nothing to cancel).
     """
     steps_by_name = {step.name: step for step in steps}
 
@@ -1456,7 +1506,10 @@ def _apply_per_stage_overrides(
             # silent, intentional skip. No warning.
             continue
         if stage.agent is not None:
-            step.body["command"] = _WRAPPER_PATH_TEMPLATE.format(agent=stage.agent)
+            # An agent instruction composes the body's exec target; a script
+            # body's action IS its script — the two are mutually exclusive
+            # (see ``_compose_agent_command``).
+            _compose_agent_command(step.body, name, stage.agent)
         if stage.prompt is not None:
             step.body["description"] = stage.prompt
 

@@ -688,8 +688,9 @@ class TestCompileFlowScriptDirectives:
     The authoring keys are consumed and translated to the output
     ``script_before``/``script``/``script_after`` keys (never passed through as
     unknown keys). ``script`` is mutually exclusive with ``prompt``/``skills``
-    (a ``StructuralError`` naming the stage); ``before_script``/``after_script``
-    are compatible with ``script``/``prompt``/``skills``.
+    and with a verbatim ``command`` key (a ``StructuralError`` naming the
+    stage); ``before_script``/``after_script`` are compatible with
+    ``script``/``prompt``/``skills``.
     """
 
     def test_compile_script_directives_translated(self, tmp_path: Path) -> None:
@@ -750,6 +751,26 @@ class TestCompileFlowScriptDirectives:
         with pytest.raises(
             StructuralError,
             match=r"script is mutually exclusive with prompt/skills in stage a",
+        ):
+            compile_flow(pipeline_path, flow_path)
+
+    def test_compile_script_mutually_exclusive_with_command(self, tmp_path: Path) -> None:
+        """``script`` + a verbatim ``command`` key raises ``StructuralError`` naming the stage.
+
+        ``command`` is not pipeline vocabulary, but ``parse_dsl`` passes
+        unknown keys through — the authored pair would compile into a stage
+        carrying both fields with no defined engine precedence. The stage
+        action is one: the agent exec target or the script.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  script: run\n  command: /bin/ls\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(
+            StructuralError,
+            match=r"script is mutually exclusive with command in stage a",
         ):
             compile_flow(pipeline_path, flow_path)
 

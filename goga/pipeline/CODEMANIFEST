@@ -1386,7 +1386,9 @@ Annotations: |
     flow-file, and return a new stage list where those stages' fields
     point at their wrappers. The delivery form follows the claimed
     stage's own compiled fields: a script stage (carrying a script
-    field — the stage's action, with no agent command) receives a
+    field — the stage's action; the compiler rejects an agent
+    instruction or a verbatim command key on a script body, so a
+    script claim never carries a command) receives a
     payload closure carrying the authored script lines as-is and its
     script field is patched; every other stage receives an exec closure
     over the resolved agent wrapper and its command field is patched
@@ -1418,8 +1420,9 @@ Annotations: |
        receives its own wrapper carrying the same env values
     2. Classify every selected stage by its own compiled fields: a
        stage carrying a script field is a script claim (the stage's
-       action — the compiler assembles no command beside it); every
-       other stage is an agent claim
+       action — the compiler rejects an agent instruction or a
+       verbatim command key on a script body, so no command rides
+       beside the script); every other stage is an agent claim
     3. Per agent claim, resolve the exec target with the compiler's
        agent precedence: the stage agent's wrapper, else the
        extend-entry agent's wrapper of the same workflow stage name
