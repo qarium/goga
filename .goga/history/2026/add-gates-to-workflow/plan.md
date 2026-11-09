@@ -880,13 +880,13 @@ commit.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Run the full suite: `python3 -m pytest tests/ -x` — all pass
-- [ ] Lint the project: `python3 -m ruff check goga/ tests/` — zero errors
-- [ ] Format-check the touched files: `python3 -m ruff format --check` over every file created or modified by Tasks 1–9 — clean
-- [ ] Facade check: `python3 -c "from goga.pipeline.workflow import WorkflowGateStep, WorkflowGates; from goga.pipeline.compiler import FlowVerify, FlowVerifyStep"`
-- [ ] Byte-identical guard: `python3 -m pytest tests/pipeline/compiler/test_compile_flow_gates.py::test_gate_free_workflow_compiles_byte_identically -v` — green
-- [ ] `goga lint` — passes
-- [ ] Confirm `CODEMANIFEST` files untouched (`git diff --stat` shows no CODEMANIFEST path) and the unrelated `goga/assets/afm/skin/goga.css` working-tree change is left alone
+- [x] Run the full suite: `python3 -m pytest tests/ -x` — all pass (8200 passed, 8 skipped)
+- [x] Lint the project: `python3 -m ruff check goga/ tests/` — zero errors (all checks passed)
+- [x] Format-check the touched files: `python3 -m ruff format --check` over every file created or modified by Tasks 1–9 — clean (42 files already formatted)
+- [x] Facade check: `python3 -c "from goga.pipeline.workflow import WorkflowGateStep, WorkflowGates; from goga.pipeline.compiler import FlowVerify, FlowVerifyStep"` — imports succeed
+- [x] Byte-identical guard: `python3 -m pytest tests/pipeline/compiler/test_compile_flow_gates.py::TestCompileFlowGatesEdge::test_gate_free_workflow_compiles_byte_identically -v` — green (PASSED)
+- [x] `goga lint` — passes (cells: 92, errors: 0)
+- [x] Confirm `CODEMANIFEST` files untouched (`git diff --stat` shows no CODEMANIFEST path) and the unrelated `goga/assets/afm/skin/goga.css` working-tree change is left alone (no CODEMANIFEST path in the working tree or the branch diff; css file clean and absent from the branch diff)
 
 ---
 
@@ -905,17 +905,17 @@ commit.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`workflow_gates.py`, `workflow_gate_step.py`, `flow_verify.py`, `flow_verify_step.py`; changed: `parse_workflow.py`, `workflow_stage.py`, `workflow_document.py`, `compile_flow.py`, `serialize_flow.py`, `overlay.py`, `events.py`, `amendments.py`, `apply_skip_stages.py`)
-- [ ] Every contract entity is accessible from the facade (`WorkflowGateStep`, `WorkflowGates` from `goga.pipeline.workflow`; `FlowVerify`, `FlowVerifyStep` from `goga.pipeline.compiler`)
-- [ ] Properties and methods match the declared API (field names, order, types, defaults)
-- [ ] Descriptions are reflected in behavior (validation surfaces, emission forms, merge semantics, carriage)
-- [ ] Contract dependencies are met (compiler imports the two types + the `gates` usage from workflow; no cycles; workflow stays a leaf)
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Every coding task ran its REPL checkpoint (interactive evaluation with hot reload; verified snippets migrated to source files)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task; integration tests exist for the cross-package lifecycle chains
-- [ ] A gate-free workflow compiles byte-identically (full-string golden comparison green)
-- [ ] No package boundary was expanded; no new dependencies
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] The Mandatory Rules (R1–R4) were applied in every task; ruff check and the scoped ruff format check were green at every stage and before every local commit; commit messages carry no co-authorship trailers
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (`convention`, `beautiful_yaml`, `afm`, `gates`, `parse-workflow`, `memory`, `assistants`)
+- [x] Every contract entity is implemented in the correct `location` (`workflow_gates.py`, `workflow_gate_step.py`, `flow_verify.py`, `flow_verify_step.py`; changed: `parse_workflow.py`, `workflow_stage.py`, `workflow_document.py`, `compile_flow.py`, `serialize_flow.py`, `overlay.py`, `events.py`, `amendments.py`, `apply_skip_stages.py`)
+- [x] Every contract entity is accessible from the facade (`WorkflowGateStep`, `WorkflowGates` from `goga.pipeline.workflow`; `FlowVerify`, `FlowVerifyStep` from `goga.pipeline.compiler`)
+- [x] Properties and methods match the declared API (field names, order, types, defaults)
+- [x] Descriptions are reflected in behavior (validation surfaces, emission forms, merge semantics, carriage)
+- [x] Contract dependencies are met (compiler imports the two types + the `gates` usage from workflow; no cycles; workflow stays a leaf)
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Every coding task ran its REPL checkpoint (interactive evaluation with hot reload; verified snippets migrated to source files)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task; integration tests exist for the cross-package lifecycle chains
+- [x] A gate-free workflow compiles byte-identically (full-string golden comparison green)
+- [x] No package boundary was expanded; no new dependencies
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] The Mandatory Rules (R1–R4) were applied in every task; ruff check and the scoped ruff format check were green at every stage and before every local commit; commit messages carry no co-authorship trailers
+- [x] All validation commands pass
+- [x] Every Usages entry is mentioned in at least one task (`convention`, `beautiful_yaml`, `afm`, `gates`, `parse-workflow`, `memory`, `assistants`)
