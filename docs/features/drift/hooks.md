@@ -59,7 +59,7 @@ def suppress_known(context):
     context.adjust(kept)
 ```
 
-Amending tools are mutually blind — every tool reads the same finished scoped report, never another tool's adjustment; the last adjusting tool in enumeration order wins, and calling `adjust` nothing leaves the report unchanged. The settled list decides the command's grading: a tool-emptied report prints `[]` and exits 0, a tool-added entry prints and exits 1.
+Amending tools are mutually blind — every tool reads the same finished scoped report, never another tool's adjustment; the last adjusting tool in enumeration order wins, and never calling `adjust` leaves the report unchanged. The settled list decides the command's grading: a tool-emptied report prints `[]` and exits 0, a tool-added entry prints and exits 1.
 
 ### `amend_entry` — `EntryAmendment` (hard)
 

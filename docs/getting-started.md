@@ -13,7 +13,7 @@
 pipx install goga
 ```
 
-## Connect to agent
+## Connect to an agent
 
 Install skills into an agent:
 
@@ -72,7 +72,7 @@ Invited tools are configured at initialization time with `goga init -t <tool-nam
 
 Instead of the bare wizard, you can scaffold a project from a [copier](https://copier.readthedocs.io/) template first. Copier writes the template files plus a `.goga/scaffold.yml` state file, then the same questionnaire runs. Questions are skipped when the template already brought the corresponding artifact (`.goga/config.yml` or `.goga/usages/conventions.md`). During scaffolding, copier interactively asks every template question that has no programmatic answer (the project name is resolved from the git remote and supplied for you) — run it in a terminal, not a pipe/CI.
 
-On `--upgrade` the survey is skipped and defaults are used:
+Scaffold a fresh project from a template URL:
 
 ```bash
 # Latest commit on the template's default branch
@@ -82,7 +82,7 @@ goga init https://github.com/<you>/my-template.git
 goga init https://github.com/<you>/my-template.git#v1.0
 ```
 
-To migrate a previously scaffolded project to a newer template version later, copier re-applies the recorded template from the state file (no onboarding):
+To migrate a previously scaffolded project to a newer template version later — on `--upgrade` the survey is skipped and defaults are used — copier re-applies the recorded template from the state file (no onboarding):
 
 ```bash
 goga init --upgrade            # re-apply at the recorded ref

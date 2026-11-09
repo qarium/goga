@@ -585,6 +585,7 @@ class TestPipelineDirectSubstrate:
         monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
 
         runner_cls = mock.Mock()
+
         with (
             mock.patch.object(_rpc_module, "DockerRunner", runner_cls),
             mock.patch.object(_rpc_module, "docker_build_if_not_exist") as mock_build,

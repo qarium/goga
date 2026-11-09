@@ -653,6 +653,7 @@ class TestPipelineRunPort:
             return 0
 
         monkeypatch.setattr(_rpc_mod.DockerRunner, "run", _record)
+
         return captured
 
     def test_given_port_replaces_allocation_on_docker_substrate(self, tmp_path: Path, monkeypatch) -> None:
@@ -1212,6 +1213,7 @@ class TestDirectSubstrateLaunch:
         monkeypatch.setattr(_rpc_mod, "DockerRunner", docker_mocks["runner_cls"])
         monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", docker_mocks["build"])
         monkeypatch.setattr(_rpc_mod, "docker_update", docker_mocks["update"])
+
         return spawn, docker_mocks
 
     def test_direct_run_spawns_composed_child_and_returns_exit_code_verbatim(self, tmp_path: Path, monkeypatch) -> None:

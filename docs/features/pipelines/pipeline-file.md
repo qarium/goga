@@ -30,7 +30,7 @@ Every pipeline-file is a two-segment YAML document separated by a `---` line:
 - The **header** is a YAML mapping with `name`, `description`, an
   optional `roles` block (see [Roles](#roles)), and an optional
   `repeatable` flag (see below).
-- The **body** is either a YAML **list** (phases format) or a YAML **dict**
+- The **body** is either a YAML **list** (phases format) or a YAML **mapping**
   (stages format).
 
 A file without the `---` separator is rejected at parse time with a
@@ -94,7 +94,7 @@ chain naturally via list position — the first copy inherits the original
 position, subsequent copies depend on their predecessor, and the next
 **original** step depends on the last expanded copy.
 
-### Stages format (dict)
+### Stages format (mapping)
 
 A YAML mapping keyed by step id. Each value carries `title` and an optional
 explicit `depends_on` plus any extra fields. `depends_on` is passed through

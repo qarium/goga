@@ -89,19 +89,6 @@ def _workflow_doc(
     )
 
 
-@pytest.fixture
-def closure_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect the fixed closure-base constant into the tmp tree.
-
-    The routine generates closures under ``/tmp/goga-assistant-env`` — a
-    container-only path. The fixed base constant is patched so every generated
-    closure lands under pytest's tmp_path instead.
-    """
-    base = tmp_path / "goga-assistant-env"
-    monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", base)
-    return base
-
-
 class TestWriteAfmConfigCollaborationContract:
     """Contract: when the collaboration section materializes."""
 
@@ -398,6 +385,7 @@ class TestWriteAfmConfigCollaborationLogic:
         names its stage as the site.
         """
         plain = _workflow_doc(catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")})
+
         with pytest.raises(
             ValueError,
             match=r"assistant reviewer at workflow.assistants resolved no agent: set its agent or a global agent",
@@ -407,6 +395,7 @@ class TestWriteAfmConfigCollaborationLogic:
         env_declaring = _workflow_doc(
             catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.", env={"REVIEW_MODE": "strict"})},
         )
+
         with pytest.raises(
             ValueError,
             match=(
@@ -421,6 +410,7 @@ class TestWriteAfmConfigCollaborationLogic:
                 "verify": WorkflowStage(assistants={"security": WorkflowAssistant(name="security", prompt="Audit.")})
             },
         )
+
         with pytest.raises(
             ValueError,
             match=r"assistant security at workflow.stages.verify resolved no agent: set its agent or a global agent",

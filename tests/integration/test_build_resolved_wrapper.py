@@ -114,6 +114,7 @@ class TestBuildWritesResolvedWrapper:
         # The review agent inherits the root agent here, so both role closures
         # exec the same resolved wrapper of the configured agent.
         resolved = f"/home/goga/bin/{agent}-as-claude.sh"
+
         for closure in ("tasks.sh", "review.sh"):
             assert f'exec {resolved} "$@"' in (relocated_wrapper_base / closure).read_text()
 

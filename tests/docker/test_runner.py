@@ -319,6 +319,7 @@ class TestRunDirectLogic:
             stdout=subprocess.PIPE,
             text=True,
         )
+
         try:
             child_pid = int(launcher.stdout.readline().strip())
             time.sleep(0.3)  # the child reaches signal.pause()

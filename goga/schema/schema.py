@@ -230,6 +230,7 @@ def schema(
 
     nodes = [_to_schema_node(node) for node in result]
     verdict = hooks.validate_schema(nodes)
+
     if not verdict.approved:
         details = "\n".join(
             f"- tool {violation.tool} / hook {violation.hook}: {violation.reason}" for violation in verdict.violations

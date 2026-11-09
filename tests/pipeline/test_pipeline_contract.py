@@ -114,6 +114,7 @@ class TestPipelineFacade:
         assert sorted(zone_facade.__all__) == ZONE_ALL
         for name in BRIDGE_FACADE_NAMES:
             assert name in pipeline_facade.__all__
+
         assert len(pipeline_facade.__all__) == 21
         assert callable(pipeline_facade.run_pipeline)
         assert callable(pipeline_facade.describe_pipeline)

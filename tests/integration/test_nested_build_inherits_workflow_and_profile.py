@@ -79,6 +79,7 @@ def _write_project(tmp_path: Path) -> tuple[Path, Path]:
     user_dir.mkdir(parents=True)
 
     (tmp_path / ".afm").mkdir(parents=True)
+
     return project_dir, user_dir
 
 

@@ -21,28 +21,6 @@ import pytest
 
 from tests.conftest import is_kw_only_dataclass
 
-
-@pytest.fixture
-def node() -> object:
-    """A minimal code-derived node — the shared read surface of every tool."""
-    from goga.codegraph.hooks import NodeFacts
-
-    return NodeFacts(
-        cell="goga/config",
-        types=["ProjectConfig"],
-        dependencies={"goga/hooks": ["HookRegistry"]},
-        children=["goga/config/hooks"],
-    )
-
-
-@pytest.fixture
-def view(node: object) -> object:
-    """The read-and-contribute view of one tool."""
-    from goga.codegraph.hooks import NodeAmendment
-
-    return NodeAmendment(node=node)
-
-
 # --- Contract tests ---
 
 

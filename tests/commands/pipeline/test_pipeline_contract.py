@@ -207,6 +207,7 @@ class TestPipelineProfileFlagSurface:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "-p", "mixa"])
 
@@ -221,6 +222,7 @@ class TestPipelineProfileFlagSurface:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "--profile", "mixa"])
 

@@ -214,6 +214,7 @@ my stage:
         # Each patched command line lands inside its OWN stage block.
         patched_lines = flow_path.read_text().splitlines()
         header_of = {"01": "- id: '01'", "my stage": "- id: my stage", "true": "- id: 'true'"}
+
         for stage_id, header in header_of.items():
             header_index = patched_lines.index(header)
             command_index = patched_lines.index(f"  command: {by_id[stage_id].fields['command']}")
@@ -457,6 +458,7 @@ class TestExtendAgentTier:
 
         by_id = {stage.id: stage for stage in result}
         expected = '#!/bin/sh\nexport N=1\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+
         for index in (1, 2):
             wrapper = wrapper_base / f"scan-{index}"
             assert by_id[f"scan-{index}"].fields["command"] == str(wrapper)
@@ -590,13 +592,7 @@ class TestGatesInteraction:
         """
         stages, workflow, flow_path, original = _compile(
             tmp_path,
-            "stages:\n"
-            "  build:\n"
-            "    env:\n"
-            '      E: "1"\n'
-            "    gates:\n"
-            "      - name: tests\n"
-            "        script: pytest -q\n",
+            'stages:\n  build:\n    env:\n      E: "1"\n    gates:\n      - name: tests\n        script: pytest -q\n',
         )
 
         result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
@@ -730,7 +726,7 @@ class TestScriptStageDelivery:
             tmp_path,
             "stages:\n  build:\n    env:\n      GREETING: hello env\n",
             "name: Deploy\ndescription: d\n---\n\n"
-            "build:\n  title: Build\n  script: |\n    echo \"$GREETING from $PWD-marker\"\n    exit 0\n",
+            'build:\n  title: Build\n  script: |\n    echo "$GREETING from $PWD-marker"\n    exit 0\n',
         )
 
         stage_env_wrappers.apply_stage_env_wrappers(_stages, workflow, None, flow_path)
@@ -820,14 +816,7 @@ class TestScriptStageDelivery:
         """A script claim patches script; an agent claim of the same flow patches command."""
         stages, workflow, flow_path, _original = _compile(
             tmp_path,
-            "stages:\n"
-            "  build:\n"
-            "    env:\n"
-            '      E: "1"\n'
-            "  review:\n"
-            "    agent: codex\n"
-            "    env:\n"
-            '      R: "2"\n',
+            'stages:\n  build:\n    env:\n      E: "1"\n  review:\n    agent: codex\n    env:\n      R: "2"\n',
             "name: Deploy\ndescription: d\n---\n\n"
             "build:\n  title: Build\n  script: echo ok\n"
             "review:\n  title: Review\n",

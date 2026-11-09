@@ -4,6 +4,29 @@ Goga is a command-line tool built with [Click](https://click.palletsprojects.com
 
 This page is the **command cross-road**: every command of the root `goga` group, mapped to the functional domain that owns it. The full reference of each command — synopsis, options, behavior, exit codes — lives in its domain's **CLI** page (under [Features](../features/index.md), or [Configuration](../configuration/index.md) for `goga config`).
 
+## Commands
+
+| Command | Domain | Description |
+|---|---|---|
+| [`goga init`](../features/init/cli.md) | [Init](../features/init/index.md) | Interactive project initialization |
+| [`goga install`](../features/install/cli.md) | [Install](../features/install/index.md) | Install goga-tool packages into the current interpreter and re-sync connected agents |
+| [`goga uninstall`](../features/install/uninstall.md) | [Install](../features/install/index.md) | Remove a goga-tool package from the current interpreter and re-sync connected agents |
+| [`goga lint`](../features/lint/cli.md) | [Lint](../features/lint/index.md) | Validate CODEMANIFEST files |
+| [`goga build`](../features/build/cli.md) | [Build](../features/build/index.md) | Execute a build plan in an isolated container |
+| [`goga contract`](../features/contract/cli.md) | [Contract](../features/contract/index.md) | Compare CODEMANIFEST with implementation |
+| [`goga config`](../configuration/cli.md) | [Configuration](../configuration/index.md) | Display configuration values |
+| [`goga schema`](../features/schema/cli.md) | [Schema](../features/schema/index.md) | Generate JSON schema from project cells |
+| [`goga codegraph`](../features/codegraph/cli.md) | [Codegraph](../features/codegraph/index.md) | Derive the prospective cell graph from existing code |
+| [`goga drift`](../features/drift/cli.md) | [Drift](../features/drift/index.md) | Report structural drift between declared manifests and actual code |
+| [`goga connect`](../features/connect/cli.md) | [Connect](../features/connect/index.md) | Install goga skills for AI agents |
+| [`goga upgrade`](../features/upgrade/cli.md) | [Upgrade](../features/upgrade/index.md) | Upgrade goga and re-sync connected agents |
+| [`goga usages`](../features/usages/cli.md) | [Usages](../features/usages/index.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |
+| [`goga pipeline`](../features/pipelines/cli.md) | [Pipelines](../features/pipelines/index.md) | Run a goga pipeline, or inspect the available ones (`--list`, `--info`) |
+| [`goga history`](../features/history/cli.md) | [History](../features/history/index.md) | Work with the `.goga/history/` tree (`list`, `status`, `path`, `ensure`, `prune`) |
+| [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `update`, `publish`, `propagate`, `delete`, `clear`) |
+| [`goga tool`](../features/tools/cli.md) | [Tools](../features/tools/index.md) | Dynamic tool package invocation |
+| [`goga hooks`](../features/hooks/cli.md) | [Hooks](../features/hooks/index.md) | Inspect the hooks registered by installed tool packages |
+
 ## Installation
 
 ```bash
@@ -37,32 +60,9 @@ goga --version       # the version of your main install
 Reinstalling over an existing suffix needs `--force`. pipx marks
 `--suffix` as experimental and subject to change.
 
-## Commands
-
-| Command | Domain | Description |
-|---|---|---|
-| [`goga init`](../features/init/cli.md) | [Init](../features/init/index.md) | Interactive project initialization |
-| [`goga install`](../features/install/cli.md) | [Install](../features/install/index.md) | Install goga-tool packages into the current interpreter and re-sync connected agents |
-| [`goga uninstall`](../features/install/uninstall.md) | [Install](../features/install/index.md) | Remove a goga-tool package from the current interpreter and re-sync connected agents |
-| [`goga lint`](../features/lint/cli.md) | [Lint](../features/lint/index.md) | Validate CODEMANIFEST files |
-| [`goga build`](../features/build/cli.md) | [Build](../features/build/index.md) | Execute a build plan in an isolated container |
-| [`goga contract`](../features/contract/cli.md) | [Contract](../features/contract/index.md) | Compare CODEMANIFEST with implementation |
-| [`goga config`](../configuration/cli.md) | [Configuration](../configuration/index.md) | Display configuration values |
-| [`goga schema`](../features/schema/cli.md) | [Schema](../features/schema/index.md) | Generate JSON schema from project cells |
-| [`goga codegraph`](../features/codegraph/cli.md) | [Codegraph](../features/codegraph/index.md) | Derive the prospective cell graph from existing code |
-| [`goga drift`](../features/drift/cli.md) | [Drift](../features/drift/index.md) | Report structural drift between declared manifests and actual code |
-| [`goga connect`](../features/connect/cli.md) | [Connect](../features/connect/index.md) | Install goga skills for AI agents |
-| [`goga upgrade`](../features/upgrade/cli.md) | [Upgrade](../features/upgrade/index.md) | Upgrade goga and re-sync connected agents |
-| [`goga usages`](../features/usages/cli.md) | [Usages](../features/usages/index.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |
-| [`goga pipeline`](../features/pipelines/cli.md) | [Pipelines](../features/pipelines/index.md) | Run a goga pipeline, or inspect the available ones (`--list`, `--info`) |
-| [`goga history`](../features/history/cli.md) | [History](../features/history/index.md) | Work with the `.goga/history/` tree (`list`, `status`, `path`, `ensure`, `prune`) |
-| [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `update`, `publish`, `propagate`, `delete`, `clear`) |
-| [`goga tool`](../features/tools/cli.md) | [Tools](../features/tools/index.md) | Dynamic tool package invocation |
-| [`goga hooks`](../features/hooks/cli.md) | [Hooks](../features/hooks/index.md) | Inspect the hooks registered by installed tool packages |
-
 ## Slash commands in agents
 
-The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-specify`).
+The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents, invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-specify`).
 
 ## Global Options
 

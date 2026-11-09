@@ -32,9 +32,9 @@ wins:
 
 - A **unique** match switches (or stays) on the hosting branch and the run
   proceeds;
-- **several** candidates with no terminal is a clean error and exit 1 — the
+- **Several** candidates with no terminal is a clean error and exit 1 — the
   numbered picker cannot render;
-- **nothing** hosts the identifier — a fresh branch and its topic directory
+- **Nothing** hosts the identifier — a fresh branch and its topic directory
   are created, and the run proceeds;
 - A **dirty working tree** on a mutating switch exits 1 before anything is
   touched.

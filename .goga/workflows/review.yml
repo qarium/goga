@@ -36,6 +36,11 @@ stages:
   
       Requirements:
       - Create venv outside the project, in /opt/goga
+    gates:
+      - name: lint
+        script: ruff format --check goga/ tests/
+      - name: pytest
+        script: pytest -v --tb=short
   commit-changes:
 {{ stage_config(stages["commit-changes"]) }}
   update-docs:

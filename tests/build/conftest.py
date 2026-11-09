@@ -66,6 +66,42 @@ def home_bundle() -> dict[str, dict[str, Any]]:
     }
 
 
+@pytest.fixture
+def seeded_project(project_root: Path) -> Path:
+    """Seed the fake project with two workflows and two project profiles.
+
+    ``hard.yml`` carries the literal ``profile: mixa`` default; ``custom.yml``
+    is profile-free — the pair distinguishes the CLI/env selection axes from
+    the profile activation channels.
+    """
+    workflows = project_root / ".goga" / "workflows"
+    (workflows / "hard.yml").write_text("profile: mixa\nstages:\n  build:\n    agent: claude\n")
+    (workflows / "custom.yml").write_text("stages:\n  test:\n    agent: codex\n")
+
+    profiles = project_root / ".goga" / "profiles"
+    (profiles / "mixa.yml").write_text("worker:\n  agent: codex\n  model: sonnet\n")
+    (profiles / "alt.yml").write_text("worker:\n  agent: gemini\n  model: o4\n")
+
+    return project_root
+
+
+@pytest.fixture
+def wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Relocate the wrapper base into the isolated tree; expose the run dir.
+
+    The closures land in the PID-keyed per-run subdirectory under the
+    relocated base (``_run_base()``), so the assertions address the run
+    directory directly.
+    """
+    from goga.build import role_env_wrappers
+
+    base = tmp_path / "goga-build-env"
+
+    monkeypatch.setattr(role_env_wrappers, "_WRAPPER_BASE", base)
+
+    return role_env_wrappers._run_base()
+
+
 # goga.build.build is shadowed in the package __init__ by the build function,
 # so a string-based patch path walking through it fails on Python 3.10.
 # Resolve the real module through the import system and patch its

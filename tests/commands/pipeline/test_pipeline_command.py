@@ -759,6 +759,7 @@ class TestPipelineProfileFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "-p", "mixa"])
 
@@ -770,6 +771,7 @@ class TestPipelineProfileFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info:
             result = runner.invoke(pipeline, ["deploy", "--info", "--profile", "mixa"])
 
@@ -781,6 +783,7 @@ class TestPipelineProfileFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "--parallel", "4"])
 
@@ -801,6 +804,7 @@ class TestPipelineProfileFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "-p", "5000"])
 
@@ -822,6 +826,7 @@ class TestPipelineProfileFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
             mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
@@ -850,6 +855,7 @@ class TestPipelineProfileFlag:
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
             mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
@@ -907,6 +913,7 @@ class TestPipelineProfileFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy"])
 

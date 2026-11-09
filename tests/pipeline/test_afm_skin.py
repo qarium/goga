@@ -16,28 +16,6 @@ from tests.pipeline.conftest import patch_skin_source, write_skin
 _afm_skin_module = sys.modules["goga.pipeline.afm_skin"]
 
 
-@pytest.fixture
-def skin_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect the fixed skins-base constant into the tmp tree.
-
-    The materializer writes at ``/home/goga/.afm/skins`` — a container-only
-    path. The fixed base constant is patched (never the filesystem root), so
-    the materialized skin lands under pytest's tmp_path instead.
-    """
-    base = tmp_path / ".afm-home" / "skins"
-    monkeypatch.setattr(_afm_skin_module, "_SKINS_TARGET_BASE", base)
-    return base
-
-
-@pytest.fixture
-def packaged_skin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect the packaged-dir resolver at a tmp source and seed it with one file."""
-    source = tmp_path / "packaged-skin"
-    write_skin(source, names=("index.css",))
-    patch_skin_source(monkeypatch, source)
-    return source
-
-
 class TestMaterializeAfmSkinContract:
     """Contract: the facade surface and the fixed materialization target."""
 

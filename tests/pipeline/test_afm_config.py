@@ -35,13 +35,6 @@ def _workflow_doc(catalog: dict[str, WorkflowAssistant]) -> WorkflowDocument:
     return WorkflowDocument(stages={}, assistants=catalog)
 
 
-@pytest.fixture
-def closure_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect the fixed closure-base constant into the tmp tree and return it."""
-    base = tmp_path / "goga-assistant-env"
-    monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", base)
-    return base
-
 # goga's observer hook registration — the fixed D2 entry the composed content
 # additionally carries in the global ``hooks`` layer.
 _OBSERVER_HOOK = {

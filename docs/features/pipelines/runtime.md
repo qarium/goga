@@ -161,7 +161,7 @@ docker:
 Mount each credential file to the container path its CLI looks up natively —
 the container layout mirrors the host layout under `/home/goga/`:
 
-| agent | host file | container path |
+| Agent | Host file | Container path |
 |---|---|---|
 | claude | `~/.claude/.credentials.json` | `/home/goga/.claude/.credentials.json` |
 | codex | `~/.codex/auth.json` | `/home/goga/.codex/auth.json` |

@@ -23,42 +23,6 @@ import pytest
 
 from tests.conftest import is_kw_only_dataclass
 
-
-@pytest.fixture
-def report() -> object:
-    """A minimal scoped report — the shared read surface of every amending tool."""
-    from goga.drift.hooks import EntryFacts
-
-    return [
-        EntryFacts(kind="schema_only", cell="goga/config", types=["ProjectConfig"]),
-        EntryFacts(kind="codegraph_only", cell="goga/extra", types=None),
-    ]
-
-
-@pytest.fixture
-def entry() -> object:
-    """A minimal report entry — the shared read surface of every contributing tool."""
-    from goga.drift.hooks import EntryFacts
-
-    return EntryFacts(kind="schema_only", cell="goga/config", types=["ProjectConfig"])
-
-
-@pytest.fixture
-def report_view(report: object) -> object:
-    """The read-and-adjust view of one tool."""
-    from goga.drift.hooks import ReportAmendment
-
-    return ReportAmendment(report=report)
-
-
-@pytest.fixture
-def entry_view(entry: object) -> object:
-    """The read-and-contribute view of one tool."""
-    from goga.drift.hooks import EntryAmendment
-
-    return EntryAmendment(entry=entry)
-
-
 # --- Contract tests ---
 
 

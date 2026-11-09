@@ -939,10 +939,7 @@ class TestCompileFlowScriptDirectives:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  script:\n    - pytest ./\n    - ruff check .\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  script:\n    - pytest ./\n    - ruff check .\n",
         )
         flow_path = tmp_path / "flow.yml"
 

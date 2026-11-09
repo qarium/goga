@@ -447,6 +447,7 @@ class DriftHooks:
             (entry for entry in declared_actions() if entry.domain == "drift" and entry.name == "amend_report"),
             None,
         )
+
         if record is None:
             raise ValueError("unknown hook action: drift.amend_report")
 
@@ -555,6 +556,7 @@ class DriftHooks:
             (entry for entry in declared_actions() if entry.domain == "drift" and entry.name == "amend_entry"),
             None,
         )
+
         if record is None:
             raise ValueError("unknown hook action: drift.amend_entry")
 

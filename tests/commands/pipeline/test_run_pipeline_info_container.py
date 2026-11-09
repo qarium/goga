@@ -559,6 +559,7 @@ class TestProfileCargoEnvFile:
             return 0
 
         mocks["runner_instance"].run.side_effect = _read_env_file
+
         return captured
 
     def test_info_container_envfile_only_with_cargo(self, tmp_path: Path, monkeypatch) -> None:

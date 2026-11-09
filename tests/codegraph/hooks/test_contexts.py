@@ -20,22 +20,6 @@ from goga.hooks import wrap_context
 
 from tests.conftest import is_kw_only_dataclass
 
-
-@pytest.fixture
-def tree() -> list[object]:
-    """A minimal final tree — one leaf node, no tools overlay."""
-    from goga.codegraph.facts import CodegraphNode
-
-    return [
-        CodegraphNode(
-            cell="goga/config",
-            types=["ProjectConfig"],
-            dependencies={"goga/hooks": ["HookRegistry"]},
-            children=[],
-        )
-    ]
-
-
 # --- Contract tests ---
 
 

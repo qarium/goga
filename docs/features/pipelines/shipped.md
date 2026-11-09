@@ -55,7 +55,7 @@ at that exact namespaced stem, or when another tool resolves to the same
 namespace. Such a residual conflict is
 resolved by the `--force-overwrite` flag passed to `goga connect`:
 
-| `--force-overwrite` | Behaviour on residual namespaced conflict                        |
+| `--force-overwrite` | Behavior on residual namespaced conflict                        |
 |---------------------|------------------------------------------------------------------|
 | `false` (default)   | The tool's pipeline is skipped; the existing file wins. A warning is logged to stderr. |
 | `true`              | The tool's pipeline overwrites the existing file at `<tool>:<name>.yml`. |

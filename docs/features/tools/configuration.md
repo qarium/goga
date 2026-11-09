@@ -8,7 +8,7 @@ The `tools:` mapping of the project configuration — the version declarations c
 
 A tool that carries its own configuration into a project follows one
 convention: **a tool's project files live under
-`.goga/tools/<tool-name>/`** — one directory per tool, checked into the
+`.goga/tools/<tool>/`** — one directory per tool, checked into the
 project. The name is the canonical hyphenated tool identity
 (`goga_tool_hello_world` → `hello-world`), the same identity used for
 namespaced pipelines and skills.
@@ -38,7 +38,7 @@ non-flat name segment — empty, `.`/`..`, or containing a separator — is a
 clean `ValueError`), returns the raw parsed content as-is, and propagates a
 parse failure (`yaml.YAMLError`) or a read failure (`OSError`,
 `UnicodeDecodeError`) raw; `root=None` anchors at the current directory.
-The same composition the onboarding engine writes under — the write-side
+The onboarding engine writes under the same composition — the write-side
 counterpart of this read.
 
 The raw parse resolves **environment references**: a scalar written as

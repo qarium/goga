@@ -31,7 +31,7 @@ A full Specification-Driven Development (SDD) cycle ships in the box — it can 
   </tr>
 </table>
 
-AI development without a framework collapses into uncoordinated agent runs — the cycle cannot be reproduced, there are no managed approval checkpoints, and the methodology is locked into a single tool. goga is the framework: the process is declared, agents are interchangeable, methodologies are composable.
+AI development without a framework collapses into uncoordinated agent runs — the cycle cannot be reproduced, there are no managed approval checkpoints, and the methodology is locked into a single tool. Goga is the framework: the process is declared, agents are interchangeable, methodologies are composable.
 
 **Languages**
 
@@ -128,7 +128,7 @@ Each pipeline is a flat YAML file describing the stages; layer project-specific 
 specify → prototype → apply → design → plan → goga build → change → accept
 ```
 
-The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/features/connect/cli/)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-specify` (Codex uses the `$` prefix — `$goga-specify`). Reviews are optional at every stage.
+The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/features/connect/cli/)). Codex and cursor do not register commands; in those agents, invoke the skill directly: `goga-specify` (Codex uses the `$` prefix — `$goga-specify`). Reviews are optional at every stage.
 
 **5. Inspect the result** — once `apply` has produced cells on disk, view the cell hierarchy:
 
@@ -518,7 +518,8 @@ A valid tool **must**:
 - Be named with the `goga_tool_` prefix (PyPI publication under `goga-tool-`)
 - Contain the entry-point skill `skills/<tool-name>/SKILL.md` — `goga connect` skips the whole package with a warning when it is missing (every skill directory carries a `SKILL.md`)
 - Expose a `main(argv: list[str])` function for CLI execution
-- A `pipelines/` directory is **optional**; when present, its flat `*.yml` files are copied into `~/.goga/pipelines/` at `goga connect` time, namespaced as `<tool>:<name>.yml`
+
+A `pipelines/` directory is **optional**; when present, its flat `*.yml` files are copied into `~/.goga/pipelines/` at `goga connect` time, namespaced as `<tool>:<name>.yml`.
 
 A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
 

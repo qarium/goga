@@ -9,25 +9,6 @@ from goga.build import resolve_build_workflow
 from goga.pipeline.workflow import ProfileSource
 
 
-@pytest.fixture
-def seeded_project(project_root: Path) -> Path:
-    """Seed the fake project with two workflows and two project profiles.
-
-    ``hard.yml`` carries the literal ``profile: mixa`` default; ``custom.yml``
-    is profile-free — the pair distinguishes the CLI/env selection axes from
-    the profile activation channels.
-    """
-    workflows = project_root / ".goga" / "workflows"
-    (workflows / "hard.yml").write_text("profile: mixa\nstages:\n  build:\n    agent: claude\n")
-    (workflows / "custom.yml").write_text("stages:\n  test:\n    agent: codex\n")
-
-    profiles = project_root / ".goga" / "profiles"
-    (profiles / "mixa.yml").write_text("worker:\n  agent: codex\n  model: sonnet\n")
-    (profiles / "alt.yml").write_text("worker:\n  agent: gemini\n  model: o4\n")
-
-    return project_root
-
-
 class TestResolveBuildWorkflow:
     def test_env_fallback_and_empty_strings(self, seeded_project: Path) -> None:
         loaded = resolve_build_workflow(None, "hard")

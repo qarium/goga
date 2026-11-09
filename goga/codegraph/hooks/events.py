@@ -289,6 +289,7 @@ class CodegraphHooks:
             (entry for entry in declared_actions() if entry.domain == "codegraph" and entry.name == "amend_node"),
             None,
         )
+
         if record is None:
             raise ValueError("unknown hook action: codegraph.amend_node")
 
@@ -386,6 +387,7 @@ class CodegraphHooks:
             (entry for entry in declared_actions() if entry.domain == "codegraph" and entry.name == "validate_graph"),
             None,
         )
+
         if record is None:
             raise ValueError("unknown hook action: codegraph.validate_graph")
 

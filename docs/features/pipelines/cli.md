@@ -73,7 +73,7 @@ tools: hardener, notifier
 
 The card and the run share the same workflow rule set, the same `-s/--skip` merge, and the same compiler, so the stages the card lists are structurally the stages a run executes (see [Workflow files](#workflow-files)).
 
-## Run Mode (`goga pipeline <name>`)
+## Run mode (`goga pipeline <name>`)
 
 Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container loads and amends the project configuration (the in-container `config/amend_config` delivery — see [Configuration — Hooks](../../configuration/hooks.md)), resolves the absolute path internally, compiles the pipeline-file into the definition the run follows, materializes the agent prompt files (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), writes the afm configuration file with the effective `pipeline.agent` — always carrying the collaboration section headed by `runtime_context: wrapper`, plus, when the workflow declares assistants, the generated `goga-<name>` collaboration profiles and the `delegation` task budget — materializes the goga dashboard skin into `~/.afm/skins/goga/`, and starts the run. Passing `--parallel N` caps the number of stages executed concurrently; without it, stages run unbounded. The dashboard port is resolved at launch: the `--port <port>` value when pinned, else a free port allocated automatically — either way it is published on both sides (`-p <port>:<port>`) and the pipeline engine listens on that port inside the container. When a workflow is applied, a single log line naming it (and the resolved profile, when one activated) is printed in-container by the goga process; when `-t/--topic` brought the repository onto the requested work, the single result line of the topic procedure (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed once before the launch; otherwise the launcher prints no status line.
 
@@ -282,7 +282,7 @@ Fail the run's exit code when a stage fails (default: a failed stage does not fa
 goga pipeline development --fail-on-error
 ```
 
-## Exit Codes
+## Exit codes
 
 Host side (all forms):
 

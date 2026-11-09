@@ -428,6 +428,7 @@ class TestExtendDirectiveEndToEnd:
         flow_path = tmp_path / "flow.yml"
 
         workflow = parse_workflow(workflow_path.read_text())
+
         with pytest.raises(
             StructuralError,
             match=r"unknown stage name in workflow\.extend\.x\.after: ghost",

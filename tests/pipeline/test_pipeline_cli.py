@@ -104,6 +104,7 @@ class TestPipelineCliContract:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+
         with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             exit_code = pipeline_cli(["run", "deploy", "--info", "-w", "hardening"])
 
@@ -168,6 +169,7 @@ class TestPipelineCliContract:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+
         with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info", "--fail-on-error"])
 
@@ -232,6 +234,7 @@ class TestPipelineCliContract:
         assert mock_run.call_args.kwargs["no_workflow"] is True
 
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+
         with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             exit_code = pipeline_cli(["run", "deploy", "--info", "-w", "hardening", "-s", "build"])
         assert exit_code == 0
@@ -556,6 +559,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+
         with (
             mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe,
             mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0) as mock_run,
@@ -1170,6 +1174,7 @@ class TestPipelineCliCardToolsContract:
             stages=[CardStage(id="build", title="Build")],
             provenance=["t1", "t2"],
         )
+
         with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 
@@ -1193,6 +1198,7 @@ class TestPipelineCliCardToolsContract:
             stages=[],
             provenance=["later-tool", "earlier-tool", "third-tool"],
         )
+
         with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 
@@ -1213,6 +1219,7 @@ class TestPipelineCliCardToolsContract:
         card = PipelineCard(
             name="Deploy", description="Deploy the service", stages=[CardStage(id="build", title="Build")]
         )
+
         with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 
@@ -1232,6 +1239,7 @@ class TestPipelineCliCardToolsContract:
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=[], provenance=["t1"])
+
         with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 

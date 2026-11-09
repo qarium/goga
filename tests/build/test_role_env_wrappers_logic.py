@@ -60,21 +60,6 @@ def _make_settings(
     )
 
 
-@pytest.fixture
-def wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Relocate the wrapper base into the isolated tree; expose the run dir.
-
-    The closures land in the PID-keyed per-run subdirectory under the
-    relocated base (``_run_base()``), so the assertions address the run
-    directory directly.
-    """
-    base = tmp_path / "goga-build-env"
-
-    monkeypatch.setattr(wrappers_module, "_WRAPPER_BASE", base)
-
-    return wrappers_module._run_base()
-
-
 class TestWriteRoleEnvWrappers:
     def test_generates_independent_closures(self, wrapper_base: Path) -> None:
         settings = _make_settings(envs={"tasks": {"T": "role"}, "review": {"R": "1"}, "additional": {"A": "x"}})

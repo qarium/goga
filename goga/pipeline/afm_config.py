@@ -417,10 +417,12 @@ def write_afm_config(
     # The engine's dashboard label falls back to the file base name; map every
     # generated command to the bare agent id (``claude-as-claude.sh`` → ``claude``).
     command_names = dict(profile_command_names)
+
     if wrapper is not None:
         client_label = _wrapper_agent_label(wrapper)
         if client_label is not None:
             command_names[wrapper] = client_label
+
     if command_names:
         content["command_names"] = command_names
 

@@ -121,6 +121,41 @@ def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
+def closure_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the fixed closure-base constant into the tmp tree.
+
+    The routine generates closures under ``/tmp/goga-assistant-env`` — a
+    container-only path. The fixed base constant is patched so every generated
+    closure lands under pytest's tmp_path instead.
+    """
+    base = tmp_path / "goga-assistant-env"
+    monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", base)
+    return base
+
+
+@pytest.fixture
+def skin_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the fixed skins-base constant into the tmp tree.
+
+    The materializer writes at ``/home/goga/.afm/skins`` — a container-only
+    path. The fixed base constant is patched (never the filesystem root), so
+    the materialized skin lands under pytest's tmp_path instead.
+    """
+    base = tmp_path / ".afm-home" / "skins"
+    monkeypatch.setattr(_afm_skin_module, "_SKINS_TARGET_BASE", base)
+    return base
+
+
+@pytest.fixture
+def packaged_skin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the packaged-dir resolver at a tmp source and seed it with one file."""
+    source = tmp_path / "packaged-skin"
+    write_skin(source, names=("index.css",))
+    patch_skin_source(monkeypatch, source)
+    return source
+
+
+@pytest.fixture
 def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point AFM_DIR at a tmp dir and return the resolved path.
 

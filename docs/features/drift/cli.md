@@ -1,6 +1,6 @@
 # goga drift
 
-Report contract drift between declared manifests and actual code.
+Report structural drift between declared contracts and actual code.
 
 ## Synopsis
 

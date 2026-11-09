@@ -85,6 +85,7 @@ def _line_indent(line: str) -> int:
     """
     return len(line) - len(line.lstrip(" "))
 
+
 # The top-level ``stages:`` key — the section boundary of the stage blocks.
 # The serializer emits the ``team:`` list BEFORE ``stages:`` with member
 # headers shaped exactly like stage headers (``- id: NAME`` at column 0), so

@@ -161,7 +161,7 @@ The `codemanifest` section is global — it belongs to no single domain. It feed
 
 ## Pre-built Docker images
 
-goga provides prebuilt language images for build execution:
+goga provides pre-built language images for build execution:
 
 | Language | Images |
 |----------|--------|

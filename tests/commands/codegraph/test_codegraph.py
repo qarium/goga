@@ -324,6 +324,7 @@ def _install_amend_tool(pin_package_environment, install_tool_package, hook):
         registrar.subscribe("codegraph", "amend_node", "cover", hook)  # type: ignore[attr-defined]
 
     install_tool_package("goga_tool_docs", register_hooks=register)
+
     return boundary
 
 
@@ -344,6 +345,7 @@ def _install_gate_tool(pin_package_environment, install_tool_package, hook):
         registrar.subscribe("codegraph", "validate_graph", "vetoer", hook)  # type: ignore[attr-defined]
 
     install_tool_package("goga_tool_gate", register_hooks=register)
+
     return boundary
 
 

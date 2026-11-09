@@ -888,7 +888,7 @@ layer.
 
 ### Worked example
 
-A STAGES pipeline whose `implementation` stage is gated by two check steps
+A stages-format pipeline whose `implementation` stage is gated by two check steps
 (a shell step with an authored timeout, an AI-review step), with the
 settings block authoring a correction budget:
 
@@ -1039,7 +1039,7 @@ an absence — omit the key to express absence (symmetric with the per-stage
 
 ### Examples
 
-A STAGES pipeline `specify → review` with a new `warmup` stage that runs after
+A stages-format pipeline `specify → review` with a new `warmup` stage that runs after
 `specify`, and a new `extra` stage that runs before `review`:
 
 ```yaml
@@ -1060,7 +1060,7 @@ Compiled effect (stages format): `warmup` depends on `specify`, and `review`
 gains `extra` as an additional dependency —
 `specify → warmup`, `extra → review`.
 
-The same idea for a PHASES pipeline `[a, b, c]` — insert `x` after `b`:
+The same idea for a phases-format pipeline `[a, b, c]` — insert `x` after `b`:
 
 ```yaml
 extend:
@@ -1215,22 +1215,6 @@ For each `(stage_name, effective_stage)` pair in the map:
      canonical field assembly into the stage's launch mode. See
      [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger).
 
-### Skills merge
-
-A `stages`-block `skills` override is **merged** with the pipeline-file
-`skills` of the matched stage, not replaced:
-
-- Pipeline-file skills come first (their relative order is preserved), then
-  the workflow skills, with any value already seen dropped (deduplication is
-  by value, first-occurrence order).
-- A stage with no pipeline `skills` gets the workflow list as-is; a workflow
-  override of `[]` (or a stage with neither side carrying skills) leaves the
-  `skills` key absent rather than emitting an empty list.
-- An `extend` entry's own body `skills` are the new stage's pipeline-side
-  skills — when a `stages` entry also names that stage, the merge combines the
-  extend-body skills with the `stages` override. With no matching `stages`
-  entry the extend-body skills pass through verbatim.
-
 ### Step 5 — Expand loops
 
 For each step, determine `loop_count` from the effective override's `loop`
@@ -1300,6 +1284,22 @@ authored `memory` block when present, else the materialized defaults
   stage body is a structural error. A workflow without memory
   participation compiles byte-identically to the same workflow compiled
   before the mechanism existed.
+
+### Skills merge
+
+A `stages`-block `skills` override is **merged** with the pipeline-file
+`skills` of the matched stage, not replaced:
+
+- Pipeline-file skills come first (their relative order is preserved), then
+  the workflow skills, with any value already seen dropped (deduplication is
+  by value, first-occurrence order).
+- A stage with no pipeline `skills` gets the workflow list as-is; a workflow
+  override of `[]` (or a stage with neither side carrying skills) leaves the
+  `skills` key absent rather than emitting an empty list.
+- An `extend` entry's own body `skills` are the new stage's pipeline-side
+  skills — when a `stages` entry also names that stage, the merge combines the
+  extend-body skills with the `stages` override. With no matching `stages`
+  entry the extend-body skills pass through verbatim.
 
 ## Profiles
 

@@ -22,20 +22,6 @@ import pytest
 
 from tests.conftest import is_kw_only_dataclass
 
-
-@pytest.fixture
-def facts() -> object:
-    """A minimal code-derived node — one type, one dependency, one child."""
-    from goga.codegraph.hooks import NodeFacts
-
-    return NodeFacts(
-        cell="goga/config",
-        types=["ProjectConfig"],
-        dependencies={"goga/hooks": ["HookRegistry"]},
-        children=["goga/config/hooks"],
-    )
-
-
 # --- Contract tests ---
 
 

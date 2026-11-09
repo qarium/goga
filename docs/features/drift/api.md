@@ -31,7 +31,7 @@ scope_entries(
 **Raises:**
 
 - `FileNotFoundError` — `.goga/config.yml` is absent (the uninitialized-project error of the code-derived view).
-- `ValueError` — the AST has parsing errors, the configured language is outside `python`, `golang`, `javascript`, `kotlin`, `swift`, a source file fails to parse (the message names the file), a schema or codegraph checkpoint hard-fails — every producer error propagates unchanged — or a [drift amendment](hooks.md) hard-fails: a crashed hook or a malformed adjustment or contribution, the message naming the hook or tool, the action, the entry subject where one exists, and the reason.
+- `ValueError` — manifest loading and validation failures, the configured language is outside `python`, `golang`, `javascript`, `kotlin`, `swift`, a source file fails to parse (the message names the file), a schema or codegraph checkpoint hard-fails — every producer error propagates unchanged — or a [drift amendment](hooks.md) hard-fails: a crashed hook or a malformed adjustment or contribution, the message naming the hook or tool, the action, the entry subject where one exists, and the reason.
 - `ImportError` — a tool-package facade failed to import (the message names the package); the run never started, so no completion moment fires.
 
 The routine is read-only, deterministic, and idempotent — identical project state, configuration, and filters produce identical reports.
