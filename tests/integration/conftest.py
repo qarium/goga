@@ -165,9 +165,11 @@ def in_container_pipeline_run_context(
     only afm mocked) opt into this context: a minimal authored configuration
     (``language`` plus an empty ``pipeline`` section — the section the host
     structural guard guarantees) lands in the isolated process CWD, the
-    package environment pins empty (the delivery is the passthrough), and the
-    fixed home-path constant redirects into the tmp tree so no test writes
-    the real home.
+    package environment pins empty (the delivery is the passthrough), the
+    fixed home-path constant redirects into the tmp tree, and the fixed
+    skins-base constant of the afm skin materialization redirects the same
+    way — so no test writes the real home, and the run path holds on hosts
+    without a writable ``/home/goga`` (the CI user's home is elsewhere).
 
     Returns:
         The project root (the isolated CWD) carrying the written configuration.
@@ -179,6 +181,10 @@ def in_container_pipeline_run_context(
 
     afm_config_module = sys.modules["goga.pipeline.afm_config"]
     monkeypatch.setattr(afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
+
+    afm_skin_module = sys.modules["goga.pipeline.afm_skin"]
+    monkeypatch.setattr(afm_skin_module, "_SKINS_TARGET_BASE", tmp_path / ".afm-home" / "skins")
+
     return tmp_path
 
 
