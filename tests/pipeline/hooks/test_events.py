@@ -29,6 +29,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import logging
+from typing import ClassVar
 
 import pytest
 from goga.pipeline.hooks import (
@@ -774,6 +775,55 @@ class TestAmendWorkflowDelivery:
             )
 
         assert witnesses == []  # the walk stopped at the failing tool — no merge ran
+
+    def test_amend_workflow_missing_gates_fact_fails_that_hook_hard(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A duck-typed document with every fact except ``gates`` fails its hook — not the merge.
+
+        ``gates`` is the LAST entry of the fact-validation tuple, so only a
+        document carrying the seven earlier facts pins it: without the
+        entry, a pre-gates tool document would crash past the loop with a
+        bare ``AttributeError`` (the discard check reads ``document.gates``
+        outside the try) instead of the structured hard error naming the
+        hook, the tool, and the action.
+        """
+
+        class _SevenFactDocument:
+            """A workflow-document duck carrying every amend fact except ``gates``."""
+
+            prompt: ClassVar[None] = None
+            stages: ClassVar[dict[str, object]] = {}
+            extend: ClassVar[dict[str, object]] = {}
+            memory: ClassVar[None] = None
+            assistants: ClassVar[dict[str, object]] = {}
+            delegation: ClassVar[None] = None
+            repeat: ClassVar[None] = None
+
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_stale(hooks: object) -> None:
+            def stale(self: object, context: object) -> None:
+                context.contribute(_SevenFactDocument())
+
+            hooks.subscribe("pipeline", "amend_workflow", "stale", stale)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_stale)
+
+        pipeline, decision, work = _facts()
+
+        with pytest.raises(
+            ValueError,
+            match=r"pipeline\.amend_workflow: .* object has no attribute 'gates'",
+        ):
+            PipelineHooks().amend_workflow(
+                pipeline=pipeline,
+                decision=decision,
+                workflow=WorkflowDocument(prompt="authored"),
+                work=work,
+            )
 
     def test_amend_workflow_two_hooks_of_one_tool_share_one_view_and_buffer(
         self,

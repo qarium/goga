@@ -184,9 +184,10 @@ class TestApplySkipStagesContract:
         """
         gates = WorkflowGates(max_iterations=4)
         step = WorkflowGateStep(name="Unit tests", script="pytest -q")
+        keep = [WorkflowGateStep(name="Lint", script="ruff check .")]
         workflow = WorkflowDocument(
             gates=gates,
-            stages={"a": WorkflowStage(prompt="x"), "gone": WorkflowStage(gates=[step])},
+            stages={"a": WorkflowStage(prompt="x", gates=keep), "gone": WorkflowStage(gates=[step])},
         )
 
         result = apply_skip_stages(workflow, ["gone"])
@@ -197,7 +198,7 @@ class TestApplySkipStagesContract:
         assert result.stages["gone"].skip is True
         assert result.stages["gone"].gates is None
         # A surviving gated stage keeps its check-step list (the same list).
-        assert result.stages["a"].gates is None
+        assert result.stages["a"].gates is keep
         # The skip-only document over a None workflow carries no gates block.
         skip_only = apply_skip_stages(None, ["build"])
 

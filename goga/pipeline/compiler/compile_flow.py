@@ -1239,13 +1239,17 @@ def _reject_gate_body(stage_name: str, body: dict[str, Any]) -> None:
         raise StructuralError(f"gates are forbidden on a planning-only stage in workflow.stages.{stage_name}")
 
 
-def _verify_step_from_authored(step: WorkflowGateStep) -> FlowVerifyStep:
+def _verify_step_from_authored(stage_name: str, index: int, step: WorkflowGateStep) -> FlowVerifyStep:
     """Build one emitted verify step from an authored check step (step 4.11).
 
     Args:
+        stage_name: The BASE stage id (the authoring site —
+            ``workflow.stages.NAME``), used in the error message.
+        index: The step's position in the stage's effective gates list,
+            used in the error message.
         step: One authored ``WorkflowGateStep`` of a stage's effective gates
-            list. Exactly one of ``script``/``agent`` is not ``None`` (the
-            parse guarantee) and ``prompt`` is ``None`` on a shell step.
+            list. Exactly one of ``script``/``agent`` is not ``None`` and
+            ``prompt`` is ``None`` on a shell step.
 
     Returns:
         The ``FlowVerifyStep`` mirror: a shell step carries ``run`` with the
@@ -1255,7 +1259,21 @@ def _verify_step_from_authored(step: WorkflowGateStep) -> FlowVerifyStep:
         no host-side resolution, no agent-name existence check — and
         materializes NO timeout default. ``name`` and ``prompt`` carry
         verbatim; an authored ``timeout`` carries verbatim either way.
+
+    Raises:
+        StructuralError: When ``step`` carries both or neither of
+            ``script``/``agent``. Authored files hit the parser's own check
+            first; a programmatic workflow (a tool contribution rides the
+            overlay merge without a parse) can reach the compiler with a
+            degenerate step, and the guard names the authoring site with
+            the parser's message instead of composing a wrapper path over
+            a ``None`` agent.
     """
+    if (step.script is None) == (step.agent is None):
+        raise StructuralError(
+            f"gates step must carry exactly one of script/agent in workflow.stages.{stage_name}.gates[{index}]",
+        )
+
     if step.script is not None:
         return FlowVerifyStep(
             name=step.name,
@@ -1300,7 +1318,7 @@ def _verify_from_steps(steps: list[FlowVerifyStep], settings: WorkflowGates | No
 
 
 def _gates_emission(
-    workflow: WorkflowDocument | None,
+    workflow: WorkflowDocument,
     effective: dict[str, WorkflowStage],
     expanded: list[PhaseStep | StageStep],
     expanded_ids: dict[str, list[str]],
@@ -1308,9 +1326,10 @@ def _gates_emission(
     """Step 4.11 — translate every gated stage's check steps into per-id stage gates.
 
     Args:
-        workflow: The declarative workflow instructions, or ``None`` when no
-            workflow is applied (no workflow, no gates — byte-identical
-            output). The settings source is ``workflow.gates``.
+        workflow: The declarative workflow instructions (the workflow-less
+            compile never reaches this helper — its ``verify_by_id`` is the
+            empty map by construction). The settings source is
+            ``workflow.gates``.
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name. Read-only input —
             the source of each stage's effective gates list.
@@ -1330,14 +1349,13 @@ def _gates_emission(
         workflow-level block authored any key.
 
     Raises:
-        StructuralError: When a gated stage's body carries ``script``, or
-        when its translated agents are exactly ``["planning"]`` — each check
-        runs once per stage name on the first produced copy's body (the
-        copies share shape), after skip removal and loop expansion.
+        StructuralError: When a gated stage's body carries ``script``, when
+        its translated agents are exactly ``["planning"]``, or when a check
+        step carries both or neither of ``script``/``agent`` (see
+        ``_verify_step_from_authored``) — each check runs once per stage
+        name on the first produced copy's body (the copies share shape),
+        after skip removal and loop expansion.
     """
-    if workflow is None:
-        return {}
-
     settings = workflow.gates
     bodies = {step.name: step.body for step in expanded}
     verify_by_id: dict[str, FlowVerify] = {}
@@ -1352,7 +1370,7 @@ def _gates_emission(
         # copies share shape (deep copies of one override-applied body).
         _reject_gate_body(base_name, bodies[produced_ids[0]])
 
-        steps = [_verify_step_from_authored(authored) for authored in gates]
+        steps = [_verify_step_from_authored(base_name, index, authored) for index, authored in enumerate(gates)]
         verify = _verify_from_steps(steps, settings)
 
         for produced_id in produced_ids:

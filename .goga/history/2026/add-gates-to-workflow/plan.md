@@ -886,7 +886,7 @@ commit.
 - [x] Facade check: `python3 -c "from goga.pipeline.workflow import WorkflowGateStep, WorkflowGates; from goga.pipeline.compiler import FlowVerify, FlowVerifyStep"` — imports succeed
 - [x] Byte-identical guard: `python3 -m pytest tests/pipeline/compiler/test_compile_flow_gates.py::TestCompileFlowGatesEdge::test_gate_free_workflow_compiles_byte_identically -v` — green (PASSED)
 - [x] `goga lint` — passes (cells: 92, errors: 0)
-- [x] Confirm `CODEMANIFEST` files untouched (`git diff --stat` shows no CODEMANIFEST path) and the unrelated `goga/assets/afm/skin/goga.css` working-tree change is left alone (no CODEMANIFEST path in the working tree or the branch diff; css file clean and absent from the branch diff)
+- [x] Confirm `CODEMANIFEST` files untouched (`git diff --stat` shows no CODEMANIFEST path) and the unrelated `goga/assets/afm/skin/goga.css` working-tree change is left alone (no CODEMANIFEST path in the working tree or the branch diff; css file clean and absent from the branch diff) — post-hoc correction (review, 2026-11-09): the css change was in fact committed onto this branch as `ce000950` ("size select chevrons and refresh skin snapshot selectors") before the gates commits — a scope rider with no gates dependency; the CODEMANIFEST paths in the branch diff are the plan's own Task 10 contract updates, not stray edits
 
 ---
 

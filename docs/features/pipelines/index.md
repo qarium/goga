@@ -46,6 +46,9 @@ The pipelines layer is split into two authoring surfaces:
   [Workflows — Collaboration](workflows.md#collaboration-assistants-delegation)),
   run-cycle tuning via the top-level `repeat` block (see
   [Workflows — Run cycles](workflows.md#run-cycles-repeat)),
+  stage-completion quality gates via the top-level `gates` block and the
+  per-stage `gates` check-step lists (see
+  [Workflows — Quality gates](workflows.md#quality-gates-gates)),
   profile-driven rendering (one file adapting per
   contributor — see [Workflows — Profiles](workflows.md#profiles)), and a
   `build:` block configuring nested `goga build` runs.
@@ -106,7 +109,10 @@ delivered to the engine configuration on launch (see
 A repeatable pipeline (header `repeatable: true`) always compiles a
 top-level `repeat` key — a workflow `repeat` block's authored bounds, else
 the scalar `repeat: true` (see
-[Workflows — Run cycles](workflows.md#run-cycles-repeat)).
+[Workflows — Run cycles](workflows.md#run-cycles-repeat)). A workflow
+`gates` block plus per-stage `gates` check-step lists compiles each gated
+stage's completion `verify` gate (see
+[Workflows — Quality gates](workflows.md#quality-gates-gates)).
 Every stage is either an **agent stage** — a `prompt` for an AI agent,
 with optional `skills` and `roles` — or a **script stage** — a literal
 `script` executed without an agent (see

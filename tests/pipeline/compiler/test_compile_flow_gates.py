@@ -23,6 +23,14 @@ stage-completion gate — the ``verify`` field of the flow-file —
   exactly ``["planning"]``) are strict pre-run errors naming the stage —
   checked once per stage name on the original, after skip removal (the
   gates of a skipped stage drop silently);
+- a check step carrying both or neither of ``script``/``agent`` fails the
+  compile with the parser's message — authored files hit the parser's own
+  check first, but a programmatic workflow (the tool-contribution path
+  bypasses ``parse_workflow``) can reach the compiler with a degenerate
+  step, and the guard fires instead of composing a ``None``-agent wrapper
+  path;
+- a stage failing both an attachment check (4.10) and a gates check (4.11)
+  reports the attachment error — the emission order is deterministic;
 - an authoring ``gates`` key and a raw ``verify`` key in a stage body
   (pipeline-file stage OR embedded extend-stage body) are strict compile
   errors — ``verify`` is a compiled-only key, authored through
@@ -400,6 +408,61 @@ class TestCompileFlowGatesRejections:
         assert "verify" not in text
         assert all("verify" not in stage.fields for stage in flow_doc.stages)
 
+    @pytest.mark.parametrize(
+        "step",
+        [
+            pytest.param(lambda: WorkflowGateStep(name="g"), id="neither"),
+            pytest.param(
+                lambda: WorkflowGateStep(name="g", script="pytest", agent="codex"),
+                id="both",
+            ),
+        ],
+    )
+    def test_degenerate_gate_step_rejected_defensively(self, tmp_path: Path, step) -> None:
+        """A step carrying both or neither of ``script``/``agent`` fails the compile.
+
+        Authored files hit the parser's own exclusivity check first; a
+        PROGRAMMATIC workflow (a tool contribution rides the overlay merge
+        without a parse) can reach the compiler with a degenerate step.
+        The guard names the authoring site with the parser's message —
+        never a wrapper path composed over a ``None`` agent.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(_BASE_STAGES)
+        workflow = WorkflowDocument(stages={"build": WorkflowStage(gates=[step()])})
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("gates step must carry exactly one of script/agent in workflow.stages.build.gates[0]"),
+        ):
+            compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
+
+    def test_attachment_error_precedes_gates_error(self, tmp_path: Path) -> None:
+        """A stage failing both 4.10 and 4.11 reports the attachment error — deterministic order.
+
+        The reconstruction tuple evaluates the attachments emission before
+        the gates emission, so a script stage carrying both an assistant
+        attachment and a gate fails with the attachment message.
+        """
+        pipeline_text = "name: T\ndescription: T\n---\ns:\n  title: S\n  script: make check\n"
+        workflow_text = (
+            "stages:\n"
+            "  s:\n"
+            "    assistants:\n"
+            "      helper:\n"
+            "        when: checkpoints\n"
+            "        prompt: Help.\n"
+            "    gates:\n"
+            "      - name: g\n"
+            "        script: pytest\n"
+        )
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant is forbidden on a script stage in workflow.stages.s: helper"),
+        ):
+            _compile(tmp_path, pipeline_text, workflow_text)
+
 
 class TestCompileFlowGatesEdge:
     """Edge cases — byte-identity, verbatim values, and the merged extend entry."""
@@ -418,6 +481,23 @@ class TestCompileFlowGatesEdge:
         _pipeline_doc, _flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
 
         assert "timeout: 30x" in text
+
+    def test_gates_pipeline_document_body_untouched(self, tmp_path: Path) -> None:
+        """The ``PipelineDocument`` mirror keeps the authored body verbatim.
+
+        No ``verify``/``gates`` key appears in the mirror's stage bodies —
+        the gate lives only in ``FlowStage.fields`` (output-side only, the
+        timeout-translation precedent).
+        """
+        workflow_text = "stages:\n  build:\n    gates:\n      - name: compile\n        script: make all\n"
+        pipeline_doc, flow_doc, _text = _compile(tmp_path, _BASE_STAGES, workflow_text)
+
+        build_step = next(step for step in pipeline_doc.body.steps if step.name == "build")
+        build_stage = next(stage for stage in flow_doc.stages if stage.id == "build")
+
+        assert "verify" not in build_step.body
+        assert "gates" not in build_step.body
+        assert "verify" in build_stage.fields
 
     def test_extend_plus_stages_entry_keeps_gate(self, tmp_path: Path) -> None:
         """A stage carrying BOTH an extend-entry and a stages-block entry keeps its gate."""
@@ -455,10 +535,6 @@ class TestCompileFlowGatesEdge:
 
 class TestCompileFlowGatesPlumbing:
     """Direct unit tests of the private step-4.11 helpers (the ``notes_by_id`` precedent)."""
-
-    def test_gates_emission_none_workflow_yields_no_gates(self) -> None:
-        """A ``None`` workflow never gates anything — the workflow-less default mirror."""
-        assert _gates_emission(None, {}, [], {}) == {}
 
     def test_effective_overrides_merged_branch_passes_gates(self) -> None:
         """A stage named in both ``extend`` and ``stages`` keeps its stages-block gates."""

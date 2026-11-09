@@ -169,6 +169,12 @@ below have assigned semantics:
 > Authoring `reflect` or `memory_use` in a stage body is rejected with a
 > structural error.
 >
+> The quality gates likewise have no pipeline-file authoring key: they are
+> assembled by the compiler from the workflow `gates` instructions (see
+> [Workflows — Quality gates](workflows.md#quality-gates-gates)).
+> Authoring `gates` or `verify` in a stage body is rejected with a
+> structural error.
+>
 > The legacy `agents` key is forbidden in both the header and a stage
 > body — author `roles` instead.
 

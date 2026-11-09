@@ -211,7 +211,10 @@ Translation (authored → engine):
   carries `script`; gates on a planning-only stage (translated agents
   exactly `["planning"]`); an authoring `gates` or raw `verify` key in a
   stage body — `verify` is compiled-only, authored through
-  `workflow.stages`.
+  `workflow.stages`. A check step carrying both or neither of
+  `script`/`agent` fails with the parser's message — authored files hit the
+  parser first, but a programmatic workflow (a tool contribution) reaches
+  the compiler unvalidated.
 - Value grammar (durations, name text) passes verbatim — the engine
   reports malformed values at preflight. goga performs no cross-field
   checks of engine constraints and never executes or interprets the gate.
