@@ -25,6 +25,7 @@ from goga.drift import drift as drift_logic
 from tests.drift.conftest import (
     _plant_four_kinds,
     _plant_healthy_plus,
+    _plant_ignored_dirty_tree,
     _plant_locationless,
     _plant_nested_depth,
     _plant_stale_importer,
@@ -108,6 +109,16 @@ class TestDriftCliReport:
         assert result.exit_code == 2
         assert result.stdout == ""
         assert "AST parsing failed" in (result.stderr or "")
+
+    def test_drift_cli_ignored_dirty_tree_exit_0(self, tmp_path: Path) -> None:
+        """A dirty tree excluded by lint ignore exits 0 with the empty report — no parse failure."""
+        _plant_ignored_dirty_tree(tmp_path)
+
+        result = _run_drift()
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+        assert "AST parsing failed" not in (result.stderr or "")
 
     def test_drift_cli_repeated_runs_byte_identical(self, tmp_path: Path) -> None:
         """Two consecutive invocations print byte-identical reports, both exit 1."""

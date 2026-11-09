@@ -32,6 +32,12 @@ report = drift(
 )
 ```
 
+The run honors the project exclusion list: the `lint.ignore` entries of
+`.goga/config.yml` scope the declared view's manifest walk exactly as
+they scope the code-derived view's source discovery — a vendored
+dependency tree, a build directory, or an examples folder listed there
+contributes no cells, no errors, and no entries to either view.
+
 ## Report entries
 
 The routine returns a list of `DriftEntry` records — one per
@@ -69,6 +75,9 @@ only for type-level entries — serialized with
   views; the filters scope the report only — a cell is reported when
   it survives the filters in at least one of the two filtered views,
   and the `depends_on` asymmetry never fabricates cell-level entries
+- Same directory universe: both views of one run are scoped by the
+  `lint.ignore` exclusion of the project config — an ignored directory
+  never surfaces as a discrepancy from either side
 - Hook extension: the run wraps the pipeline with the soft moments and
   delivers the hard report amendment plus the hard entry-facts amendment;
   the grading list is the final post-amendment list; with no subscriptions
@@ -82,7 +91,8 @@ surfaces it as a clean command failure:
 - an uninitialized project — no .goga/config.yml
 - a configured language outside python, golang, javascript, kotlin, swift
 - an unparseable source file — the error names the file
-- manifest loading and validation failures of the declared view
+- manifest loading and validation failures of the declared view —
+  directories excluded by `lint.ignore` never reach this gate
 - hard failures of the schema hooks checkpoints
 - hard failures of the drift hooks checkpoints — a crashed or malformed
   amendment hook (the error names the hook, the tool, the action, and the

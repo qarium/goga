@@ -23,6 +23,8 @@ from goga.drift import DriftEntry, drift
 from tests.drift.conftest import (
     _plant_four_kinds,
     _plant_healthy_plus,
+    _plant_ignored_agreeing_vendor,
+    _plant_ignored_dirty_tree,
     _plant_locationless,
     _plant_nested_depth,
     _plant_root_manifest,
@@ -175,6 +177,34 @@ class TestDriftReport:
 
         assert first == second
         assert _snapshot_tree(tmp_path) == before
+
+
+class TestDriftExclusion:
+    """Contract: the lint ignore exclusion of the config scopes both views of one run."""
+
+    def test_drift_ignored_dirty_tree_does_not_abort(self, tmp_path: Path) -> None:
+        """A rule-violating manifest under an ignored directory aborts nothing — empty report."""
+        _plant_ignored_dirty_tree(tmp_path)
+
+        report = drift([], None, [])
+
+        assert _kinds(report) == []
+
+    def test_drift_honors_lint_ignore_on_both_views(self, tmp_path: Path) -> None:
+        """An ignored agreeing tree surfaces no phantom schema_only entry — both views exclude it."""
+        _plant_ignored_agreeing_vendor(tmp_path)
+
+        report = drift([], None, [])
+
+        assert _kinds(report) == []
+
+    def test_drift_dirty_tree_without_ignore_still_fails(self, tmp_path: Path) -> None:
+        """The same dirty tree without the exclusion keeps the producer error gate."""
+        _plant_ignored_dirty_tree(tmp_path)
+        _write_config(tmp_path)
+
+        with pytest.raises(ValueError, match="AST parsing failed"):
+            drift([], None, [])
 
 
 class TestDriftFailures:

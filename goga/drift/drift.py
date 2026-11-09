@@ -7,13 +7,16 @@ tool packages — the start moment fires before the first producer call, the
 settled report and its entries pass the two amendments, and the completion
 moment fires on every terminal state of a started run, a failure included.
 The routine reads no manifests and no sources itself — the views arrive
-fully assembled from the two producers — and every producer error
-propagates unchanged.
+fully assembled from the two producers, and the one file the routine
+reads on its own is the project config, for the ``lint.ignore``
+exclusion list both views share — and every producer error propagates
+unchanged.
 """
 
 from __future__ import annotations
 
 from ..codegraph import codegraph
+from ..config import load_project_config
 from ..schema import schema
 from .compare import DriftEntry, compare_views, scope_entries
 from .hooks import DriftFilters, DriftHooks, EntryFacts, ReportEntry, RunCompletion, RunOutcome
@@ -31,7 +34,12 @@ def drift(
     the checkpoint family in a fixed order: the start moment, the view
     production with comparison and scoping, the report amendment, the
     per-entry facts amendment, and the completion moment on the terminal
-    state — finished and crashed alike.
+    state — finished and crashed alike. The declared and code-derived
+    views of one run cover the same directory universe: the
+    ``lint.ignore`` exclusion of the project config scopes the declared
+    view's AST walk exactly as it scopes the code-derived view's source
+    discovery, so ignored directories contribute no cells, no errors,
+    and no entries.
 
     Args:
         cells: Cell paths to scope the report. Empty list scopes nothing.
@@ -69,10 +77,17 @@ def drift(
     carried: list[ReportEntry] | None = None
 
     try:
-        complete_schema = schema([], None, [])
+        # The exclusion list of the project config scopes both views of one
+        # run — the declared view's AST walk below and the code-derived
+        # view's source discovery inside codegraph — so the comparison
+        # never spans two different directory universes.
+        config = load_project_config()
+        ignore = None if config.lint is None else config.lint.ignore
+
+        complete_schema = schema([], None, [], ignore=ignore)
         complete_codegraph = codegraph([], None, [])
 
-        filtered_schema = schema(cells, max_depth, depends_on)
+        filtered_schema = schema(cells, max_depth, depends_on, ignore=ignore)
         filtered_codegraph = codegraph(cells, max_depth, depends_on)
 
         entries = compare_views(complete_schema, complete_codegraph)

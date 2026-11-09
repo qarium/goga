@@ -83,11 +83,15 @@ def _write_package(root: Path, name: str, definitions: str, declarations: list[s
         _write_codemanifest(package, declarations)
 
 
-def _write_config(root: Path, language: str = "python") -> None:
-    """Write a minimal ``.goga/config.yml`` with the given language."""
+def _write_config(root: Path, language: str = "python", lint_ignore: list[str] | None = None) -> None:
+    """Write a minimal ``.goga/config.yml`` — the language plus an optional lint ignore list."""
     goga_dir = root / ".goga"
     goga_dir.mkdir(exist_ok=True)
-    (goga_dir / "config.yml").write_text(f"language: {language}\n", encoding="utf-8")
+    lint = ""
+    if lint_ignore is not None:
+        listed = "".join(f"    - {entry}\n" for entry in lint_ignore)
+        lint = f"lint:\n  ignore:\n{listed}"
+    (goga_dir / "config.yml").write_text(f"language: {language}\n{lint}", encoding="utf-8")
 
 
 def _plant_four_kinds(root: Path) -> None:
@@ -172,6 +176,33 @@ def _plant_locationless(root: Path) -> None:
     bad = root / "bad"
     bad.mkdir()
     (bad / "CODEMANIFEST").write_text(_LOCATIONLESS_MANIFEST, encoding="utf-8")
+
+
+def _plant_ignored_dirty_tree(root: Path) -> None:
+    """Plant a healthy project whose ``vendor/`` tree carries a rule-violating manifest.
+
+    The config's lint ignore list excludes ``vendor/`` — the dirty tree
+    must contribute no cells, no errors, and no entries to either view.
+    """
+    _write_config(root, lint_ignore=["vendor/"])
+
+    _write_package(root, "pkg", "def run() -> None:\n    return\n", ["run"])
+
+    vendor = root / "vendor"
+    vendor.mkdir()
+    (vendor / "CODEMANIFEST").write_text(_LOCATIONLESS_MANIFEST, encoding="utf-8")
+
+
+def _plant_ignored_agreeing_vendor(root: Path) -> None:
+    """Plant a healthy project plus a valid manifest-and-code ``vendor/`` tree under lint ignore.
+
+    Both views exclude ``vendor/`` — the agreeing tree must surface as
+    no phantom schema_only entry.
+    """
+    _write_config(root, lint_ignore=["vendor/"])
+
+    _write_package(root, "pkg", "def run() -> None:\n    return\n", ["run"])
+    _write_package(root, "vendor", "def vend() -> None:\n    return\n", ["vend"])
 
 
 def _snapshot_tree(root: Path) -> dict[str, str]:

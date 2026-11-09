@@ -174,7 +174,9 @@ Annotations: |
     1. Emit the start moment via the `DriftHooks` entry — its
        emit_run_started checkpoint — with `DriftFilters` mirroring the
        requested filters
-    2. Wrap every following stage: produce the complete views — call
+    2. Wrap every following stage: resolve the exclusion list — the
+       lint ignore entries of the project config — once and deliver it
+       to both `schema` calls; produce the complete views — call
        `schema` and `codegraph` with no filters; produce the filtered
        views — call `schema` and `codegraph` with `cells`, `max_depth`,
        `depends_on`
@@ -221,6 +223,11 @@ Annotations: |
       run failed before the report was computed
     - The comparison always runs on the complete views; the filters
       scope the report only
+    - The declared and code-derived views of one run cover the same
+      directory universe — the lint ignore exclusion of the project
+      config scopes the declared view's AST walk exactly as it scopes
+      the code-derived view's source discovery; ignored directories
+      contribute no cells, no errors, and no entries
     - The depends_on asymmetry — declared dependencies in the
       declared view, resolved imports in the code-derived view —
       never surfaces as fabricated cell-level entries
@@ -244,7 +251,8 @@ Annotations: |
 
     Constraints:
     - Do not read manifests or sources — the views arrive fully
-      assembled from `schema` and `codegraph`
+      assembled from `schema` and `codegraph`; the project config read
+      resolves the exclusion list only
     - Do not apply filters inside the comparison
     - Do not emit provenance markers — the tools areas are the
       contribution idiom, not provenance
