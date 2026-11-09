@@ -14,8 +14,8 @@ Annotations: |
   workflow-file (the reading step lives in `load_workflow`; `parse_workflow`
   accepts the rendered text), validates its structure (known top-level keys
   prompt / stages / extend /
-  memory / profile / build / assistants / delegation / repeat, field types,
-  loop counts, extend-entry positioning, and the inline agent/loop fields of
+  memory / profile / build / assistants / delegation / repeat / gates, field types,
+  loop counts, extend-entry positioning, and the inline agent/loop/approve fields of
   an extend-entry), and returns a
   `WorkflowDocument` carrying declarative instructions for the compiler. It performs no I/O beyond the path it receives, performs
   no network or subprocess calls, and has no Imports — it depends only on

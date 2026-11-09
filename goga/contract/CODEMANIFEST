@@ -1,5 +1,6 @@
 Imports:
   - Types:
+      - BaseContract
       - EntityContract
       - RoutineContract
       - PropertyContract
@@ -40,10 +41,16 @@ Annotations: |
 
 ---
 
+->BaseContract: {}
 ->EntityContract: {}
 ->RoutineContract: {}
 ->PropertyContract: {}
 ->MethodContract: {}
+->python_contract: {}
+->golang_contract: {}
+->javascript_contract: {}
+->kotlin_contract: {}
+->swift_contract: {}
 
 "contract(lang: str, cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
   location: dispatcher.py

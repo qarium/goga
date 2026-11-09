@@ -1,0 +1,84 @@
+Imports:
+  - Types:
+      - DocumentRule
+    From: goga/ast/rules/base
+  - Types:
+      - AnnotationLinksExists
+    From: goga/ast/rules/document/annotations
+  - Types:
+      - ImportsCanNotBeEmpty
+      - ImportsHasOnlyValidKeys
+      - ImportItemIsValid
+      - ImportUsageExists
+      - ImportHasValidFromPath
+      - ImportHasNotDuplicate
+      - ImportIsUsed
+    From: goga/ast/rules/document/imports
+  - Types:
+      - MutationExists
+      - MutationIsValid
+      - EmbeddedEntityCanNotHasMutations
+    From: goga/ast/rules/document/mutation
+  - Types:
+      - EntitiesAndRoutinesHasNotConflicts
+      - EntityHasOnlyValidKeys
+      - RoutineHasOnlyValidKeys
+      - SignatureIsValid
+      - ReturnTypeHasLink
+      - LocationIsRequired
+    From: goga/ast/rules/document/structures
+  - Types:
+      - AllUsagesIsUsed
+      - UsageFilepathExists
+      - UsageLinksHasNotConflicts
+      - UsageUrlIsAccessible
+    From: goga/ast/rules/document/usages
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  When developing and testing: follow the practice `convention`.
+  The cell is the aggregation facade of the document validation rules:
+  it re-exports every rule of the five rule zones as-is — the rules are
+  declared and implemented in their zone cells, and this contract includes
+  them unchanged via embedding. All re-exported rules are mutations of
+  `DocumentRule`.
+
+---
+
+# ***************** #
+# Document facade  #
+# ***************** #
+
+->AnnotationLinksExists: {}
+->ImportsCanNotBeEmpty: {}
+->ImportsHasOnlyValidKeys: {}
+->ImportItemIsValid: {}
+->ImportUsageExists: {}
+->ImportHasValidFromPath: {}
+->ImportHasNotDuplicate: {}
+->ImportIsUsed: {}
+->MutationExists: {}
+->MutationIsValid: {}
+->EmbeddedEntityCanNotHasMutations: {}
+->EntitiesAndRoutinesHasNotConflicts: {}
+->EntityHasOnlyValidKeys: {}
+->RoutineHasOnlyValidKeys: {}
+->SignatureIsValid: {}
+->ReturnTypeHasLink: {}
+->LocationIsRequired: {}
+->AllUsagesIsUsed: {}
+->UsageFilepathExists: {}
+->UsageLinksHasNotConflicts: {}
+->UsageUrlIsAccessible: {}
+
+---
+
+Author: Goga
+CreatedAt: 09/11/26
+
+Description: |
+  Aggregation facade of the CODEMANIFEST document validation rules —
+  the single import surface re-exporting the rules of the five document
+  rule zones unchanged.

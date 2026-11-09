@@ -182,6 +182,18 @@ and/or skills is rejected at compile time — "script is mutually exclusive with
 prompt/skills in stage <name>". before_script/after_script are compatible
 with prompt/skills/script (no error).
 
+Structural error: a stage body that carries script together with a verbatim
+`command` key is rejected at compile time — "script is mutually exclusive
+with command in stage <name>". The stage action is one — the agent exec
+target (`command`) or the script.
+
+Structural error: a workflow stage-level agent instruction on a script stage
+is rejected at compile time — "agent is forbidden on a script stage in
+workflow.<name>: <agent>". A script stage runs its script; the workflow
+agent override applies to agent stages only. before_script/after_script and
+`timeout` stay compatible with the workflow agent override on non-script
+stages.
+
 ## Stage timeout directive
 
 `timeout` is a string stage-body directive (pipeline-file stage or extend-stage

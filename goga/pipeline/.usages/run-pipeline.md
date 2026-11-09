@@ -122,7 +122,8 @@ the host launcher prints no workflow line.
 
 After `compile_flow` writes the flow-file, `apply_stage_env_wrappers` generates one sh closure
 wrapper per env-declaring stage and patches exactly those stages'
-`command:` fields in the ALREADY WRITTEN flow-file — every other byte stays untouched. A
+`command:` (agent stages) or `script:` (script stages) fields in the ALREADY WRITTEN
+flow-file — every other byte stays untouched. A
 workflow declaring no stage env is neither read nor rewritten: the flow output stays
 byte-identical to the compiler's direct composition.
 

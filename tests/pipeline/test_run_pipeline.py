@@ -581,6 +581,124 @@ class TestRunPipelineGateEnvDelivery:
         assert not (tmp_path / "goga-gate-env").exists()
 
 
+class TestRunPipelineStageEnvDelivery:
+    """Step 14 — the per-stage env delivery through the full run chain.
+
+    The stage-env forms the run coordination patches after the real compile:
+    the payload-closure form of a script stage and the combined delivery of
+    stage env with gate-step env on one stage (the two sequential patches of
+    steps 14/14b over the same written flow-file).
+    """
+
+    @pytest.fixture
+    def stage_wrapper_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """Relocate the stage wrapper base into the tmp tree and return its path."""
+        from goga.pipeline import stage_env_wrappers
+
+        base = tmp_path / "goga-stage-env"
+        monkeypatch.setattr(stage_env_wrappers, "_WRAPPER_BASE", base)
+
+        return base
+
+    def test_run_pipeline_delivers_script_stage_env_through_payload_closure(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        stage_wrapper_base: Path,
+    ) -> None:
+        """A script stage with a stage env gets the payload closure — its script field points at the wrapper.
+
+        The real (un-mocked) compile chain runs through ``run_pipeline``; the
+        stage env delivery then patches the claimed stage's ``script:`` line in
+        the written flow-file and generates the closure under the redirected
+        container-local base. No agent resolves on this path — the config's
+        ``pipeline`` section carries no agent.
+        """
+        import yaml
+
+        afm_dir.mkdir(parents=True)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text("stages:\n  build:\n    env:\n      FOO: bar\n")
+
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\ndescription: Deploy pipeline\n---\n\n- name: build\n  title: Build\n  script: pytest -q\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+
+        wrapper = str(stage_wrapper_base / "build")
+
+        loaded = yaml.safe_load((afm_dir / "flow.yml").read_text())
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert stage["script"] == wrapper
+        assert "command" not in stage
+        assert (stage_wrapper_base / "build").read_text() == "#!/bin/sh\nexport FOO=bar\npytest -q\n"
+
+    def test_run_pipeline_delivers_stage_and_gate_env_on_one_stage(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        stage_wrapper_base: Path,
+    ) -> None:
+        """Stage env and gate-step env on one stage compose — both patches land in one written flow-file.
+
+        Step 14 patches the stage's ``command:`` line to the exec closure
+        (the workflow stage declares its own agent); step 14b then patches the
+        gate step's ``run:`` line to its gate closure over the same file —
+        neither delivery disturbs the other.
+        """
+        import yaml
+
+        afm_dir.mkdir(parents=True)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text(
+            "stages:\n"
+            "  build:\n"
+            "    agent: codex\n"
+            "    env:\n"
+            "      FOO: bar\n"
+            "    gates:\n"
+            "      - name: tests\n"
+            "        script: pytest -q\n"
+            "        env:\n"
+            "          GATE_KEY: gv\n"
+        )
+
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\ndescription: Deploy pipeline\n---\n\n- name: build\n  title: Build\n  prompt: Build it\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+
+        loaded = yaml.safe_load((afm_dir / "flow.yml").read_text())
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert stage["command"] == str(stage_wrapper_base / "build")
+        assert stage["verify"][0]["run"] == str(tmp_path / "goga-gate-env" / "build-0-tests")
+
+        assert (stage_wrapper_base / "build").read_text() == (
+            '#!/bin/sh\nexport FOO=bar\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        )
+        assert (tmp_path / "goga-gate-env" / "build-0-tests").read_text() == (
+            "#!/bin/sh\nexport GATE_KEY=gv\npytest -q\n"
+        )
+
+
 class TestRunPipelineSkipStages:
     """Step 7 — merge the ``skip`` parameter names onto the resolved workflow
     via :func:`apply_skip_stages`, then forward the merged document to

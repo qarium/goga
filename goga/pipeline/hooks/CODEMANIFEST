@@ -12,6 +12,7 @@ Imports:
     From: goga/hooks
   - Types:
       - WorkflowDocument
+      - WorkflowGates
     From: goga/pipeline/workflow
 
 Usages:
@@ -76,7 +77,13 @@ Annotations: |
   inline declaration whose name is already present anywhere in the merged
   assistant namespace dropped silently the same way. The final
   document assembly carries the merged collaboration fields like every
-  workflow-level field — they never vanish in the overlay.
+  workflow-level field — they never vanish in the overlay. The gates
+  follow the same preservation law: the workflow-level gates settings
+  block merges whole like repeat (an authored block is unbeatable,
+  otherwise the later contributing tool's block wins), and every stage's
+  authored check-step list is an unbeatable ordinary stage field — an
+  authored list is never overwritten, and an unset list takes the later
+  contributing tool's entries.
   Use the `per-tool-delivery` practice for the staged delivery loop of
   the amendment checkpoint — its loop skeleton, primitives, and
   tool-grouped commit apply as written.
@@ -347,7 +354,8 @@ Annotations: |
     4.3. repeat: keep the authored block when present — it is unbeatable;
         otherwise the block of the later contributing tool wins; no
         field-level merging
-    4.4. gates (settings block): keep the authored block when present — it
+    4.4. gates (settings block, `WorkflowGates`): keep the authored block
+        when present — it
         is unbeatable; otherwise the block of the later contributing tool
         wins; no field-level merging
     5. skip is an ordinary stage field: an authored skip — from the
@@ -826,5 +834,6 @@ Description: |
   hooks platform, and the bridged mid-run events with their passthrough
   contexts. The overlay merge preserves the full workflow model —
   per-stage `env` instructions, the workflow-level `profile` and `build`
-  fields, and the collaboration instructions (assistant catalog,
-  delegation block, stage attachments).
+  fields, the run-cycle tuning (repeat block, gates settings block) with
+  the per-stage check-step lists, and the collaboration instructions
+  (assistant catalog, delegation block, stage attachments).

@@ -1,4 +1,3 @@
-from ..base.document import DocumentRule
 from .annotations.rules import AnnotationLinksExists
 from .imports.rules import (
     ImportHasNotDuplicate,
@@ -32,7 +31,6 @@ from .usages.rules import (
 __all__ = [
     "AllUsagesIsUsed",
     "AnnotationLinksExists",
-    "DocumentRule",
     "EmbeddedEntityCanNotHasMutations",
     "EntitiesAndRoutinesHasNotConflicts",
     "EntityHasOnlyValidKeys",

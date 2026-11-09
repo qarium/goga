@@ -449,7 +449,10 @@ Annotations: |
   per-stage steps is inert. The verify key occupies the canonical fields slot
   after assistants; inside the emitted block: steps, then the settings in the
   fixed order max_failures, review_patience, fresh_correction; inside a step:
-  name, then run/command, then timeout, prompt. Use `afm` for the emitted
+  name, then run/command, then timeout, prompt. A step's authored env map
+  never reaches the emitted verify — the emission drops it silently; the
+  pipeline run coordination's gate wrapper generation consumes it (per the
+  stage-env precedent). Use `afm` for the emitted
   verify contract; use `gates` for the authoring vocabulary of the consumed
   instructions.
 

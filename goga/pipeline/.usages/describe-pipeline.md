@@ -81,8 +81,10 @@ a run applies — the same flags produce the same composition and the same prove
 forms, and the card names the contributing tools (`card.provenance`). The stage composition is
 produced by the same compilation machine a run uses, so loop-expanded copies appear as separate
 rows with their generated ids, and skipped stages disappear from the list exactly as they
-disappear from a run. The composition reflects the per-stage env wrappers — an env-declaring
-stage appears exactly as it composes in a run with the same flags; the card adds no new
+disappear from a run. The card/run equivalence is structural — the card never generates the
+per-stage env wrappers: an env-declaring
+stage appears exactly as it composes in a run with the same flags, and wrapper generation with
+its pre-launch failure modes is run-only; the card adds no new
 reporting surfaces and prints no feedback line. No run events fire in card form.
 
 ## Side effects

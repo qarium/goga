@@ -31,6 +31,19 @@ class TestContract:
 
         assert facade_usages is usages_cli
 
+    def test_facade_all_is_exact_contract_set(self) -> None:
+        """The package facade carries exactly the CODEMANIFEST-declared names."""
+        commands_usages_package = importlib.import_module("goga.commands.usages")
+
+        assert commands_usages_package.__all__ == ["render_status_report", "usages"]
+        assert commands_usages_package.__all__ == sorted(commands_usages_package.__all__)
+
+    def test_render_status_report_in_facade_all(self) -> None:
+        """The status renderer is a declared facade member of the package."""
+        commands_usages_package = importlib.import_module("goga.commands.usages")
+
+        assert callable(commands_usages_package.render_status_report)
+
     def test_usages_is_click_group(self) -> None:
         assert isinstance(usages_cli, click.Group)
 
