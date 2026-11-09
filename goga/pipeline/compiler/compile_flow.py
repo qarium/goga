@@ -1249,7 +1249,8 @@ def _verify_step_from_authored(stage_name: str, index: int, step: WorkflowGateSt
             used in the error message.
         step: One authored ``WorkflowGateStep`` of a stage's effective gates
             list. Exactly one of ``script``/``agent`` is not ``None`` and
-            ``prompt`` is ``None`` on a shell step.
+            ``prompt`` is ``None`` on a shell step (both parse guarantees,
+            re-checked here).
 
     Returns:
         The ``FlowVerifyStep`` mirror: a shell step carries ``run`` with the
@@ -1262,16 +1263,26 @@ def _verify_step_from_authored(stage_name: str, index: int, step: WorkflowGateSt
 
     Raises:
         StructuralError: When ``step`` carries both or neither of
-            ``script``/``agent``. Authored files hit the parser's own check
-            first; a programmatic workflow (a tool contribution rides the
-            overlay merge without a parse) can reach the compiler with a
-            degenerate step, and the guard names the authoring site with
-            the parser's message instead of composing a wrapper path over
-            a ``None`` agent.
+            ``script``/``agent``, or carries ``prompt`` alongside ``script``
+            (the engine accepts ``prompt`` on AI steps only). Authored files
+            hit the parser's own checks first; a programmatic workflow (a
+            tool contribution rides the overlay merge without a parse) can
+            reach the compiler with a degenerate step, and the guard names
+            the authoring site with the parser's message instead of
+            composing a wrapper path over a ``None`` agent or emitting a
+            ``run``+``prompt`` step the engine rejects at load.
     """
     if (step.script is None) == (step.agent is None):
         raise StructuralError(
             f"gates step must carry exactly one of script/agent in workflow.stages.{stage_name}.gates[{index}]",
+        )
+
+    if step.prompt is not None and step.script is not None:
+        # The engine accepts ``prompt`` on AI steps only — the parser binds
+        # it to an agent step at authoring time; the guard mirrors that
+        # binding for a programmatic workflow (same defensive surface).
+        raise StructuralError(
+            f"prompt is forbidden on a script gate step in workflow.stages.{stage_name}.gates[{index}]",
         )
 
     if step.script is not None:
@@ -1363,7 +1374,7 @@ def _gates_emission(
     for base_name, produced_ids in expanded_ids.items():
         stage = effective.get(base_name)
         gates = stage.gates if stage is not None else None
-        if gates is None:
+        if not gates:
             continue
 
         # The first produced copy's body decides for the whole group — the

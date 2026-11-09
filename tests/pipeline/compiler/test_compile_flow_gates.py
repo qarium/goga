@@ -23,12 +23,17 @@ stage-completion gate — the ``verify`` field of the flow-file —
   exactly ``["planning"]``) are strict pre-run errors naming the stage —
   checked once per stage name on the original, after skip removal (the
   gates of a skipped stage drop silently);
-- a check step carrying both or neither of ``script``/``agent`` fails the
-  compile with the parser's message — authored files hit the parser's own
-  check first, but a programmatic workflow (the tool-contribution path
-  bypasses ``parse_workflow``) can reach the compiler with a degenerate
-  step, and the guard fires instead of composing a ``None``-agent wrapper
-  path;
+- a check step carrying both or neither of ``script``/``agent``, or
+  carrying ``prompt`` alongside ``script``, fails the compile with the
+  parser's message — authored files hit the parser's own checks first, but
+  a programmatic workflow (the tool-contribution path bypasses
+  ``parse_workflow``) can reach the compiler with a degenerate step, and
+  the guard fires instead of composing a ``None``-agent wrapper path or
+  emitting a ``run``+``prompt`` step the engine rejects at load;
+- an empty gates list equals absence — authored emptiness normalizes at
+  parse, and an empty programmatic list (a tool contribution carries it
+  verbatim through the overlay merge) emits no verify key and fires no
+  body check;
 - a stage failing both an attachment check (4.10) and a gates check (4.11)
   reports the attachment error — the emission order is deterministic;
 - an authoring ``gates`` key and a raw ``verify`` key in a stage body
@@ -437,6 +442,29 @@ class TestCompileFlowGatesRejections:
         ):
             compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
 
+    def test_prompt_on_script_gate_step_rejected_defensively(self, tmp_path: Path) -> None:
+        """A script step carrying ``prompt`` fails the compile.
+
+        Authored files hit the parser's own prompt binding first; a
+        PROGRAMMATIC workflow (a tool contribution rides the overlay merge
+        without a parse) can reach the compiler with the degenerate pair —
+        the model types allow it (both are ``str | None``). The guard names
+        the authoring site with the parser's message instead of emitting a
+        ``run``+``prompt`` step the engine rejects at load (``prompt`` is
+        valid on AI steps only).
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(_BASE_STAGES)
+        workflow = WorkflowDocument(
+            stages={"build": WorkflowStage(gates=[WorkflowGateStep(name="g", script="pytest", prompt="Why?")])},
+        )
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("prompt is forbidden on a script gate step in workflow.stages.build.gates[0]"),
+        ):
+            compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
+
     def test_attachment_error_precedes_gates_error(self, tmp_path: Path) -> None:
         """A stage failing both 4.10 and 4.11 reports the attachment error — deterministic order.
 
@@ -481,6 +509,43 @@ class TestCompileFlowGatesEdge:
         _pipeline_doc, _flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
 
         assert "timeout: 30x" in text
+
+    def test_empty_programmatic_gates_list_equals_absence(self, tmp_path: Path) -> None:
+        """An empty gates list from a tool contribution emits nothing — empty equals absence.
+
+        The parser normalizes authored emptiness to ``None``, but the
+        overlay merge carries a tool's ``WorkflowStage(gates=[])``
+        verbatim (``_is_set`` counts the empty list as authored). The
+        emission guard treats the empty list exactly like absence: no
+        verify key anywhere, and no spurious body check — a SCRIPT stage
+        carrying an empty list is not a forbidden-gates error.
+        """
+        pipeline_text = (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "check:\n"
+            "  title: Check\n"
+            "  script: make check\n"
+        )
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(pipeline_text)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={
+                "build": WorkflowStage(gates=[]),
+                "check": WorkflowStage(gates=[]),
+            },
+        )
+
+        _pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+        text = flow_path.read_text()
+
+        assert "verify" not in text
+        assert all("verify" not in stage.fields for stage in flow_doc.stages)
 
     def test_gates_pipeline_document_body_untouched(self, tmp_path: Path) -> None:
         """The ``PipelineDocument`` mirror keeps the authored body verbatim.

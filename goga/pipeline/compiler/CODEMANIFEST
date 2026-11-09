@@ -408,13 +408,19 @@ Annotations: |
   name, prompt, and an authored timeout pass verbatim. A shell step without an
   authored timeout carries the materialized "1h"; an AI step materializes no
   timeout default — a goga-side product default, not an engine contract. A
-  check step carrying both or neither of script/agent is a structural error
-  with the parser's message ("gates step must carry exactly one of
-  script/agent in workflow.stages.<NAME>.gates[<i>]" — authored files hit
-  the parser's own check first; a programmatic workflow, which a tool
-  contribution delivers through the overlay merge without a parse, reaches
-  this cell unvalidated, and the guard fires instead of composing a wrapper
-  path over a None agent). When
+  check step carrying both or neither of script/agent, or carrying prompt
+  alongside script (the engine accepts prompt on AI steps only), is a
+  structural error with the parser's message ("gates step must carry
+  exactly one of script/agent in workflow.stages.<NAME>.gates[<i>]" /
+  "prompt is forbidden on a script gate step in
+  workflow.stages.<NAME>.gates[<i>]" — authored files hit the parser's own
+  checks first; a programmatic workflow, which a tool contribution delivers
+  through the overlay merge without a parse, reaches this cell unvalidated,
+  and the guard fires instead of composing a wrapper path over a None agent
+  or emitting a run+prompt step the engine rejects at load). An empty gates
+  list equals absence — the parser normalizes authored emptiness to None,
+  and the emission guard treats an empty programmatic list the same: no
+  verify key, no body check. When
   the workflow-level gates settings block authored any key, every gated
   stage's verify is the container form (the steps plus the authored settings,
   authored keys only — no materialized settings); with no settings block
@@ -433,8 +439,8 @@ Annotations: |
   script) and gates on a planning-only stage (translated agents exactly
   ["planning"]) are strict pre-run errors naming the stage — the engine
   rejects both, and this cell surfaces them with its own messages. A check
-  step's script/agent exclusivity is re-checked here defensively (see Gates
-  compilation). An
+  step's script/agent exclusivity and prompt binding are re-checked here
+  defensively (see Gates compilation). An
   authoring gates key and a raw verify key in a stage body (pipeline-file
   stage or embedded extend-stage body) are strict compile errors directing
   the author to workflow.stages — verify is a compiled-only key, authored
