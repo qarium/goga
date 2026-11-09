@@ -637,18 +637,18 @@ facade. Covers `FlowVerifyStep` (`flow_verify_step.py`) and `FlowVerify`
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Declaration**: declare Task 4 (compiler verify models) being executed
-- [ ] **Contract tests**: create `tests/pipeline/compiler/test_flow_verify_step_contract.py` and `tests/pipeline/compiler/test_flow_verify_contract.py` (the `test_flow_repeat_contract.py` pattern): facade importability + `__all__` membership, `is_kw_only_dataclass`, fixed field order (`FlowVerifyStep`: name, run, command, timeout, prompt; `FlowVerify`: steps, max_failures, review_patience, fresh_correction), defaults `None` with `steps` required (`pytest.raises(TypeError)` on missing), authored-zero preservation — expected to fail at this stage
-- [ ] **Code**: create `goga/pipeline/compiler/flow_verify_step.py` — `@dataclass(kw_only=True)` `FlowVerifyStep`: `name: str` (required), `run: str | None = None`, `command: str | None = None`, `timeout: str | None = None`, `prompt: str | None = None` (fixed order — the emission order of the step keys)
-- [ ] **Code**: create `goga/pipeline/compiler/flow_verify.py` — `@dataclass(kw_only=True)` `FlowVerify`: `steps: list[FlowVerifyStep]` (required, no default), `max_failures: int | None = None`, `review_patience: int | None = None`, `fresh_correction: bool | None = None` (fixed order — the emission order of the block keys); docstring notes that an instance carrying no authored setting IS the list emission form
-- [ ] **Code**: export both from `goga/pipeline/compiler/__init__.py` — relative imports and `__all__` entries `FlowVerify`, `FlowVerifyStep` after `FlowTeamMember`, before `PhaseStep`
-- [ ] **REPL checkpoint**: in the REPL, construct `FlowVerify(steps=[FlowVerifyStep(name="t", run="pytest")])` and a settings-carrying instance; observe the fields
-- [ ] **Interface verification**: `python3 -m pytest tests/pipeline/compiler/test_flow_verify_step_contract.py tests/pipeline/compiler/test_flow_verify_contract.py -v` — all pass
-- [ ] **Logic tests**: defaults carry no authored setting; `steps` has no default; authored `0` on `max_failures`/`review_patience` stays `0`
-- [ ] **Debugging**: `python3 -m pytest tests/pipeline/compiler -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade `__all__` matches the CODEMANIFEST obligation; field names/order/types match the declared properties
-- [ ] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
-- [ ] **Completion**: mark checkboxes complete
+- [x] **Declaration**: declare Task 4 (compiler verify models) being executed
+- [x] **Contract tests**: create `tests/pipeline/compiler/test_flow_verify_step_contract.py` and `tests/pipeline/compiler/test_flow_verify_contract.py` (the `test_flow_repeat_contract.py` pattern): facade importability + `__all__` membership, `is_kw_only_dataclass`, fixed field order (`FlowVerifyStep`: name, run, command, timeout, prompt; `FlowVerify`: steps, max_failures, review_patience, fresh_correction), defaults `None` with `steps` required (`pytest.raises(TypeError)` on missing), authored-zero preservation — expected to fail at this stage
+- [x] **Code**: create `goga/pipeline/compiler/flow_verify_step.py` — `@dataclass(kw_only=True)` `FlowVerifyStep`: `name: str` (required), `run: str | None = None`, `command: str | None = None`, `timeout: str | None = None`, `prompt: str | None = None` (fixed order — the emission order of the step keys)
+- [x] **Code**: create `goga/pipeline/compiler/flow_verify.py` — `@dataclass(kw_only=True)` `FlowVerify`: `steps: list[FlowVerifyStep]` (required, no default), `max_failures: int | None = None`, `review_patience: int | None = None`, `fresh_correction: bool | None = None` (fixed order — the emission order of the block keys); docstring notes that an instance carrying no authored setting IS the list emission form
+- [x] **Code**: export both from `goga/pipeline/compiler/__init__.py` — relative imports and `__all__` entries `FlowVerify`, `FlowVerifyStep` after `FlowTeamMember`, before `PhaseStep`
+- [x] **REPL checkpoint**: in the REPL, construct `FlowVerify(steps=[FlowVerifyStep(name="t", run="pytest")])` and a settings-carrying instance; observe the fields
+- [x] **Interface verification**: `python3 -m pytest tests/pipeline/compiler/test_flow_verify_step_contract.py tests/pipeline/compiler/test_flow_verify_contract.py -v` — all pass
+- [x] **Logic tests**: defaults carry no authored setting; `steps` has no default; authored `0` on `max_failures`/`review_patience` stays `0`
+- [x] **Debugging**: `python3 -m pytest tests/pipeline/compiler -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: facade `__all__` matches the CODEMANIFEST obligation; field names/order/types match the declared properties
+- [x] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
+- [x] **Completion**: mark checkboxes complete
 
 ### Task 5: `serialize_flow` verify emission (TDD coding)
 
