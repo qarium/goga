@@ -271,6 +271,39 @@ docs/features/schema/api.md:
   - goga/schema
   - goga/schema/hooks
 
+docs/features/codegraph/index.md:
+  - goga/codegraph
+  - goga/commands/codegraph
+docs/features/codegraph/cli.md:
+  - goga/commands/codegraph
+  - goga/codegraph
+docs/features/codegraph/configuration.md:
+  - goga/codegraph
+  - goga/config/project
+docs/features/codegraph/hooks.md:
+  - goga/codegraph
+  - goga/codegraph/hooks
+docs/features/codegraph/api.md:
+  - goga/codegraph
+  - goga/codegraph/hooks
+
+docs/features/drift/index.md:
+  - goga/drift
+  - goga/commands/drift
+docs/features/drift/cli.md:
+  - goga/commands/drift
+  - goga/drift
+docs/features/drift/configuration.md:
+  - goga/drift
+  - goga/schema
+  - goga/codegraph
+docs/features/drift/hooks.md:
+  - goga/drift
+  - goga/drift/hooks
+docs/features/drift/api.md:
+  - goga/drift
+  - goga/drift/hooks
+
 docs/features/contract/index.md:
   - goga/contract
   - goga/commands/contract
@@ -364,9 +397,11 @@ docs/configuration/index.md:
 docs/configuration/project.md:
   - goga/config
   - goga/config/project
+  - goga/config/yaml
   - goga/docker
 docs/configuration/home.md:
   - goga/config/home
+  - goga/config/yaml
   - goga/docker
   - goga/pipeline
 docs/configuration/agents.md:

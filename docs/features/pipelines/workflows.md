@@ -100,7 +100,7 @@ extend:
 | `extend` | map   | no*      | New stages to add to the pipeline, keyed by new stage name. |
 | `memory` | map   | no*      | Workflow-memory configuration (see [Project memory](#project-memory-memory-reflect)). |
 | `profile` | string | no    | Default profile name activated when no `--profile`/`GOGA_PROFILE` channel provided one. Must be a literal (a templated default does not participate in activation). A `profile:`-only workflow is invalid — activation is not content. |
-| `build` | map   | no*      | Configuration layered onto the `build` section for nested `goga build` runs (see the [build documentation](../../build/configuration.md)). A `build:`-only workflow is valid. |
+| `build` | map   | no*      | Configuration layered onto the `build` section for nested `goga build` runs (see the [build documentation](../build/configuration.md)). A `build:`-only workflow is valid. |
 | `assistants` | map | no*   | Catalog of run-level assistants keyed by assistant name (see [Collaboration](#collaboration-assistants-delegation)). An `assistants:`-only workflow is valid. |
 | `delegation` | map | no*   | Delegation bounds — `depth` and `max_tasks` (see [Collaboration](#collaboration-assistants-delegation)). A `delegation:`-only workflow is valid. |
 | `repeat` | map | no*   | Run-cycle tuning for a repeatable pipeline — `max_cycles` / `keep_runs` (see [Run cycles](#run-cycles-repeat)). A `repeat:`-only workflow is valid. |
@@ -122,8 +122,8 @@ fields:
 
 | Field   | Type     | Default | Description                                                                                              |
 |---------|----------|---------|----------------------------------------------------------------------------------------------------------|
-| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `cursor`, `opencode`, `qwen`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
-| `env`   | map of str→str | — | Per-stage environment variables, exported verbatim by a generated sh closure wrapping the stage's agent (or the global pipeline agent when the entry sets no `agent`). Every `loop`-expanded copy gets its own closure carrying the same values; keys must be legal environment variable names and values are shell-quoted in the closure. An empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` (`env is forbidden in workflow.extend.<NAME>`). |
+| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `cursor`, `opencode`, `qwen`). Selects which agent runs this stage; forbidden on a script stage — a structural error at compile time (`agent is forbidden on a script stage in workflow.<NAME>`), the same exclusivity family as `gates` and `assistants` on a script stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
+| `env`   | map of str→str | — | Per-stage environment variables, exported verbatim by a generated sh closure wrapping the stage's execution target — the entry's own `agent`, else the extend-entry agent of the same name, else the global pipeline agent. On an agent stage the closure replaces the stage's `command`; on a script stage the authored script becomes the closure's payload (the compiled `script:` field is patched to the wrapper, which re-executes the script inside the exported environment). Every `loop`-expanded copy gets its own closure carrying the same values; keys must be legal environment variable names and values are shell-quoted in the closure. An empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` (`env is forbidden in workflow.extend.<NAME>`). |
 | `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt-context-not-command). |
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
@@ -213,9 +213,11 @@ exists in the image — absence is surfaced at run time, not at validation
 time.
 
 When a stage does **not** specify an `agent` in the workflow, the pipeline
-uses its global default agent — typically `claude`. Setting `agent`
-per-stage overrides that default for the named stage only; other stages
-keep the global default.
+falls back to the extend-entry agent of the same stage name (the inline
+default an `extend` entry may carry), and then to the pipeline's global
+default agent — typically `claude`. Setting `agent` per-stage overrides
+both fallbacks for the named stage only; other stages keep the global
+default.
 
 ### Workflow `prompt` — context, not command
 
@@ -570,7 +572,7 @@ attachment parameters. Two entry forms:
 
 | Attachment key | Type | Default | Description |
 |----------------|------|---------|-------------|
-| `when` | `start` \| `checkpoints` \| `finish` | **required** | When the assistant engages. |
+| `when` | `start` \| `checkpoints` \| `finish` \| `message` | **required** | When the assistant engages. `message` is the resting engagement: the engine sends no initial request — the helper waits for messages and stays attached after each answer (one turn per message). |
 | `gate` | bool | `false` | `true` — the assistant's verdict must pass (or be waived by a human) before the stage may finish; `false` is advisory. |
 
 `when` is required on every attachment — the entry key already names the
@@ -1345,7 +1347,7 @@ stages:
 ```
 
 The build command consumes the same profiles (see
-[build](../../build/cli.md)).
+[build](../build/cli.md)).
 
 ## Invocation modes
 

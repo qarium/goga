@@ -110,8 +110,11 @@ prototype-architecture → architecture-review → apply-architecture → code-d
 coding-plan → plan-review → commit-changes → accept-result
 ```
 
-The `prototype-architecture`, `code-design`, and `coding-plan` stages emit documents
-named after the current git branch; the `*-review` stages validate them;
+The `prototype-architecture`, `code-design`, and `coding-plan` stages emit
+their documents under the current branch's history topic
+(`.goga/history/<year>/<topic>/` — `arch.md`, `design.md`, and `plan.md`,
+with `<topic>` the kebab-case slug of the current git branch); the
+`*-review` stages validate them;
 `commit-changes` commits the accumulated changes and waits for user
 confirmation that the implementation is built before acceptance runs.
 `accept-result` is triggered manually (`trigger: manual`) — it runs the

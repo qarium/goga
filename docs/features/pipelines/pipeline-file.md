@@ -247,7 +247,12 @@ anything else is a structural error naming the stage and the directive.
 `script` is **mutually exclusive** with `prompt` and `skills`: a stage runs
 either an agent-driven prompt (`prompt`/`skills`) or a literal shell script
 (`script`), not both. Authoring `script` together with `prompt` and/or
-`skills` is a structural error. `before_script` and `after_script` are
+`skills` is a structural error. A `script` stage also cannot carry an
+authored `command` key — `command` is not pipeline vocabulary (a key
+authored verbatim rides the unknown-key passthrough), and the stage action
+is one: the agent exec target or the script. Pairing them
+is a structural error (`script is mutually exclusive with command in stage
+<NAME>`). `before_script` and `after_script` are
 compatible with both `script` and `prompt`/`skills` — they bracket the stage
 regardless of how its body is defined. An agent stage with bracketing
 scripts:

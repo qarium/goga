@@ -39,7 +39,7 @@ The build pipeline performs these steps:
 | `--skip-review` / `--no-skip-review` | bool pair (tri-state) | unset | Skip the review phase (`--skip-review` — a tasks-only run) or force the full cycle (`--no-skip-review`). Overrides `build.review.skip` in `.goga/config.yml`; when neither is given, the config decides |
 | `--session-timeout` | string | config | Session timeout duration |
 | `--idle-timeout` | string | config | Idle timeout duration |
-| `--wait` | string | config | Wait time before starting |
+| `--wait` | string | config | Wait time on rate limit |
 | `--max-iterations` | int | config | Maximum number of build iterations (tasks pass) |
 | `--review-patience` | int | config | External-review patience — addresses `build.review.additional.patience` in `.goga/config.yml`; forwarded to the container only when set |
 | `--base-ref` | string | config | Review diff base (branch name or commit hash); overrides `build.review.base_ref`; reaches ralphex as `--base-ref` on the review pass only |
@@ -49,7 +49,7 @@ The build pipeline performs these steps:
 | `-u`, `--update` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Default skips the refresh |
 | `-c`, `--clean` | flag | off | Wipe the build's persistent runtime directory on the host before launch (default preserves state across runs) |
 | `-w`, `--workflow` | string | — | Apply the workflow at `<cwd>/.goga/workflows/<name>.yml` to this build — strict: the host validates containment and existence before launch (a missing file or an escaping name is a clean exit 1, no docker activity). Unlike the pipeline's auto-match, there is no implicit workflow; the value travels to the in-container build as the `--workflow <name>` argv flag (this launcher never writes `GOGA_WORKFLOW` — only the pipeline-run launcher does, so a `goga build` nested inside a pipeline stage inherits the pipeline's effective workflow through it, and the `-w` flag beats it). A value starting with `-` is rejected |
-| `-p`, `--profile` | string | — | Activate a profile — the CLI activation channel of the workflow rendering (same channels and precedence as `goga pipeline`: `--profile` > `GOGA_PROFILE` > the workflow's `profile:` default) |
+| `-p`, `--profile` | string | — | Activate a profile — the CLI activation channel of the workflow rendering (same channels and precedence as `goga pipeline`: `--profile` > `GOGA_PROFILE` > the workflow's `profile:` default). A profile renders a workflow: with no workflow in effect (`-w` unset, no `GOGA_WORKFLOW` inherited from an enclosing pipeline run) the flag is inert — nothing loads (see [Workflows — Profiles](../pipelines/workflows.md#profiles)) |
 
 Timeout and iteration options fall back to values in `.goga/config.yml` when not provided on the command line.
 
