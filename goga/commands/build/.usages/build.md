@@ -156,7 +156,7 @@ docker:
 ## Profile carriage
 
 The launcher loads the home profiles bundle once via `load_home_profiles`
-(`~/.goga/profiles/`, per the `profiles` practice of goga/pipeline/workflow)
+(`~/.goga/profiles/`)
 BEFORE any docker activity — a malformed home profile is one clean error
 before any container launches. Two engine lines join the env-file after the
 CLI entries under the engine-skip rule (an explicit `-e` entry keeps

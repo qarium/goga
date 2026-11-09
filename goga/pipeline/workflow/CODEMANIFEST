@@ -1002,7 +1002,7 @@ Annotations: |
        6.1.13. memory (when present) must be a bool; otherwise raise
            "non-bool value in workflow.stages.NAME.memory". An explicit false
            equals absence — build with memory=None
-       6.1.15. gates (when present) must be a list — a non-list value raises
+       6.1.14. gates (when present) must be a list — a non-list value raises
            "non-list gates in workflow.stages.NAME"; an empty list equals
            absence (None). Validate each step:
            - a non-mapping step raises "non-mapping gate step in
@@ -1043,10 +1043,10 @@ Annotations: |
              workflow.stages.NAME.gates[i].env.KEY". An empty map equals
              absence — build with env=None
            - build a `WorkflowGateStep` list in authored order and thread it
-             into the `WorkflowStage` construction of 6.1.14
-       6.1.14. Build a `WorkflowStage` from the validated values (agent, env,
+             into the `WorkflowStage` construction of 6.1.15
+       6.1.15. Build a `WorkflowStage` from the validated values (agent, env,
            prompt, loop, skills, skip, approve, manual, notes, reflect,
-           memory, assistants, gates — the list built by 6.1.15); an absent
+           memory, assistants, gates — the list built by 6.1.14); an absent
            manual key yields None (NOT False);
            an empty notes map yields None; an empty env map yields None; an
            empty assistants map yields None
@@ -1283,8 +1283,8 @@ Annotations: |
       warning+skip) — split or prune such workflows
     - A workflow-file with none of a prompt, any stage entries, any extend
       entries, the memory block, the build block, the assistants block, the
-      delegation block, or the repeat block is rejected — at least one must
-      be present
+      delegation block, the repeat block, or the gates block is rejected —
+      at least one must be present
     - A workflow consisting of the build block alone is valid
     - The assistants catalog grammar: a name-keyed mapping; each entry value
       carries the key set prompt, skills, agent, delegate, env; delegate is

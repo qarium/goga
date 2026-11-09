@@ -172,8 +172,8 @@ Annotations: |
   `collect_file_roots` and `encode_file_roots`. The listing and info
   forms produce no such variable.
 
-  The command gains -p/--profile NAME: the short alias -p moves from
-  --parallel to --profile, and --parallel becomes long-only. The value
+  The command carries -p/--profile NAME: the short alias -p belongs to
+  --profile, and --parallel is long-only. The value
   forwards into the in-container argv of the run and card forms as the
   long flag, appended only when set, and passes the same leading-dash
   argv-parsability check as the workflow name.
@@ -183,7 +183,7 @@ Annotations: |
   is one clean error BEFORE any docker activity; the bundle is
   handed to both launchers.
 
-  Run launcher env-file: three new engine lines after the CLI entries
+  Run launcher env-file: three engine lines after the CLI entries
   under the engine-skip rule (an explicit -e entry keeps winning) —
   GOGA_PROFILE (the ambient host value, written only when non-empty),
   GOGA_HOME_PROFILES (the encoded bundle, written only when non-empty),
@@ -280,7 +280,7 @@ Annotations: |
             `workflow`.
     `profile`: optional name from the -p/--profile option — the
             contributor-profile activation channel (the short alias -p
-            moved here from --parallel, which becomes long-only). Run and
+            belongs to --profile; --parallel is long-only). Run and
             card forms; forwarded into the in-container argv as
             --profile <value> only when set; passes the same leading-dash
             argv-parsability check as the workflow name.
@@ -331,7 +331,7 @@ Annotations: |
        broken tool package facade — wraps into the same user-facing
        ClickException, never a raw traceback. The home configuration
        load stays authored-only (closed surface)
-    1a. Resolve the execution substrate once via `is_in_docker`. On
+    1.1. Resolve the execution substrate once via `is_in_docker`. On
         the direct path, reject every host-only option BEFORE any other
         work — each of `topic`, `todo`, `update`,
         `extra_env`, `add_host`, `proxy` that was passed is one clean
@@ -449,8 +449,8 @@ Annotations: |
       apply whenever the flags are passed, in every form
     - -p/--profile forwards into the in-container argv of the run and card
       forms as --profile <value>, appended only when set; the value passes
-      the leading-dash check; the -p short alias moved from --parallel to
-      --profile, and --parallel becomes long-only
+      the leading-dash check; the -p short alias belongs to
+      --profile, and --parallel is long-only
     - The home bundle loads once via `load_home_profiles` after the
       argument-form checks and before the dispatch — a malformed home
       profile is one clean error before any docker activity; the bundle is
@@ -554,7 +554,7 @@ Annotations: |
             BOTH port sinks of the launch carry this value verbatim — the
             docker -p <port>:<port> publish and the in-container
             --port <port> argv — and no ephemeral port is allocated; when
-            None (default), a free localhost port is allocated as before.
+            None (default), a free localhost port is allocated.
             Not a host-only option: the direct substrate resolves the port
             the same way
     `exit_code`: container exit code (0 success; 2 argparse error
@@ -654,7 +654,7 @@ Annotations: |
         home.docker.build tokens reach the build branch verbatim (extra_args
         — appended after the translated params flags, before -f); ignored on
         no-op branches. Runs inside the try so the leak-prevention invariant
-        covers this window: the secret env-file is already written (step 10),
+        covers this window: the secret env-file is already written (step 8),
         and a fatal build unwinds to the finally which unlinks it
     11. When `update` is True: call `docker_update` with config.image,
         config.dockerfile, and extra_args=home.docker.build — build when a
@@ -670,7 +670,7 @@ Annotations: |
         (saves and restores it), runs docker run, streams stdout/stderr, and
         returns the exit code. The runner finally performs the guaranteed
         docker kill and restores to the caller handler
-    12a. Direct path (`is_in_docker` True): skip the docker-CLI check
+    12.1. Direct path (`is_in_docker` True): skip the docker-CLI check
         (step 1), the env-file creation and docker-run input assembly
         (steps 8-9 — the composed env layers below apply to the child
         process environment directly; no env-file is written, nothing
@@ -699,10 +699,10 @@ Annotations: |
     Apply the `docker-runner` practice for the docker run launch and
     lifecycle.
     Apply the `afm` practice for the file-manager roots payload delivered
-    through AFM_DOCKER_FILE_ROOTS in step 10 — the schema, the encoding,
+    through AFM_DOCKER_FILE_ROOTS in step 8 — the schema, the encoding,
     and the roots scope live there.
     Apply the `extra-env-carriage` practice for the CLI entries payload
-    line of step 10 and the ladder order of the env-file layers.
+    line of step 8 and the ladder order of the env-file layers.
     Apply the `run-pipeline` practice for the in-container contract the
     argv addresses — the load-and-amend, the afm configuration authorship,
     and the launch layer the container side composes.
@@ -898,7 +898,7 @@ Annotations: |
        `profile_carriage_lines`, written only when the bundle is non-empty;
        never GOGA_WORKFLOW) under the engine-skip rule; without cargo the launch
        keeps the minimal read-only shape — no env-file
-    7a. Direct path (`is_in_docker` True): skip the docker-CLI check and
+    7.1. Direct path (`is_in_docker` True): skip the docker-CLI check and
         the image steps; apply the same minimal env composition (the
         profile cargo variables only, when cargo exists) as the env
         layer of `run_direct`; spawn the composed argv (python3 -m

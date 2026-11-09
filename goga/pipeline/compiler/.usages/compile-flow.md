@@ -243,14 +243,13 @@ Translation (authored → engine):
 - A step's authored `env` map never reaches the emission (the engine's
   verify-step schema has no `env` field) — the compiler emits an
   env-carrying step exactly like an env-free one; the pipeline run
-  coordination's gate wrapper generation delivers the env downstream (see
-  the pipeline cell's `gate-env` practice).
+  coordination's gate wrapper generation delivers the env downstream.
 - A gate-free workflow compiles byte-identically.
 
 ## Collaboration emission
 
 The workflow's collaboration instructions compile into three output
-surfaces (see `collaboration-emission` for the full contract):
+surfaces:
 
 - the top-level `collaboration` block is emitted into EVERY compiled flow
   — `mode: assistants` always, `max_depth` only when the workflow's

@@ -1080,7 +1080,7 @@ Annotations: |
 
     `agent`: the effective pipeline agent — the authored pipeline.agent as
              amended by the config delivery; None when no agent resolves
-    `flow`: the compiled flow document (a `FlowDocument` from Imports) —
+    `flow`: the compiled flow document (a `FlowDocument`) —
             the source of the generated profile ids (the binding of every
             team member and of every stage attachment the flow carries);
             None writes no collaboration profiles (the section head still

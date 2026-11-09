@@ -48,10 +48,10 @@ the workflow-file is rendered with the active profile before its
 prints one stderr line: `Build running with workflow "<w>" and profile
 "<p>"`.
 
-## What does NOT change
+## Invariants
 
 Ralphex invocation shape, the two-pass cycle, hooks checkpoints, and
-plan relocation are unchanged. Env delivery to executors moves to
-generated per-role wrappers — agents receive the same effective
-environment through the wrappers; only the command fields in `.ralphex/config`
-now point at the generated wrappers.
+plan relocation follow the build contract as configured. Env delivery
+to executors rides generated per-role wrappers — agents receive the same
+effective environment through the wrappers, and the command fields in
+`.ralphex/config` point at the generated wrappers.

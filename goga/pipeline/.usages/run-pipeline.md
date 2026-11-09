@@ -121,13 +121,13 @@ the host launcher prints no workflow line.
 ## Per-stage env wrappers
 
 After `compile_flow` writes the flow-file, `apply_stage_env_wrappers` generates one sh closure
-wrapper per env-declaring stage (see `per-stage-env`) and patches exactly those stages'
+wrapper per env-declaring stage and patches exactly those stages'
 `command:` fields in the ALREADY WRITTEN flow-file — every other byte stays untouched. A
 workflow declaring no stage env is neither read nor rewritten: the flow output stays
 byte-identical to the compiler's direct composition.
 
 Immediately after, `apply_gate_env_wrappers` applies the same closure delivery to the env maps
-authored on `gates` check steps (see `gate-env`): each env-declaring step's `run:`/`command:`
+authored on `gates` check steps: each env-declaring step's `run:`/`command:`
 line in the written flow-file is patched to point at its wrapper. A workflow whose gates
 declare no step env is neither read nor rewritten.
 

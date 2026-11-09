@@ -113,8 +113,7 @@ Annotations: |
     - ignore is passed verbatim to `schema_logic` — the command performs
       no path normalization or glob interpretation
     - When .goga/config.yml or the lint section is absent, ignore is None
-      in both cases (no directories excluded) — the traversal behavior
-      of a config-less project is unchanged
+      in both cases (no directories excluded)
 
 ---
 

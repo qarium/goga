@@ -48,7 +48,7 @@ Annotations: |
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
-    Parse through `parse_env_yaml` from Imports (per `env-variables`)
+    Parse through `parse_env_yaml` (per `env-variables`)
     — no local tag handling.
 
     Algorithm:

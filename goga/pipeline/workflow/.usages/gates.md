@@ -44,8 +44,7 @@ compiled `run` payload is the same either way.
 
 A step's `env` never reaches the flow-file as an emitted field (the engine's
 verify-step schema has no `env`) — the pipeline run coordination delivers it
-through a generated closure wrapper per env-declaring step (see the pipeline
-cell's `gate-env` practice). Env keys must be legal environment variable
+through a generated closure wrapper per env-declaring step. Env keys must be legal environment variable
 names (POSIX shape); an illegal key is a strict pre-run error naming the
 stage, the step, and the key.
 

@@ -19,6 +19,7 @@ Imports:
     Usages:
       - build-usage
       - registering-hooks
+      - workflow-layering
     From: goga/build
   - Types:
       - resolve_runtime_dir
@@ -139,16 +140,18 @@ Annotations: |
   wipe it before launch. Use `resolve_runtime_dir` to compute the
   host directory; the in-container `run_build` is unaware of the host path.
 
-  The launcher gains -p/--profile NAME and -w/--workflow NAME: both
+  The launcher carries -p/--profile NAME and -w/--workflow NAME: both
   forward into the in-container argv as their long flags, value
   appended only when set. The -w name is validated host-side for path
   containment and file existence under <cwd>/.goga/workflows/ (a
   light early diagnostic; the file itself is never read on the host).
+  The workflow build: block layers onto the effective build
+  configuration per the `workflow-layering` practice.
 
   Home bundle: the command loads ~/.goga/profiles/ once via
   `load_home_profiles` (Apply `profiles`) — a malformed home profile
   is one clean error BEFORE any docker activity. The env-file
-  gains two engine lines written after the CLI entries under the
+  carries two engine lines written after the CLI entries under the
   engine-skip rule (an explicit -e entry keeps winning): GOGA_PROFILE —
   the ambient host value, written only when non-empty — and
   GOGA_HOME_PROFILES — the encoded bundle, written only when the bundle
@@ -286,17 +289,16 @@ Annotations: |
     home.docker.run is appended to every docker run (step 13/17);
     home.docker.build is forwarded to image build (steps 15/16, build branch).
     1. Verify docker availability; raise ClickException when missing —
-       HOST PATH ONLY: the direct path of 1a skips it entirely (no
+       HOST PATH ONLY: the direct path of 1.1 skips it entirely (no
        docker-CLI check inside the image)
-    1a. Resolve the execution substrate once via `is_in_docker` —
+    1.1. Resolve the execution substrate once via `is_in_docker` —
         BEFORE the docker-CLI check of step 1; on the direct path
         step 1 is skipped entirely. On the direct path, reject every
         host-only option BEFORE any other work — each of `extra_env`,
         `add_host`,
         `proxy`, `update` that was passed is one clean error naming the
         option (stderr, exit 1; nothing to stdout; no env assembly, no
-        launch). The host path skips this rejection and runs step 1 as
-        today
+        launch). The host path skips this rejection and runs step 1
     2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`;
        deliver the config amendment checkpoint per the `checkpoints`
        practice right after the authored load via the `ConfigHooks`
@@ -395,10 +397,10 @@ Annotations: |
           .ralphex/ in cwd and the bytes land in the host runtime dir, never in
           the project dir), --add-host, --env-file, image, args
     14. On dry_run: print the assembled command — the docker run line with the
-        same param→flag translation (`translate_params` from Imports) and argv
+        same param→flag translation (`translate_params`) and argv
         order a launch would use, shell-quoted, to stderr — and exit 0 without
         launching
-    14a. Direct path (`is_in_docker` True): skip the env-file write
+    14.1. Direct path (`is_in_docker` True): skip the env-file write
         (step 9), the docker-run input assembly (steps 12-13), the
         docker-CLI check, `docker_build_if_not_exist`, `docker_update`,
         and `DockerRunner` (the docker steps 15-17); the composed env

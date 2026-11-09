@@ -193,14 +193,14 @@ there is nothing to cancel.
 
 - in the stages block it is an unknown key → structural error "unknown key in
   workflow.stages.<name>: trigger; valid keys: agent, env, prompt, loop, skills,
-  skip, approve, manual, notes, reflect, memory, assistants"
+  skip, approve, manual, notes, reflect, memory, assistants, gates"
 - in an extend-entry body it is legal and passes through verbatim — the compiler
   validates its value (`on_success` | `manual`) at compilation time
 
 ## Empty-workflow rule
 
 A workflow is empty only when `prompt`, `stages`, `extend`, `memory`, `build`,
-`assistants`, `delegation`, AND `repeat` are ALL absent — `profile` never
+`assistants`, `delegation`, `repeat`, AND `gates` are ALL absent — `profile` never
 counts (activation is not content). The structural error "empty workflow"
 names the content options. A workflow consisting of the `build:` block alone
 is valid; a workflow consisting of the `repeat:` block alone is valid; a

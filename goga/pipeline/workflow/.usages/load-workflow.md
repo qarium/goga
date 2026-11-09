@@ -66,6 +66,6 @@ Steps performed by the chain:
 
 ## Interplay with skip merges
 
-A skip merge (goga/pipeline) rebuilds the document in memory; the
-`profile` and `build` fields survive the rebuild verbatim, exactly as
-the memory configuration does.
+The `profile` and `build` fields are ordinary document fields: they
+survive any consumer-side in-memory rebuild of the document verbatim,
+exactly as the memory configuration does.

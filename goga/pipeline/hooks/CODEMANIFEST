@@ -323,10 +323,10 @@ Annotations: |
        sets it. The merge is field-set-complete, never a named-subset
        copy — a new stage field flows through without touching this
        cell again. The assistants field is the one append-merge stage
-       field — it follows 5a instead of the authored-value-wins rule;
+       field — it follows 5.1 instead of the authored-value-wins rule;
        every other stage field follows the field-set-complete merge
        unchanged
-    4a. assistants (catalog): resolve the winning delivered entry per
+    4.1. assistants (catalog): resolve the winning delivered entry per
         name among the contributions in enumeration order (the
         later-tool-wins rule among contributions). For a name carrying an authored entry
         (the authored catalog or an authored inline declaration — one
@@ -341,20 +341,20 @@ Annotations: |
         entry verbatim. Tool inline declarations under an authored name
         are dropped silently; the namespace carries each
         name exactly once
-    4b. delegation: keep the authored block when present — it is
+    4.2. delegation: keep the authored block when present — it is
         unbeatable; otherwise the block of the later contributing tool
         wins; no field-level merging
-    4c. repeat: keep the authored block when present — it is unbeatable;
+    4.3. repeat: keep the authored block when present — it is unbeatable;
         otherwise the block of the later contributing tool wins; no
         field-level merging
-    4d. gates (settings block): keep the authored block when present — it
+    4.4. gates (settings block): keep the authored block when present — it
         is unbeatable; otherwise the block of the later contributing tool
         wins; no field-level merging
     5. skip is an ordinary stage field: an authored skip — from the
        workflow-file or the merged runner skip — is unbeatable; an
        unset skip takes a contributing skip; skip=False overrides
        nothing
-    5a. stage assistants: for each stage name the authored map is the
+    5.1. stage assistants: for each stage name the authored map is the
         ground — the authored entries first, in authored order; the
         contributing entries append in enumeration order, an entry whose
         name is already present on the stage dropped silently, and an
@@ -362,7 +362,7 @@ Annotations: |
         anywhere in the merged assistant namespace dropped silently the
         same way; a stage with no authored entry takes the appended
         contributing entries the same way
-    5b. stage gates: an ordinary stage field of the field-set-complete
+    5.2. stage gates: an ordinary stage field of the field-set-complete
         stage merge — an authored check-step list is never overwritten; a
         field the author left unset takes the value of the later
         contributing tool that sets it

@@ -14,8 +14,7 @@ finalize materialization, and delegation of the launch to `run_ralphex`
 
 A workflow may drive the build settings on top of the configuration: the
 workflow-file's six-field `build:` block layers onto the effective build
-configuration (config < workflow build: < CLI — see the
-`workflow-layering` practice), and the workflow-file is rendered with the
+configuration (config < workflow build: < CLI), and the workflow-file is rendered with the
 active contributor profile before its block is read.
 
 Every non-skipped run is exactly two ralphex invocations: a tasks pass
