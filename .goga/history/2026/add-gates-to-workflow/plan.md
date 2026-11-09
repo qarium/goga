@@ -708,8 +708,8 @@ contract changes in `goga/pipeline/compiler/compile_flow.py`.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Declaration**: declare Task 6 (compile_flow gates emission) being executed
-- [ ] **Contract tests**: create `tests/pipeline/compiler/test_compile_flow_gates.py` (fixtures: STAGES-format pipeline text constants — the `test_compile_flow_memory.py` pattern — plus `parse_workflow(text)` workflow docs); extend `tests/pipeline/compiler/test_compile_flow.py` pins (below). Expected to fail at this stage.
+- [x] **Declaration**: declare Task 6 (compile_flow gates emission) being executed
+- [x] **Contract tests**: create `tests/pipeline/compiler/test_compile_flow_gates.py` (fixtures: STAGES-format pipeline text constants — the `test_compile_flow_memory.py` pattern — plus `parse_workflow(text)` workflow docs); extend `tests/pipeline/compiler/test_compile_flow.py` pins (below). Expected to fail at this stage.
 
 Context — `_gates_emission` algorithm (verbatim from the design):
 
@@ -751,31 +751,31 @@ Context — `_gates_emission` algorithm (verbatim from the design):
 5. RETURN verify_by_id
 ```
 
-- [ ] **Code**: implement `_gates_emission(workflow, effective, expanded, expanded_ids) -> dict[str, FlowVerify]` per the algorithm; call it as the fourth companion immediately after `_collaboration_emission` (attachment errors fire before gates errors); `workflow.gates is None` cannot reach here with gated stages — the settings source is `workflow.gates`
-- [ ] **Code**: `_effective_overrides` merged branch (extend + stages-block entry for the same name) gains `gates=stg.gates` in the explicit per-field pass — omitting it silently drops the gate; extend-seeded entries keep the constructor default `None` (gates is stages-block-only); docstring updated
-- [ ] **Code**: `_canonical_fields` signature gains `verify_fields: FlowVerify | None = None` (last parameter); new `_assemble_verify(source, verify_fields)` assigns `source["verify"]` when not `None` — BEFORE the canonical loop (the `_assemble_assistants` pattern); `_CANONICAL_KEY_ORDER` gains `"verify"` after `"assistants"` (comment block extended with the verify sentence); both PHASES and STAGES branches pass `verify_fields=verify_by_id.get(step.name)`; workflow-less path sets `verify_by_id = {}` (the `_MemoryEmission` default mirror); docstrings (Args/Raises/Returns) extended
-- [ ] **Code**: `_reject_authoring_output_keys` gains the prohibitions (same pass as `buttons`/`reflect`/`memory_use`/`assistants`, running from `_canonical_fields` on every produced copy — pipeline-file stage OR embedded extend-stage body): `"gates" in body` → `StructuralError("gates key is forbidden in stage body; use gates in workflow.stages")`; `"verify" in body` → `StructuralError("verify key is forbidden in stage body; use gates in workflow.stages")`
-- [ ] **REPL checkpoint**: in the REPL (fresh `python3 -c`/`python3 -i` runs per edit — the compile chain spans modules), compile the Task-6 positive fixtures on `tmp_path`; observe the emitted flow text (slot position, `1h` default, container vs list form) before pinning the substring assertions; confirm a gate-free workflow still compiles to identical text
-- [ ] **Interface verification**: `python3 -m pytest tests/pipeline/compiler/test_compile_flow_gates.py -v` — positive tests pass
-- [ ] **Logic tests (positive — from the design's test stack trace)**:
+- [x] **Code**: implement `_gates_emission(workflow, effective, expanded, expanded_ids) -> dict[str, FlowVerify]` per the algorithm; call it as the fourth companion immediately after `_collaboration_emission` (attachment errors fire before gates errors); `workflow.gates is None` cannot reach here with gated stages — the settings source is `workflow.gates`
+- [x] **Code**: `_effective_overrides` merged branch (extend + stages-block entry for the same name) gains `gates=stg.gates` in the explicit per-field pass — omitting it silently drops the gate; extend-seeded entries keep the constructor default `None` (gates is stages-block-only); docstring updated
+- [x] **Code**: `_canonical_fields` signature gains `verify_fields: FlowVerify | None = None` (last parameter); new `_assemble_verify(source, verify_fields)` assigns `source["verify"]` when not `None` — BEFORE the canonical loop (the `_assemble_assistants` pattern); `_CANONICAL_KEY_ORDER` gains `"verify"` after `"assistants"` (comment block extended with the verify sentence); both PHASES and STAGES branches pass `verify_fields=verify_by_id.get(step.name)`; workflow-less path sets `verify_by_id = {}` (the `_MemoryEmission` default mirror); docstrings (Args/Raises/Returns) extended
+- [x] **Code**: `_reject_authoring_output_keys` gains the prohibitions (same pass as `buttons`/`reflect`/`memory_use`/`assistants`, running from `_canonical_fields` on every produced copy — pipeline-file stage OR embedded extend-stage body): `"gates" in body` → `StructuralError("gates key is forbidden in stage body; use gates in workflow.stages")`; `"verify" in body` → `StructuralError("verify key is forbidden in stage body; use gates in workflow.stages")`
+- [x] **REPL checkpoint**: in the REPL (fresh `python3 -c`/`python3 -i` runs per edit — the compile chain spans modules), compile the Task-6 positive fixtures on `tmp_path`; observe the emitted flow text (slot position, `1h` default, container vs list form) before pinning the substring assertions; confirm a gate-free workflow still compiles to identical text
+- [x] **Interface verification**: `python3 -m pytest tests/pipeline/compiler/test_compile_flow_gates.py -v` — positive tests pass
+- [x] **Logic tests (positive — from the design's test stack trace)**:
   - `test_gated_stage_compiles_verify_with_steps_and_materialized_timeout` — one prompt stage `build`, gate step `name: compile, script: make all`, no settings block; assertions (exact substrings; the canonical dumper aligns block-sequence dashes with the parent key, stage fields at 2 spaces): `"verify:\n" in text`, `"  - name: compile\n" in text`, `"    run: make all\n" in text`, `"    timeout: 1h\n" in text`, `text.index("verify:") > text.index("prompt:")`, `"max_failures" not in text`
   - `test_ai_step_command_composed_from_agent_wrapper_path` — gate step `name: Check, agent: codex, prompt: "Be strict.", timeout: 15m`; assertions: `"- name: Check\n" in text`, `"command: /home/goga/bin/codex-as-claude.sh\n" in text`, `"timeout: 15m\n" in text`, `"prompt: 'Be strict.'\n" in text or "prompt: Be strict.\n" in text` (per dumper quoting); no default timeout materialized
   - `test_settings_block_authors_container_form_on_every_gated_stage` — two gated stages `a`, `b`; settings `gates: {max_iterations: 2, fresh_correction: true}`; assertions: `text.count("steps:\n") == 2`, `"max_failures: 2\n" in text`, `"fresh_correction: true\n" in text`, `"review_patience" not in text`
   - `test_loop_expanded_copies_carry_the_same_gate` — stage `check` with `loop: 2` and a gate step; assertions: `text.count("verify:\n") == 2`, `"- id: check-1\n" in text and "- id: check-2\n" in text`
-- [ ] **Logic tests (negative)**:
+- [x] **Logic tests (negative)**:
   - `test_gates_on_script_stage_rejected` — pipeline stage `s` with `script: make check`, workflow `stages: {s: {gates: [{name: g, script: pytest}]}}`; `pytest.raises(StructuralError, match="gates are forbidden on a script stage in workflow.stages.s")`
   - `test_gates_on_planning_only_stage_rejected` — stage with `roles: [planner]` gated → `match="gates are forbidden on a planning-only stage in workflow.stages.p"`; plus a twin with `roles: [planning]` (already-afm name) proving the `_translate_body_agents` comparison
   - `test_gates_and_verify_keys_forbidden_in_stage_body` (parametrized) — stage bodies carrying `gates: []` / `verify: "make test"` (also one embedded in an extend-entry body); `match="gates key is forbidden in stage body; use gates in workflow.stages"` and `match="verify key is forbidden in stage body; use gates in workflow.stages"`
   - `test_settings_block_alone_compiles_inert` — plain ungated pipeline + workflow `gates: {patience: 2}` only; `"verify" not in flow_text`
-- [ ] **Logic tests (edge)**:
+- [x] **Logic tests (edge)**:
   - `test_gate_free_workflow_compiles_byte_identically` — any pipeline + a workflow without gates; `flow_text == EXPECTED_UNCHANGED` (full-string golden, verbatim from the pre-feature output — capture it in the REPL before implementing)
   - `test_malformed_timeout_passes_verbatim` — gated shell step with `timeout: "30x"`; `"timeout: 30x" in flow_text` (no goga error — value grammar is engine-owned)
   - `test_extend_plus_stages_entry_keeps_gate` — pipeline stage `x`; workflow `extend: {x: {after: [a], agent: codex}}` AND `stages: {x: {gates: [step]}}`; `"verify:" in flow_text` and the composed `command` from the inline extend agent also present
-- [ ] **Contract-test extensions**: `tests/pipeline/compiler/test_compile_flow.py` — `test_canonical_fields_signature_has_stage_name` asserts the parameter list `["body", "stage_name", "notes", "memory_fields", "assistants_fields", "verify_fields"]` with `verify_fields` default `None`; `test_canonical_key_order_includes_approve_and_script_slots` pin becomes `[-8:]` ending `["reflect", "memory_use", "assistants", "verify"]` (verify after assistants)
-- [ ] **Debugging**: `python3 -m pytest tests/pipeline/compiler -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: byte-identical gate-free output (golden test green); `PipelineDocument` and the pipeline-file untouched; error precedence preserved (extend refs → stage names → attachments 4.10 → gates 4.11 → body-key prohibitions)
-- [ ] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting, apply decomposition if necessary
-- [ ] **Completion**: mark checkboxes complete
+- [x] **Contract-test extensions**: `tests/pipeline/compiler/test_compile_flow.py` — `test_canonical_fields_signature_has_stage_name` asserts the parameter list `["body", "stage_name", "notes", "memory_fields", "assistants_fields", "verify_fields"]` with `verify_fields` default `None`; `test_canonical_key_order_includes_approve_and_script_slots` pin becomes `[-8:]` ending `["reflect", "memory_use", "assistants", "verify"]` (verify after assistants)
+- [x] **Debugging**: `python3 -m pytest tests/pipeline/compiler -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: byte-identical gate-free output (golden test green); `PipelineDocument` and the pipeline-file untouched; error precedence preserved (extend refs → stage names → attachments 4.10 → gates 4.11 → body-key prohibitions)
+- [x] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting, apply decomposition if necessary
+- [x] **Completion**: mark checkboxes complete
 
 ### Task 7: Hooks — overlay merge and amendment emptiness for gates (TDD coding)
 

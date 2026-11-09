@@ -146,17 +146,18 @@ class TestCompileFlowContract:
         assert "_CANONICAL_KEY_ORDER" not in facade_all
 
     def test_canonical_fields_signature_has_stage_name(self) -> None:
-        """``_canonical_fields`` takes ``(body, stage_name, notes, memory_fields, assistants_fields)``."""
+        """``_canonical_fields`` takes the step-5 companion parameters (``verify_fields`` last)."""
         import inspect
 
         from goga.pipeline.compiler.compile_flow import _canonical_fields
 
         parameters = list(inspect.signature(_canonical_fields).parameters)
 
-        assert parameters == ["body", "stage_name", "notes", "memory_fields", "assistants_fields"]
+        assert parameters == ["body", "stage_name", "notes", "memory_fields", "assistants_fields", "verify_fields"]
         assert inspect.signature(_canonical_fields).parameters["notes"].default is None
         assert inspect.signature(_canonical_fields).parameters["memory_fields"].default is None
         assert inspect.signature(_canonical_fields).parameters["assistants_fields"].default is None
+        assert inspect.signature(_canonical_fields).parameters["verify_fields"].default is None
 
     def test_canonical_key_order_includes_approve_and_script_slots(self) -> None:
         """The extended canonical order slots ``auto_approve`` and the script_* keys."""
@@ -165,10 +166,10 @@ class TestCompileFlowContract:
         # ``auto_approve`` immediately follows ``interactive``; the script_*
         # family trails ``skills`` in authored order (before/script/after) and
         # closes with the translated ``script_timeout``, which the two memory
-        # stage keys follow; the attachment slot closes the list.
+        # stage keys, the attachment slot, and the verify gate slot follow.
         assert "auto_approve" in _CANONICAL_KEY_ORDER
         assert _CANONICAL_KEY_ORDER.index("auto_approve") == _CANONICAL_KEY_ORDER.index("interactive") + 1
-        assert _CANONICAL_KEY_ORDER[-7:] == [
+        assert _CANONICAL_KEY_ORDER[-8:] == [
             "script_before",
             "script",
             "script_after",
@@ -176,6 +177,7 @@ class TestCompileFlowContract:
             "reflect",
             "memory_use",
             "assistants",
+            "verify",
         ]
         assert _CANONICAL_KEY_ORDER.index("reflect") == _CANONICAL_KEY_ORDER.index("script_timeout") + 1
         assert _CANONICAL_KEY_ORDER.index("skills") < _CANONICAL_KEY_ORDER.index("script_before")

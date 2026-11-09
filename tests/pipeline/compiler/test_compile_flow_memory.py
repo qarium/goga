@@ -150,8 +150,8 @@ class TestCompileFlowMemoryContract:
         assert [f.name for f in dataclasses.fields(_MemoryEmission)] == ["block", "keys_by_id"]
 
     def test_canonical_key_order_ends_with_memory_slots(self) -> None:
-        """``reflect`` and ``memory_use`` follow ``script_timeout``; the attachment slot closes the list."""
-        assert _CANONICAL_KEY_ORDER[-7:] == [
+        """``reflect`` and ``memory_use`` follow ``script_timeout``; the attachment and verify slots close the list."""
+        assert _CANONICAL_KEY_ORDER[-8:] == [
             "script_before",
             "script",
             "script_after",
@@ -159,18 +159,20 @@ class TestCompileFlowMemoryContract:
             "reflect",
             "memory_use",
             "assistants",
+            "verify",
         ]
         assert _CANONICAL_KEY_ORDER.index("reflect") == _CANONICAL_KEY_ORDER.index("script_timeout") + 1
         assert _CANONICAL_KEY_ORDER.index("memory_use") == _CANONICAL_KEY_ORDER.index("reflect") + 1
 
     def test_canonical_fields_accepts_memory_fields(self) -> None:
-        """``_canonical_fields`` takes ``(body, stage_name, notes, memory_fields, assistants_fields)``."""
+        """``_canonical_fields`` takes the step-5 companion parameters (``memory_fields`` among them)."""
         parameters = list(inspect.signature(_canonical_fields).parameters)
 
-        assert parameters == ["body", "stage_name", "notes", "memory_fields", "assistants_fields"]
+        assert parameters == ["body", "stage_name", "notes", "memory_fields", "assistants_fields", "verify_fields"]
         assert inspect.signature(_canonical_fields).parameters["notes"].default is None
         assert inspect.signature(_canonical_fields).parameters["memory_fields"].default is None
         assert inspect.signature(_canonical_fields).parameters["assistants_fields"].default is None
+        assert inspect.signature(_canonical_fields).parameters["verify_fields"].default is None
 
 
 class TestCompileFlowMemoryEmission:
