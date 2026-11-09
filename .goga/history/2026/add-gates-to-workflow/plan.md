@@ -532,8 +532,8 @@ the `parse_workflow` contract steps 4/5/6.1.2/6.1.15/6.10/6.11/7/8 in
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Declaration**: declare Task 3 (parser gates surface) being executed
-- [ ] **Contract tests**: create `tests/pipeline/workflow/test_parse_workflow_gates.py` with the positive tests below (they fail at this stage — `gates` is an unknown key today)
+- [x] **Declaration**: declare Task 3 (parser gates surface) being executed
+- [x] **Contract tests**: create `tests/pipeline/workflow/test_parse_workflow_gates.py` with the positive tests below (they fail at this stage — `gates` is an unknown key today)
 
 Context — `_build_gates` algorithm (per contract 6.10; mirrors `_build_repeat`; verbatim from the design):
 
@@ -586,20 +586,20 @@ Context — `_build_stage_gates` algorithm (per contract 6.1.15; check order is 
 4. RETURN [WorkflowGateStep(...) for each step]          # authored order
 ```
 
-- [ ] **Contract tests (positive, from the design's test stack trace)**:
+- [x] **Contract tests (positive, from the design's test stack trace)**:
   - `test_gates_settings_block_alone_is_valid` — input `"gates:\n  patience: 1\n"`; assert `doc.gates.patience == 1`, `doc.gates.max_iterations is None`, `doc.gates.fresh_correction is None`, and `doc.prompt is None and doc.stages == {}` (a gates-only workflow is valid content)
   - `test_stage_gates_steps_built_in_authored_order` — input: stage `implement` with two steps (`name: Unit tests, script: pytest -q, timeout: 30m` and `name: Code review, agent: codex, prompt: Review the diff for correctness.`); assert 2 steps in authored order with verbatim `script`/`timeout`/`agent`/`prompt`
   - `test_empty_settings_block_and_empty_list_equal_absence` — input `"gates: {}\nstages:\n  a:\n    gates: []\n    prompt: x\n"`; assert `doc.gates is None` and `doc.stages["a"].gates is None`
   - `test_authored_zero_is_a_value` — input `"gates: {patience: 0, max_iterations: 0}\n"`; assert both `== 0` and `is not None`
-- [ ] **Code**: `_extract_top_level` becomes a 10-tuple — new dispatch arm `elif key == "gates": gates_raw = _validate_top_level_mapping("non-mapping gates block in workflow", value)`; `_TOP_LEVEL_KEYS` gains `"gates"` appended last (the unknown-key message enumerates `…, delegation, repeat, gates`)
-- [ ] **Code**: implement `_build_gates(gates_raw)` per the algorithm above; empty block → `None`; else `WorkflowGates` from authored keys only
-- [ ] **Code**: `_validate_stage_field` gains the arm `elif key == "gates": return _build_stage_gates(name, field_value)`; `_STAGE_KEYS` gains `"gates"` (unknown-key message `…, memory, assistants, gates` per 6.1.2)
-- [ ] **Code**: implement `_build_stage_gates(name, value)` per the algorithm above — non-list / empty→None / per-step checks in the normative order (key set → name → exclusivity → non-empty → types → prompt binding) → `WorkflowGateStep` list in authored order
-- [ ] **Code**: `_build_stage` construction gains `gates=fields.get("gates")` (contract 6.1.14 enumerates it); `WorkflowDocument(..., repeat=repeat, gates=gates)`; `_reject_forbidden_extend_keys` tuple gains `"gates"` → message `"gates is forbidden in workflow.extend.NAME"` (contract 6.11)
-- [ ] **Code**: empty-workflow rule condition gains `and gates is None`; message ends `…, the repeat block, or the gates block`; new constants `_GATES_KEYS = ("patience", "max_iterations", "fresh_correction")` and `_GATE_STEP_KEYS = ("name", "script", "agent", "timeout", "prompt")` (message sources, mirroring `_REPEAT_KEYS`); `parse_workflow` docstring `Raises` extended with the gates cases
-- [ ] **REPL checkpoint**: in the REPL, run `parse_workflow` on each positive input and on 2–3 malformed inputs; observe the model and the exact error lines; hot-reload `parse_workflow` after each edit before re-evaluating; pin every observed error line into the parametrized table
-- [ ] **Interface verification**: `python3 -m pytest tests/pipeline/workflow/test_parse_workflow_gates.py -v` — positive tests pass
-- [ ] **Logic tests (negative, parametrized table — verbatim from the design; `with pytest.raises(WorkflowSyntaxError, match=re.escape(msg))`)**:
+- [x] **Code**: `_extract_top_level` becomes a 10-tuple — new dispatch arm `elif key == "gates": gates_raw = _validate_top_level_mapping("non-mapping gates block in workflow", value)`; `_TOP_LEVEL_KEYS` gains `"gates"` appended last (the unknown-key message enumerates `…, delegation, repeat, gates`)
+- [x] **Code**: implement `_build_gates(gates_raw)` per the algorithm above; empty block → `None`; else `WorkflowGates` from authored keys only
+- [x] **Code**: `_validate_stage_field` gains the arm `elif key == "gates": return _build_stage_gates(name, field_value)`; `_STAGE_KEYS` gains `"gates"` (unknown-key message `…, memory, assistants, gates` per 6.1.2)
+- [x] **Code**: implement `_build_stage_gates(name, value)` per the algorithm above — non-list / empty→None / per-step checks in the normative order (key set → name → exclusivity → non-empty → types → prompt binding) → `WorkflowGateStep` list in authored order
+- [x] **Code**: `_build_stage` construction gains `gates=fields.get("gates")` (contract 6.1.14 enumerates it); `WorkflowDocument(..., repeat=repeat, gates=gates)`; `_reject_forbidden_extend_keys` tuple gains `"gates"` → message `"gates is forbidden in workflow.extend.NAME"` (contract 6.11)
+- [x] **Code**: empty-workflow rule condition gains `and gates is None`; message ends `…, the repeat block, or the gates block`; new constants `_GATES_KEYS = ("patience", "max_iterations", "fresh_correction")` and `_GATE_STEP_KEYS = ("name", "script", "agent", "timeout", "prompt")` (message sources, mirroring `_REPEAT_KEYS`); `parse_workflow` docstring `Raises` extended with the gates cases
+- [x] **REPL checkpoint**: in the REPL, run `parse_workflow` on each positive input and on 2–3 malformed inputs; observe the model and the exact error lines; hot-reload `parse_workflow` after each edit before re-evaluating; pin every observed error line into the parametrized table
+- [x] **Interface verification**: `python3 -m pytest tests/pipeline/workflow/test_parse_workflow_gates.py -v` — positive tests pass
+- [x] **Logic tests (negative, parametrized table — verbatim from the design; `with pytest.raises(WorkflowSyntaxError, match=re.escape(msg))`)**:
   ```
   "gates: 5"                                  → "non-mapping gates block in workflow"
   "gates: {patiance: 1}"                      → "unknown key in workflow.gates: patiance; valid keys: patience, max_iterations, fresh_correction"
@@ -619,10 +619,10 @@ Context — `_build_stage_gates` algorithm (per contract 6.1.15; check order is 
   "extend: {n: {after: [a], gates: [...]}}"   → "gates is forbidden in workflow.extend.n"
   ```
   (rows are workflow YAML texts; the `agent` counterparts — `agent must be a non-empty string…`, `non-str … .prompt` on an agent step — join the same table)
-- [ ] **Debugging**: `python3 -m pytest tests/pipeline/workflow -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: unknown top-level/stage keys still reject with the extended enumerations; existing parse behavior for gate-free workflows unchanged (the full workflow suite passes)
-- [ ] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
-- [ ] **Completion**: mark checkboxes complete
+- [x] **Debugging**: `python3 -m pytest tests/pipeline/workflow -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: unknown top-level/stage keys still reject with the extended enumerations; existing parse behavior for gate-free workflows unchanged (the full workflow suite passes)
+- [x] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
+- [x] **Completion**: mark checkboxes complete
 
 ### Task 4: Compiler verify emission models — `FlowVerifyStep` + `FlowVerify` (TDD coding)
 

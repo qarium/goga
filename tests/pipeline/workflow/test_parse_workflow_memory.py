@@ -377,5 +377,5 @@ class TestParseWorkflowMethodInstructionMismatch:
         assert str(exc_info.value) == (
             "empty workflow — provide at least prompt, one stage, one extend entry, "
             "the memory block, the build block, the assistants block, the delegation block, "
-            "or the repeat block"
+            "the repeat block, or the gates block"
         )
