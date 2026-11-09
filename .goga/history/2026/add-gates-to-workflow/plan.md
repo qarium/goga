@@ -819,18 +819,18 @@ Carry the settings block through the skip-driven rebuild. Covers the
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Declaration**: declare Task 8 (skip rebuild carriage) being executed
-- [ ] **Contract tests**: extend `tests/pipeline/test_apply_skip_stages.py` (the `test_apply_skip_stages_carries_repeat_verbatim` shape). Expected to fail at this stage.
-- [ ] **Code**: the rebuilt `WorkflowDocument(...)` gains `gates=workflow.gates if workflow is not None else None` — carried verbatim (same object, opaque); the replacement `WorkflowStage(skip=True, assistants=…)` needs NO code change (the dataclass default `gates=None` provides "replacement carries no gates") — document it in the docstring (the compiler removes the skipped stage before the gates walk)
-- [ ] **REPL checkpoint**: in the REPL, run `apply_skip_stages` on the test model; observe `merged.gates is workflow.gates` (same object) and `merged.stages["gone"].gates is None`
-- [ ] **Interface verification**: `python3 -m pytest tests/pipeline/test_apply_skip_stages.py -v` — all pass
-- [ ] **Logic tests (from the design's test stack trace)**:
+- [x] **Declaration**: declare Task 8 (skip rebuild carriage) being executed
+- [x] **Contract tests**: extend `tests/pipeline/test_apply_skip_stages.py` (the `test_apply_skip_stages_carries_repeat_verbatim` shape). Expected to fail at this stage.
+- [x] **Code**: the rebuilt `WorkflowDocument(...)` gains `gates=workflow.gates if workflow is not None else None` — carried verbatim (same object, opaque); the replacement `WorkflowStage(skip=True, assistants=…)` needs NO code change (the dataclass default `gates=None` provides "replacement carries no gates") — document it in the docstring (the compiler removes the skipped stage before the gates walk)
+- [x] **REPL checkpoint**: in the REPL, run `apply_skip_stages` on the test model; observe `merged.gates is workflow.gates` (same object) and `merged.stages["gone"].gates is None`
+- [x] **Interface verification**: `python3 -m pytest tests/pipeline/test_apply_skip_stages.py -v` — all pass
+- [x] **Logic tests (from the design's test stack trace)**:
   - `test_settings_block_survives_skip_rebuild` — `workflow = WorkflowDocument(gates=WorkflowGates(max_iterations=4), stages={"a": WorkflowStage(prompt="x"), "gone": WorkflowStage(skip=True, gates=[step])})`; `skip_stages=["gone"]`; assertions: `merged.gates is workflow.gates` (same object, verbatim), `merged.stages["gone"].gates is None` (replacement carries no gates)
   - `None` workflow with non-empty skips constructs with `gates=None` (the existing none-input shape extended)
-- [ ] **Debugging**: `python3 -m pytest tests/pipeline/test_apply_skip_stages.py tests/pipeline -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: skip-driven runs keep retry tuning for remaining gated stages; the skipped stage's checks drop silently downstream; no mutation of inputs
-- [ ] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
-- [ ] **Completion**: mark checkboxes complete
+- [x] **Debugging**: `python3 -m pytest tests/pipeline/test_apply_skip_stages.py tests/pipeline -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: skip-driven runs keep retry tuning for remaining gated stages; the skipped stage's checks drop silently downstream; no mutation of inputs
+- [x] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
+- [x] **Completion**: mark checkboxes complete
 
 ### Task 9: Integration tests for the gates lifecycle (integration tests)
 
