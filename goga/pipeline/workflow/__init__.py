@@ -14,6 +14,8 @@ from .workflow_build import WorkflowBuild
 from .workflow_delegation import WorkflowDelegation
 from .workflow_document import WorkflowDocument
 from .workflow_extend_stage import WorkflowExtendStage
+from .workflow_gate_step import WorkflowGateStep
+from .workflow_gates import WorkflowGates
 from .workflow_memory import WorkflowMemory
 from .workflow_reflect import WorkflowReflect
 from .workflow_repeat import WorkflowRepeat
@@ -28,6 +30,8 @@ __all__: list[str] = [
     "WorkflowDelegation",
     "WorkflowDocument",
     "WorkflowExtendStage",
+    "WorkflowGateStep",
+    "WorkflowGates",
     "WorkflowMemory",
     "WorkflowReflect",
     "WorkflowRepeat",
