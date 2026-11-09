@@ -35,9 +35,17 @@ A list of check steps; an empty list equals absence. Each step is a mapping:
 | `agent` | str, non-empty | xor `script` | an AI-review step; the same agent-name vocabulary as the per-stage agent override |
 | `timeout` | str | no | carried verbatim; the duration grammar is engine-owned |
 | `prompt` | str | no | the review instruction of an AI step — agent steps only (forbidden on a `script` step) |
+| `env` | map str→str | no | environment variables for the step — valid on BOTH step kinds; an empty map equals absence |
 
 Exactly one of `script`/`agent` per step — both or neither is a structural
 error. The steps compile in authored order.
+
+A step's `env` never reaches the flow-file as an emitted field (the engine's
+verify-step schema has no `env`) — the pipeline run coordination delivers it
+through a generated closure wrapper per env-declaring step (see the pipeline
+cell's `gate-env` practice). Env keys must be legal environment variable
+names (POSIX shape); an illegal key is a strict pre-run error naming the
+stage, the step, and the key.
 
 ## Minimal examples
 
@@ -52,9 +60,13 @@ stages:
     gates:
       - name: tests
         script: pytest -q
+        env:
+          FOO: bar
       - name: review
         agent: reviewer
         prompt: Review the diff for correctness.
+        env:
+          REVIEW_STRICTNESS: strict
 ```
 
 Without the settings block the gated stages carry the steps alone (the
@@ -78,18 +90,23 @@ stages:
 - "non-bool value in workflow.gates.fresh_correction"
 - "non-list gates in workflow.stages.NAME"
 - "non-mapping gate step in workflow.stages.NAME.gates[i]"
-- "unknown key in workflow.stages.NAME.gates[i]: KEY; valid keys: name, script, agent, timeout, prompt"
+- "unknown key in workflow.stages.NAME.gates[i]: KEY; valid keys: name, script, agent, timeout, prompt, env"
 - "gates step without name in workflow.stages.NAME.gates[i]"
 - "gates step must carry exactly one of script/agent in workflow.stages.NAME.gates[i]"
 - "script must be a non-empty string in workflow.stages.NAME.gates[i]" (and the agent counterpart)
 - "prompt is forbidden on a script gate step in workflow.stages.NAME.gates[i]" — prompt belongs to AI steps
+- "non-mapping env in workflow.stages.NAME.gates[i]" / "non-str key in
+  workflow.stages.NAME.gates[i].env" / "non-str value in
+  workflow.stages.NAME.gates[i].env.KEY" — the step env string-map form
 - "gates is forbidden in workflow.extend.NAME" — checks of a new stage are
   authored in the stages block by the new stage's name
 
 ## What is NOT validated here
 
-- The `timeout` duration grammar and the `name` text content — values pass
-  verbatim; the engine reports malformed values at flow load/preflight.
+- The `timeout` duration grammar, the `name` text content, and the step env
+  key shapes — values pass verbatim; the engine reports malformed values at
+  flow load/preflight, and the gate wrapper generation rejects an illegal
+  env key with a strict pre-run error.
 - Stage names — the compiler's strict unknown-stage check covers them.
 - Engine interplay constraints (the failure budget vs the patience value,
   the effective ceiling) — the engine owns and reports these.

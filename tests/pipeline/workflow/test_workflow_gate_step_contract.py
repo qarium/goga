@@ -2,11 +2,11 @@
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
 importability from the facade (including the ``__all__`` obligation — the
-name sorts before ``WorkflowGates``, after ``WorkflowExtendStage``), the five
+name sorts before ``WorkflowGates``, after ``WorkflowExtendStage``), the six
 declared properties in the fixed order (``name``, ``script``, ``agent``,
-``timeout``, ``prompt``), the exact defaults (``name`` required, no default;
-every other field ``None``), and kw_only construction. These tests pin the
-contract surface — behavior lives in the logic test module.
+``timeout``, ``prompt``, ``env``), the exact defaults (``name`` required, no
+default; every other field ``None``), and kw_only construction. These tests
+pin the contract surface — behavior lives in the logic test module.
 """
 
 from __future__ import annotations
@@ -37,26 +37,41 @@ class TestWorkflowGateStepContract:
     def test_workflow_gate_step_signature_matches_contract(self) -> None:
         """The signature matches the contract exactly — name required, the rest defaulting to None.
 
-        ``name, script, agent, timeout, prompt`` in the declared order; the
-        annotations pin the declared types.
+        ``name, script, agent, timeout, prompt, env`` in the declared order;
+        the annotations pin the declared types.
         """
         parameters = list(inspect.signature(WorkflowGateStep).parameters.values())
 
-        assert [parameter.name for parameter in parameters] == ["name", "script", "agent", "timeout", "prompt"]
-        assert [parameter.default for parameter in parameters] == [inspect.Parameter.empty, None, None, None, None]
+        assert [parameter.name for parameter in parameters] == [
+            "name",
+            "script",
+            "agent",
+            "timeout",
+            "prompt",
+            "env",
+        ]
+        assert [parameter.default for parameter in parameters] == [
+            inspect.Parameter.empty,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ]
         assert [parameter.annotation for parameter in parameters] == [
             "str",
             "str | None",
             "str | None",
             "str | None",
             "str | None",
+            "dict[str, str] | None",
         ]
 
     def test_workflow_gate_step_field_order_fixed(self) -> None:
-        """Field order is fixed: name, script, agent, timeout, prompt."""
+        """Field order is fixed: name, script, agent, timeout, prompt, env."""
         names = [field.name for field in fields(WorkflowGateStep)]
 
-        assert names == ["name", "script", "agent", "timeout", "prompt"]
+        assert names == ["name", "script", "agent", "timeout", "prompt", "env"]
 
     def test_workflow_gate_step_name_has_no_default(self) -> None:
         """``name`` is required — construction without it raises TypeError."""
@@ -72,6 +87,7 @@ class TestWorkflowGateStepContract:
         assert step.agent is None
         assert step.timeout is None
         assert step.prompt is None
+        assert step.env is None
 
     def test_workflow_gate_step_constructible_kw_only(self) -> None:
         """WorkflowGateStep is keyword-only — positional construction raises TypeError."""

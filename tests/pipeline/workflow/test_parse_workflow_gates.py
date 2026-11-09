@@ -91,6 +91,36 @@ class TestParseWorkflowGatesContract:
         assert document.gates.patience is not None
         assert document.gates.max_iterations is not None
 
+    def test_step_env_carried_on_both_step_kinds_in_authored_order(self) -> None:
+        """A step env map parses onto script and agent steps alike, in authored order."""
+        document = parse_workflow(
+            "stages:\n"
+            "  implement:\n"
+            "    gates:\n"
+            "      - name: Unit tests\n"
+            "        script: pytest -q\n"
+            "        env:\n"
+            "          FOO: bar\n"
+            "          BAZ: qux\n"
+            "      - name: Code review\n"
+            "        agent: codex\n"
+            "        prompt: Review.\n"
+            "        env:\n"
+            "          MODEL: gpt\n"
+        )
+
+        first, second = document.stages["implement"].gates
+
+        assert first.env == {"FOO": "bar", "BAZ": "qux"}
+        assert list(first.env) == ["FOO", "BAZ"]
+        assert second.env == {"MODEL": "gpt"}
+
+    def test_step_empty_env_map_equals_absence(self) -> None:
+        """An authored empty step env map normalizes to ``None`` — no wrapper, no patch."""
+        document = parse_workflow("stages:\n  a:\n    gates: [{name: x, script: pytest, env: {}}]\n")
+
+        assert document.stages["a"].gates[0].env is None
+
 
 class TestParseWorkflowGatesLogic:
     """Logic tests — the gates blocks' authored-values carry and normalizations."""
@@ -177,7 +207,20 @@ class TestParseWorkflowGatesRejections:
             ),
             (
                 "stages: {a: {gates: [{name: x, agent: y, extra: 1}]}}\n",
-                "unknown key in workflow.stages.a.gates[0]: extra; valid keys: name, script, agent, timeout, prompt",
+                "unknown key in workflow.stages.a.gates[0]: extra; "
+                "valid keys: name, script, agent, timeout, prompt, env",
+            ),
+            (
+                "stages: {a: {gates: [{name: x, script: y, env: 5}]}}\n",
+                "non-mapping env in workflow.stages.a.gates[0]",
+            ),
+            (
+                "stages: {a: {gates: [{name: x, script: y, env: {1: v}}]}}\n",
+                "non-str key in workflow.stages.a.gates[0].env",
+            ),
+            (
+                "stages: {a: {gates: [{name: x, agent: y, env: {K: 2}}]}}\n",
+                "non-str value in workflow.stages.a.gates[0].env.K",
             ),
             (
                 "stages: {a: {gates: [{name: x, agent: y}, 5]}}\n",

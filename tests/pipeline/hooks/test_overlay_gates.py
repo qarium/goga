@@ -257,3 +257,51 @@ class TestMergeStageGates:
         assert authored == [WorkflowGateStep(name="compile", script="make all")]
         assert tool_list == [WorkflowGateStep(name="tool", script="pytest")]
         assert contribution.document.stages["build"].gates is tool_list
+
+    def test_stage_gate_step_env_rides_the_whole_list_merge(self) -> None:
+        """An env-carrying authored step survives the merge verbatim — env rides inside the whole list."""
+        authored = [WorkflowGateStep(name="tests", script="pytest", env={"FOO": "bar"})]
+        base = WorkflowDocument(stages={"build": WorkflowStage(prompt="do", gates=authored)})
+        contribution = ToolContribution(
+            tool="t1",
+            document=WorkflowDocument(
+                stages={
+                    "build": WorkflowStage(
+                        prompt="tool",
+                        gates=[WorkflowGateStep(name="tool", agent="codex", env={"MODEL": "gpt"})],
+                    )
+                },
+            ),
+        )
+
+        overlay = merge_workflow_overlay(base, [contribution])
+
+        assert overlay.workflow is not None
+        gates = overlay.workflow.stages["build"].gates
+
+        assert gates is not None
+        assert [step.name for step in gates] == ["tests"]
+        assert gates[0].env == {"FOO": "bar"}
+
+    def test_stage_gate_step_env_taken_from_the_winning_tool_list(self) -> None:
+        """An unset authored list takes the tool's list whole — env maps included."""
+        base = WorkflowDocument(stages={"build": WorkflowStage(prompt="do")})
+        contribution = ToolContribution(
+            tool="t1",
+            document=WorkflowDocument(
+                stages={
+                    "build": WorkflowStage(
+                        prompt="tool",
+                        gates=[WorkflowGateStep(name="review", agent="codex", env={"MODEL": "gpt"})],
+                    )
+                },
+            ),
+        )
+
+        overlay = merge_workflow_overlay(base, [contribution])
+
+        assert overlay.workflow is not None
+        gates = overlay.workflow.stages["build"].gates
+
+        assert gates is not None
+        assert gates[0].env == {"MODEL": "gpt"}

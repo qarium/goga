@@ -23,6 +23,7 @@ from .afm_config import write_afm_config
 from .afm_skin import materialize_afm_skin
 from .apply_skip_stages import apply_skip_stages
 from .compiler import PipelineRoles, compile_flow, parse_dsl, translate_role
+from .gate_env_wrappers import apply_gate_env_wrappers
 from .hooks import (
     CompositionStage,
     PipelineHooks,
@@ -467,6 +468,13 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
     # A workflow declaring no stage env is neither read nor rewritten —
     # the flow output stays byte-identical to the compiler's composition.
     apply_stage_env_wrappers(flow_doc.stages, overlay.workflow, config.pipeline.agent, flow_path)
+
+    # Step 14b: apply the per-step gate env wrappers — the same closure
+    # delivery for the env maps authored on ``gates`` check steps (both step
+    # kinds): each claimed step's ``run``/``command`` line in the written
+    # flow-file is rewritten to its wrapper. A workflow declaring no gate
+    # step env is neither read nor rewritten — byte-identical output.
+    apply_gate_env_wrappers(flow_doc.stages, overlay.workflow, flow_path)
 
     # Step 15: materialize the four agent prompt files into <AFM_DIR>/prompts/.
     _materialize_prompts(afm_dir, pipeline_doc.header.roles)

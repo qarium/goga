@@ -749,7 +749,7 @@ Annotations: |
     pipeline hooks zone, compile the pipeline-file (extended by the effective
     workflow) into an afm flow-file at runtime via `compile_flow`, apply the
     per-stage env wrappers as a targeted post-compile patch of the written
-    flow-file, materialize
+    flow-file, apply the per-step gate env wrappers the same way, materialize
     the four agent prompt files (the defaults plus the inline overrides of
     the resolved `PipelineRoles`) into the
     runtime prompts directory, write the afm configuration file via
@@ -874,7 +874,11 @@ Annotations: |
         effective pipeline agent, and the composed flow path — a
         post-compile command rewrite of exactly the env-declaring stages in
         the flow-file `compile_flow` already wrote; a no-op that touches no
-        file when none declare env
+        file when none declare env. Then apply the per-step gate env
+        wrappers via `apply_gate_env_wrappers` over the same compiled
+        stages and flow path — the same closure delivery for the env maps
+        authored on gates check steps (both step kinds); a no-op that
+        touches no file when no step declares env
     15. Materialize agent prompts atomically (validate-all, then wipe, then
         write): resolve the default prompts directory per `default_prompts`;
         for each overridable role (planner, executor, reviewer) require an
@@ -945,7 +949,10 @@ Annotations: |
     - After `compile_flow`, the per-stage env wrappers apply as a targeted
       post-compile patch of the written flow-file — only for env-declaring
       stages; an env-free run keeps the flow-file byte-identical (neither
-      read nor rewritten)
+      read nor rewritten). The per-step gate env wrappers apply the same
+      way, immediately after — only for env-declaring gate steps; a run
+      whose gates declare no step env keeps the flow-file byte-identical
+      (neither read nor rewritten)
     - When a profile resolved, the afm launch layer carries
       GOGA_PROFILE=<effective profile name> — the afm subprocess and its
       stages inherit the effective profile; keys of pipeline.env and the
@@ -1444,6 +1451,82 @@ Annotations: |
       — container-local temp only
     - Do not print or log env values
 
+"apply_gate_env_wrappers(stages: list[FlowStage], workflow: WorkflowDocument | None, flow_path: Path) -> stages: list[FlowStage]":
+  location: gate_env_wrappers.py
+  annotations: |
+    Deliver the per-step gate env instructions of a compiled flow: generate
+    one sh closure wrapper per env-declaring gates check step, patch the
+    run/command fields of exactly those steps in the ALREADY WRITTEN
+    flow-file, and return a new stage list where those steps' verify gates
+    point at their wrappers. Steps without an env instruction pass through
+    as the SAME objects, untouched.
+
+    `stages`: the compiled flow stages
+    `workflow`: the effective workflow document (its stages map carries
+                the gate instructions), or None (no step is wrapped)
+    `flow_path`: the path of the flow-file written by `compile_flow` —
+                 the target of the post-compile verify-step patch
+    `stages`: the new stage list — claimed stages carry rebuilt verify
+              gates whose env steps point at their generated wrappers
+
+    Apply `resolve-wrapper-path` when composing an agent step's exec
+    target — the same in-container wrapper path the compiler composed.
+
+    Algorithm:
+    1. Select the compiled stages whose workflow entry's gates list
+       carries at least one non-None step env map (matched by stage name —
+       exact id first, then the loop-expansion suffix of the workflow
+       stage name, the same resolution `apply_stage_env_wrappers`
+       applies); with none — return the input list unchanged WITHOUT
+       reading or writing `flow_path` (the env-free invariant)
+    2. Validate every claimed step's env keys as legal environment
+       variable names (POSIX shape) BEFORE writing any file — an illegal
+       key (a shell metacharacter, a non-string key) would inject into or
+       break the generated export line; raise one strict pre-run error
+       naming the stage, the step, and the key
+    3. Generate one sh closure per claimed step in a container-local temp
+       directory (owner-only access, 0o700): export the step's env values
+       (verbatim, shell-quoted), then carry the payload — the authored
+       script lines as-is on a script step (the same shell, working
+       directory, and exit status the engine gives the authored run
+       value), or the exec of the agent's in-container wrapper forwarding
+       "$@" on an AI step. The file name composes the stage id, the step
+       index, and the step name through the shared safe-name helper — the
+       index guarantees uniqueness (step names are not unique-checked)
+    4. Patch `flow_path`: rewrite ONLY the claimed steps' run (a script
+       step) or command (an agent step) lines in the serialized verify
+       sections of the claimed stages to the absolute wrapper paths — a
+       block-literal old value (a multi-line authored script) is consumed
+       whole with its continuation lines; both emission forms (the list
+       form and the settings container form) patch identically; every
+       other byte of the file stays untouched
+    5. Return the new list: claimed stages carry rebuilt verify gates
+       (fresh FlowVerify/FlowVerifyStep objects — the compiled values are
+       never mutated); every other stage is the SAME input object
+
+    Requirements:
+    - The input list and its stage objects are never mutated
+    - Wrappers are generated ONLY for env-declaring gate steps — a run
+      whose gates declare no step env keeps byte-identical flow output
+      (the flow-file is neither read nor rewritten)
+    - The file patch touches only the claimed steps' run/command lines;
+      the rest of the serialized flow-file is byte-identical
+    - Per-step values layer above all global env layers (the closure
+      exports them last)
+    - A declared env key that is not a legal environment variable name is
+      a strict pre-run error naming the stage, the step, and the key —
+      raised before any wrapper file is written
+    - The engine's verify-step schema carries no env field (an emitted
+      env key is rejected at flow load) — the delivery is exclusively
+      goga-side composition, never an emitted key
+
+    Constraints:
+    - Do not compile, reorder, or restructure stages — this runs after
+      compilation
+    - Do not write anything under the project directory or /workspace
+      — container-local temp only
+    - Do not print or log env values
+
 "run_hook() -> exit_code: int":
   location: hook_bridge.py
   annotations: |
@@ -1701,5 +1784,6 @@ Description: |
   (the static runtime-context head, generated helper profiles, and the
   task budget), the dashboard-skin materialization of the afm home, and
   the launch environment composition — the per-stage env delivery
-  through generated closure wrappers, the lifecycle-event bridge of the
+  and the per-step gate env delivery through generated closure wrappers,
+  the lifecycle-event bridge of the
   run interior, and the in-container CLI entrypoint pipeline_cli.

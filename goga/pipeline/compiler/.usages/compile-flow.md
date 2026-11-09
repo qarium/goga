@@ -222,6 +222,11 @@ Translation (authored → engine):
 - Value grammar (durations, name text) passes verbatim — the engine
   reports malformed values at preflight. goga performs no cross-field
   checks of engine constraints and never executes or interprets the gate.
+- A step's authored `env` map never reaches the emission (the engine's
+  verify-step schema has no `env` field) — the compiler emits an
+  env-carrying step exactly like an env-free one; the pipeline run
+  coordination's gate wrapper generation delivers the env downstream (see
+  the pipeline cell's `gate-env` practice).
 - A gate-free workflow compiles byte-identically.
 
 ## Collaboration emission

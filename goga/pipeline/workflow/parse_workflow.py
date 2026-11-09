@@ -129,8 +129,10 @@ _REPEAT_KEYS = ("max_cycles", "keep_runs")
 _GATES_KEYS = ("patience", "max_iterations", "fresh_correction")
 
 # Fixed keys of a per-stage ``gates`` check step, in canonical order. Used
-# for the unknown-key rejection of a step's own key set.
-_GATE_STEP_KEYS = ("name", "script", "agent", "timeout", "prompt")
+# for the unknown-key rejection of a step's own key set. ``env`` is valid on
+# both step kinds — shell and AI-review alike (the stage-env delivery
+# precedent consumes it for both).
+_GATE_STEP_KEYS = ("name", "script", "agent", "timeout", "prompt", "env")
 
 # Accepted values of an attachment's ``when`` parameter — the engagement
 # timing vocabulary the compiler translates into the afm ``trigger`` values.
@@ -618,14 +620,16 @@ def _validate_gate_step(name: Any, index: int, step: Any) -> WorkflowGateStep:
     Returns:
         The validated :class:`WorkflowGateStep` — exactly one of
         ``script``/``agent`` carries the authored payload (the other stays
-        ``None``) and ``prompt`` is ``None`` on every script step.
+        ``None``), ``prompt`` is ``None`` on every script step, and ``env``
+        is ``None`` on every step without an authored non-empty map.
 
     Raises:
         WorkflowSyntaxError: If the step is not a mapping, carries an unknown
             key, omits ``name`` or carries a non-str one, carries both or
             neither of ``script``/``agent``, carries a non-empty-string
             ``script``/``agent``, carries a non-str ``timeout``/``prompt``,
-            or authors ``prompt`` on a script step.
+            authors ``prompt`` on a script step, or carries a malformed
+            ``env`` map (non-mapping, a non-str key, a non-str value).
     """
     scope = f"workflow.stages.{name}.gates[{index}]"
 
@@ -670,11 +674,12 @@ def _validate_gate_step(name: Any, index: int, step: Any) -> WorkflowGateStep:
         agent=agent,
         timeout=step.get("timeout"),
         prompt=step.get("prompt"),
+        env=_validate_stage_env(scope, step["env"]) if "env" in step else None,
     )
 
 
 def _reject_unknown_gate_step_keys(scope: str, step: dict[str, Any]) -> None:
-    """Reject any key of a gate step outside the five-step key set.
+    """Reject any key of a gate step outside the six-step key set.
 
     Args:
         scope: The dotted location of the step (used in error messages).
@@ -682,7 +687,7 @@ def _reject_unknown_gate_step_keys(scope: str, step: dict[str, Any]) -> None:
 
     Raises:
         WorkflowSyntaxError: If the step carries a key outside
-            ``name``/``script``/``agent``/``timeout``/``prompt``.
+            ``name``/``script``/``agent``/``timeout``/``prompt``/``env``.
     """
     for key in step:
         if key not in _GATE_STEP_KEYS:

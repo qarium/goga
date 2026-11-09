@@ -134,7 +134,7 @@ fields:
 | `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` naming which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `memory` | bool | — | Memory-participation instruction (alignment method): `true` marks the stage as participating in project memory. An explicit `false` equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `assistants` | map | — | Stage assistant attachments keyed by assistant name — each entry a reference (`gate`/`when`, with `when` required) or a full inline declaration; an empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation). |
-| `gates` | list | — | Quality-gate check steps the stage must pass before it counts as done — a list of `{name, script xor agent, timeout?, prompt?}` mappings; an empty list equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` and in any stage body. See [Quality gates (`gates`)](#quality-gates-gates). |
+| `gates` | list | — | Quality-gate check steps the stage must pass before it counts as done — a list of `{name, script xor agent, timeout?, prompt?, env?}` mappings; an empty list equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` and in any stage body. See [Quality gates (`gates`)](#quality-gates-gates). |
 
 Rules:
 
@@ -734,10 +734,14 @@ stages:
       - name: Unit tests        # the dashboard label; required on every step
         script: pytest -q       # a shell check step (script xor agent)
         timeout: 30m            # optional; carried verbatim
+        env:                    # optional; environment variables of the step
+          FOO: bar
       - name: Code review       # an AI-review step
         agent: codex
         prompt: |               # the review instruction — agent steps only
           Review the diff for correctness.
+        env:                    # valid on agent steps too
+          REVIEW_STRICTNESS: strict
 ```
 
 The top-level `gates:` block accepts these keys — authored keys only; goga
@@ -761,8 +765,9 @@ The workflow vocabulary maps one-directionally onto the engine's stage
 | step `script` | step `run` | A shell check step — gated on the exit status. |
 | step `agent` | step `command` | The agent name composed into the wrapper path `/home/goga/bin/<agent>-as-claude.sh` (the same template as the per-stage `agent` override; no agent-name existence check). |
 | step `name` / `prompt` / `timeout` | same names | Carried verbatim. |
+| step `env` | — (no emitted key) | Never reaches the flow-file — see [Gate step env](#gate-step-env) below. |
 
-Each check step is a mapping with up to five keys:
+Each check step is a mapping with up to six keys:
 
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
@@ -771,6 +776,7 @@ Each check step is a mapping with up to five keys:
 | `agent` | non-empty string | xor `script` | An AI-review step — the same agent-name vocabulary as the per-stage `agent` override. |
 | `timeout` | string | no | Carried verbatim; the duration grammar is engine-owned. |
 | `prompt` | string | no | The review instruction of an AI step — forbidden on a `script` step (`prompt is forbidden on a script gate step in workflow.stages.<NAME>.gates[<i>]`). |
+| `env` | map of string → string | no | Environment variables of the step — valid on both step kinds; an empty map equals absence. |
 
 A shell step without an authored `timeout` carries the materialized default
 `1h`; an AI step materializes no timeout default. The `1h` is a goga-side
@@ -822,6 +828,43 @@ Rules:
   reject a gated flow at load (a downgrade is never silent); a malformed
   `timeout` or a whitespace-only `name` passes verbatim and surfaces at
   engine load/preflight.
+
+### Gate step env
+
+Each check step may carry an `env` map — environment variables for that
+step's execution, valid on both step kinds (a shell `script` step and an
+AI `agent` step alike):
+
+```yaml
+stages:
+  implementation:
+    gates:
+      - name: Unit tests
+        script: pytest -q
+        env:
+          FOO: bar
+      - name: Code review
+        agent: codex
+        prompt: Review the diff.
+        env:
+          REVIEW_STRICTNESS: strict
+```
+
+The engine's verify-step schema has no `env` field, so the map never
+reaches the flow-file as an emitted key. Instead goga delivers it through
+the same mechanism as the per-stage `env` instruction (see the
+[`env` row](#stage-entries) of the stage-entries table):
+after compilation, one generated sh closure wrapper per env-declaring step
+exports the values verbatim and carries the payload (the authored script
+lines on a shell step, or the exec of the agent wrapper on an AI step), and
+the step's `run`/`command` line in the written flow-file is patched to
+point at the wrapper. Every other byte of the flow-file stays untouched; a
+workflow whose gates declare no step env compiles byte-identically.
+
+Keys must be legal environment variable names (POSIX shape) — anything
+else is a strict pre-run error naming the stage, the step, and the key,
+raised before any wrapper is written. Values layer above every global env
+layer.
 
 ### Worked example
 

@@ -16,7 +16,10 @@ class WorkflowGateStep:
     is ``None`` on every shell instance (the parser-enforced
     prompt-on-script-step binding). The consumer composes ``agent`` into a
     launch command and materializes the shell-step timeout default; the
-    engine owns the value grammars.
+    engine owns the value grammars. An authored ``env`` map is carried
+    verbatim for both step kinds — the pipeline run coordination's gate
+    wrapper generation consumes it (the stage-env delivery precedent), not
+    the compiler.
 
     Args:
         name: The check's dashboard label — required on every step.
@@ -27,6 +30,9 @@ class WorkflowGateStep:
             when not authored.
         prompt: The review instruction of an AI step, carried verbatim, or
             ``None`` when not authored.
+        env: The step's environment instruction (string map, literal and/or
+            rendered), valid on both step kinds, or ``None`` when not
+            authored (an empty map equals absence).
 
     The model is pure data: no validation, no interpretation —
     :func:`parse_workflow` enforces the step form during parsing, and the
@@ -38,3 +44,4 @@ class WorkflowGateStep:
     agent: str | None = None
     timeout: str | None = None
     prompt: str | None = None
+    env: dict[str, str] | None = None
