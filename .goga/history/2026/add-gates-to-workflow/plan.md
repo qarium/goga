@@ -791,22 +791,22 @@ field merge, and the emptiness enumeration. Covers the
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Declaration**: declare Task 7 (hooks gates carriage) being executed
-- [ ] **Contract tests**: create `tests/pipeline/hooks/test_overlay_gates.py`; extend `tests/pipeline/hooks/test_events.py`. Expected to fail at this stage.
-- [ ] **Code**: `_merge_gates(base, contributions)` — line-for-line the `_merge_repeat` shape: the authored block when present (unbeatable), else the later contributing tool's block; no field-level merging
-- [ ] **Code**: `_STAGE_FIELDS` gains `"gates"` (last, declaration order) — `_STAGE_DEFAULTS` (`dict.fromkeys(_STAGE_FIELDS)`) automatically gains the `None` default; `_merge_stage`'s authored-wins field loop carries `gates` like `agent`/`prompt`/`notes` (an authored check-step list is never overwritten; `_is_set`: not-`None` = set); no `assistants`-style carve-out — the merge unit is the field
-- [ ] **Code**: the rebuilt `WorkflowDocument(..., repeat=repeat, gates=_merge_gates(base, contributions))` — `profile`/`build` verbatim as before; docstring gains the 4d/5b/8 arms
-- [ ] **Code**: `events.py` — the per-hook buffer duck-check tuple gains `"gates"` (`("prompt", "stages", "extend", "memory", "assistants", "delegation", "repeat", "gates")`); the empty-document discard gains `and document.gates is None`; the docstring's step-5 enumeration gains "and no gates block"; `amendments.py` `contribute` docstring enumeration gains `gates` ("prompt, stages, extend, memory, assistants, delegation, repeat, gates")
-- [ ] **REPL checkpoint**: in the REPL, run `merge_workflow_overlay` on the test models (authored base vs gates-only contribution) and `amend_workflow` with a gates-only buffered contribution; observe the rebuilt document and that no discard warning fires
-- [ ] **Interface verification**: `python3 -m pytest tests/pipeline/hooks/test_overlay_gates.py -v` — all pass
-- [ ] **Logic tests (from the design's test stack trace)**:
+- [x] **Declaration**: declare Task 7 (hooks gates carriage) being executed
+- [x] **Contract tests**: create `tests/pipeline/hooks/test_overlay_gates.py`; extend `tests/pipeline/hooks/test_events.py`. Expected to fail at this stage.
+- [x] **Code**: `_merge_gates(base, contributions)` — line-for-line the `_merge_repeat` shape: the authored block when present (unbeatable), else the later contributing tool's block; no field-level merging
+- [x] **Code**: `_STAGE_FIELDS` gains `"gates"` (last, declaration order) — `_STAGE_DEFAULTS` (`dict.fromkeys(_STAGE_FIELDS)`) automatically gains the `None` default; `_merge_stage`'s authored-wins field loop carries `gates` like `agent`/`prompt`/`notes` (an authored check-step list is never overwritten; `_is_set`: not-`None` = set); no `assistants`-style carve-out — the merge unit is the field
+- [x] **Code**: the rebuilt `WorkflowDocument(..., repeat=repeat, gates=_merge_gates(base, contributions))` — `profile`/`build` verbatim as before; docstring gains the 4d/5b/8 arms
+- [x] **Code**: `events.py` — the per-hook buffer duck-check tuple gains `"gates"` (`("prompt", "stages", "extend", "memory", "assistants", "delegation", "repeat", "gates")`); the empty-document discard gains `and document.gates is None`; the docstring's step-5 enumeration gains "and no gates block"; `amendments.py` `contribute` docstring enumeration gains `gates` ("prompt, stages, extend, memory, assistants, delegation, repeat, gates")
+- [x] **REPL checkpoint**: in the REPL, run `merge_workflow_overlay` on the test models (authored base vs gates-only contribution) and `amend_workflow` with a gates-only buffered contribution; observe the rebuilt document and that no discard warning fires
+- [x] **Interface verification**: `python3 -m pytest tests/pipeline/hooks/test_overlay_gates.py -v` — all pass
+- [x] **Logic tests (from the design's test stack trace)**:
   - `test_overlay_gates.py::test_authored_settings_block_unbeatable_and_stage_gates_fill` — `base = WorkflowDocument(gates=WorkflowGates(patience=1), stages={"a": WorkflowStage(gates=[step])})`; one contribution with `gates=WorkflowGates(max_iterations=9)` and `stages={"b": WorkflowStage(gates=[other_step])}`; assertions: `overlay.workflow.gates.patience == 1`, `overlay.workflow.gates.max_iterations is None` (no field-level merge), `overlay.workflow.stages["a"].gates == [step]`, `overlay.workflow.stages["b"].gates == [other_step]`
   - `test_overlay_gates.py::test_gates_only_contribution_rides_the_merge` — `merge_workflow_overlay(None, [ToolContribution(tool="t", document=WorkflowDocument(gates=WorkflowGates(max_iterations=1)))])`; assertions: `overlay.workflow is not None`, `overlay.workflow.gates.max_iterations == 1`
   - `test_events.py::test_gates_only_contribution_is_not_empty` — a registered tool hook buffers `WorkflowAmendment.contribute(WorkflowDocument(gates=WorkflowGates(max_iterations=1)))`; `amend_workflow(...)` with `workflow=None`; assertions: `overlay.workflow is not None`, `overlay.workflow.gates.max_iterations == 1`, and `not [r for r in caplog.records if r.message == "tool contributed an empty document; discarded"]`
-- [ ] **Debugging**: `python3 -m pytest tests/pipeline/hooks -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: a gates-only tool contribution commits as a `ToolContribution` and merges; inputs never mutated; gates values carried whole (never interpreted, validated, or rebuilt); no new imports (`WorkflowDocument` only)
-- [ ] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
-- [ ] **Completion**: mark checkboxes complete
+- [x] **Debugging**: `python3 -m pytest tests/pipeline/hooks -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: a gates-only tool contribution commits as a `ToolContribution` and merges; inputs never mutated; gates values carried whole (never interpreted, validated, or rebuilt); no new imports (`WorkflowDocument` only)
+- [x] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
+- [x] **Completion**: mark checkboxes complete
 
 ### Task 8: Pipeline — `apply_skip_stages` gates carriage (TDD coding)
 

@@ -45,7 +45,7 @@ from goga.pipeline.hooks import (
     WorkflowOverlay,
     WorkIdentity,
 )
-from goga.pipeline.workflow import WorkflowDocument, WorkflowRepeat
+from goga.pipeline.workflow import WorkflowDocument, WorkflowGates, WorkflowRepeat
 
 from tests.conftest import is_kw_only_dataclass
 from tests.pipeline.hooks.conftest import ZONE_ALL, field_defaults
@@ -853,6 +853,41 @@ class TestAmendWorkflowDelivery:
         assert overlay.workflow is not None
         assert overlay.workflow.repeat is not None
         assert overlay.workflow.repeat.max_cycles == 4
+        assert overlay.provenance == ["demo"]
+        assert not [r for r in caplog.records if r.message == "tool contributed an empty document; discarded"]
+
+    def test_gates_only_contribution_is_not_empty(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A gates-only contribution commits and merges — the emptiness rule counts gates.
+
+        The delivery's emptiness discard covers the gates block: a document
+        whose only content is the settings block is NOT empty, so the tool
+        commits (no discard warning) and the overlay carries the contributed
+        block — a dropped ``gates`` term would discard the contribution and
+        yield ``workflow=None``.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_gates(hooks: object) -> None:
+            def gating(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(gates=WorkflowGates(max_iterations=1)))
+
+            hooks.subscribe("pipeline", "amend_workflow", "gating", gating)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_gates)
+
+        pipeline, decision, work = _facts()
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.hooks.events"):
+            overlay = PipelineHooks().amend_workflow(pipeline=pipeline, decision=decision, workflow=None, work=work)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.gates is not None
+        assert overlay.workflow.gates.max_iterations == 1
         assert overlay.provenance == ["demo"]
         assert not [r for r in caplog.records if r.message == "tool contributed an empty document; discarded"]
 
