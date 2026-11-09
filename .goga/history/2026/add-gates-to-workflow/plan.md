@@ -668,20 +668,20 @@ directly and depend only on the Task-4 models.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Declaration**: declare Task 5 (serialize_flow verify emission) being executed
-- [ ] **Contract tests**: create `tests/pipeline/compiler/test_serialize_flow_verify_slot.py` (the `test_serialize_flow_repeat_slot.py` pattern — direct `FlowDocument` construction). Expected to fail at this stage.
-- [ ] **Code**: `_verify_step_repr(step)` (mirrors `_assistant_repr`): ordered mapping `name` → `run` xor `command` (whichever is not `None`) → `timeout` (when not `None`) → `prompt` (when not `None`); each of `run`/`command`/`timeout`/`prompt` wrapped in `_BlockLiteralScript` iff it is a `str` containing `"\n"`
-- [ ] **Code**: `_verify_repr(gate)`: no authored setting (`max_failures is None and review_patience is None and fresh_correction is None`) → the steps list (the engine list form); else the ordered container `{"steps": [...]}` then present settings only, fixed order `max_failures`, `review_patience`, `fresh_correction` (plain scalars; step fields NEVER at the container top level — engine parse error)
-- [ ] **Code**: `_build_stage_repr` gains the arm before the generic `else`: `elif key == "verify" and isinstance(value, FlowVerify): stage_repr[key] = _verify_repr(value)`; import `FlowVerify`/`FlowVerifyStep` (relative); docstring updated
-- [ ] **REPL checkpoint**: in the REPL, serialize the two test documents; observe the exact indentation (list form: dashes under `verify:` at 2 spaces, fields at 4; container form: `steps:` at 4, dashes at 4, step fields at 6) and the block-literal `|` prompt; pin the observed substrings
-- [ ] **Interface verification**: `python3 -m pytest tests/pipeline/compiler/test_serialize_flow_verify_slot.py -v` — all pass
-- [ ] **Logic tests (from the design's test stack trace)**:
+- [x] **Declaration**: declare Task 5 (serialize_flow verify emission) being executed
+- [x] **Contract tests**: create `tests/pipeline/compiler/test_serialize_flow_verify_slot.py` (the `test_serialize_flow_repeat_slot.py` pattern — direct `FlowDocument` construction). Expected to fail at this stage.
+- [x] **Code**: `_verify_step_repr(step)` (mirrors `_assistant_repr`): ordered mapping `name` → `run` xor `command` (whichever is not `None`) → `timeout` (when not `None`) → `prompt` (when not `None`); each of `run`/`command`/`timeout`/`prompt` wrapped in `_BlockLiteralScript` iff it is a `str` containing `"\n"`
+- [x] **Code**: `_verify_repr(gate)`: no authored setting (`max_failures is None and review_patience is None and fresh_correction is None`) → the steps list (the engine list form); else the ordered container `{"steps": [...]}` then present settings only, fixed order `max_failures`, `review_patience`, `fresh_correction` (plain scalars; step fields NEVER at the container top level — engine parse error)
+- [x] **Code**: `_build_stage_repr` gains the arm before the generic `else`: `elif key == "verify" and isinstance(value, FlowVerify): stage_repr[key] = _verify_repr(value)`; import `FlowVerify`/`FlowVerifyStep` (relative); docstring updated
+- [x] **REPL checkpoint**: in the REPL, serialize the two test documents; observe the exact indentation (list form: dashes under `verify:` at 2 spaces, fields at 4; container form: `steps:` at 4, dashes at 4, step fields at 6) and the block-literal `|` prompt; pin the observed substrings
+- [x] **Interface verification**: `python3 -m pytest tests/pipeline/compiler/test_serialize_flow_verify_slot.py -v` — all pass
+- [x] **Logic tests (from the design's test stack trace)**:
   - `test_verify_list_form_is_the_steps_list` — `FlowStage(fields={"prompt": "Do", "verify": FlowVerify(steps=[FlowVerifyStep(name="t", run="pytest")])})`; assertions: `"verify:\n" in text`, no `steps:` in the verify block (list, not container), `"- name: t\n" in text`
-  - `test_verify_container_form_fixed_order_and_multiline_prompt` — `FlowVerify(steps=[FlowVerifyStep(name="r", command="/x/y.sh", prompt="line1\nline2")], max_failures=3, review_patience=1)`; assertions: `"verify:\n    steps:\n" in text`, `"    max_failures: 3\n" in text`, `"    review_patience: 1\n" in text`, `text.index("steps:") < text.index("max_failures:") < text.index("review_patience:")`, `"      prompt: |\n" in text`
-- [ ] **Debugging**: `python3 -m pytest tests/pipeline/compiler -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: a stage without a gate never enters the arm — no `verify` key in the output, byte-identical text; the existing serializer suite stays green
-- [ ] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
-- [ ] **Completion**: mark checkboxes complete
+  - `test_verify_container_form_fixed_order_and_multiline_prompt` — `FlowVerify(steps=[FlowVerifyStep(name="r", command="/x/y.sh", prompt="line1\nline2")], max_failures=3, review_patience=1)`; assertions: `"verify:\n    steps:\n" in text`, `"    max_failures: 3\n" in text`, `"    review_patience: 1\n" in text`, `text.index("steps:") < text.index("max_failures:") < text.index("review_patience:")`, `"      prompt: |\n" in text` (REPL note: with the plan's no-trailing-newline prompt the dumper writes the strip-chomping `|-`; the `|` assertion is pinned with a trailing-newline prompt and `|-` with the plan's exact data — both observed forms covered)
+- [x] **Debugging**: `python3 -m pytest tests/pipeline/compiler -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: a stage without a gate never enters the arm — no `verify` key in the output, byte-identical text; the existing serializer suite stays green
+- [x] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
+- [x] **Completion**: mark checkboxes complete
 
 ### Task 6: `compile_flow` gates emission — `_gates_emission`, canonical slot, prohibitions (TDD coding)
 
