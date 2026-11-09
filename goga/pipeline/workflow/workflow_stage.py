@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .workflow_assistant import WorkflowAssistant
+from .workflow_gate_step import WorkflowGateStep
 from .workflow_reflect import WorkflowReflect
 
 
@@ -88,6 +89,13 @@ class WorkflowStage:
             extracted here, consumed by the compiler to emit the stage's
             assistants entries. This cell does not act on ``assistants`` —
             it is declarative.
+        gates: The stage's completion quality gates — a list of
+            :class:`WorkflowGateStep` check steps in authored order (each a
+            shell check or an AI-review check), or ``None`` when not
+            specified (an empty list equals absence — normalized to
+            ``None`` by ``parse_workflow``). Declarative — extracted here,
+            consumed by the compiler to emit the stage's ``verify`` field.
+            This cell does not act on ``gates`` — it is declarative.
     """
 
     agent: str | None = None
@@ -102,3 +110,4 @@ class WorkflowStage:
     reflect: WorkflowReflect | None = None
     memory: bool | None = None
     assistants: dict[str, WorkflowAssistant] | None = None
+    gates: list[WorkflowGateStep] | None = None

@@ -501,17 +501,17 @@ Covers changed entities `WorkflowStage` (`workflow_stage.py`) and
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Declaration**: declare Task 2 (model threading) being executed
-- [ ] **Contract tests**: extend `tests/pipeline/workflow/test_workflow_stage_contract.py` — the `dataclasses.fields` order pin gains `gates` last (after `assistants`), default `None`; extend `tests/pipeline/workflow/test_workflow_document_contract.py` — the order pin gains `gates` last (after `repeat`), default `None` — expected to fail at this stage
-- [ ] **Code**: `goga/pipeline/workflow/workflow_stage.py` — trailing field `gates: list[WorkflowGateStep] | None = None` after `assistants` (relative import of the type per convention); docstring gains the field description
-- [ ] **Code**: `goga/pipeline/workflow/workflow_document.py` — trailing field `gates: WorkflowGates | None = None` after `repeat`; docstring gains the field description
-- [ ] **REPL checkpoint**: in the REPL, build `WorkflowStage(prompt="x", gates=[WorkflowGateStep(name="g", script="echo ok")])` and `WorkflowDocument(gates=WorkflowGates(max_iterations=1))`; observe `[f.name for f in fields(...)]` ending in `gates`
-- [ ] **Interface verification**: `python3 -m pytest tests/pipeline/workflow/test_workflow_stage_contract.py tests/pipeline/workflow/test_workflow_document_contract.py -v` — all pass
-- [ ] **Logic tests**: default construction leaves `gates is None` on both models (existing callers unchanged)
-- [ ] **Debugging**: `python3 -m pytest tests/pipeline/workflow -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: both models keep their declared API; every existing construction site stays valid without edits (additive law)
-- [ ] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
-- [ ] **Completion**: mark checkboxes complete
+- [x] **Declaration**: declare Task 2 (model threading) being executed
+- [x] **Contract tests**: extend `tests/pipeline/workflow/test_workflow_stage_contract.py` — the `dataclasses.fields` order pin gains `gates` last (after `assistants`), default `None`; extend `tests/pipeline/workflow/test_workflow_document_contract.py` — the order pin gains `gates` last (after `repeat`), default `None` — expected to fail at this stage
+- [x] **Code**: `goga/pipeline/workflow/workflow_stage.py` — trailing field `gates: list[WorkflowGateStep] | None = None` after `assistants` (relative import of the type per convention); docstring gains the field description
+- [x] **Code**: `goga/pipeline/workflow/workflow_document.py` — trailing field `gates: WorkflowGates | None = None` after `repeat`; docstring gains the field description
+- [x] **REPL checkpoint**: in the REPL, build `WorkflowStage(prompt="x", gates=[WorkflowGateStep(name="g", script="echo ok")])` and `WorkflowDocument(gates=WorkflowGates(max_iterations=1))`; observe `[f.name for f in fields(...)]` ending in `gates`
+- [x] **Interface verification**: `python3 -m pytest tests/pipeline/workflow/test_workflow_stage_contract.py tests/pipeline/workflow/test_workflow_document_contract.py -v` — all pass
+- [x] **Logic tests**: default construction leaves `gates is None` on both models (existing callers unchanged)
+- [x] **Debugging**: `python3 -m pytest tests/pipeline/workflow -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: both models keep their declared API; every existing construction site stays valid without edits (additive law)
+- [x] **Lint**: `python3 -m ruff check goga/ tests/` + `python3 -m ruff format --check` on the touched files — fix formatting if necessary
+- [x] **Completion**: mark checkboxes complete
 
 ### Task 3: `parse_workflow` gates validation surface (TDD coding)
 

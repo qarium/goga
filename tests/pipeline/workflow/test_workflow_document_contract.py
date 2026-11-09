@@ -5,12 +5,13 @@ importability from the facade, the declared properties (``prompt``,
 ``stages``, ``extend``, ``memory``, ``profile``, ``build``, ``assistants``,
 and ``delegation``), the ``prompt=None`` / ``stages={}`` / ``extend={}`` /
 ``memory=None`` / ``profile=None`` / ``build=None`` / ``assistants={}`` /
-``delegation=None`` / ``repeat=None`` defaults (the factories are applied at
-construction, so the default ``stages``/``extend``/``assistants`` are empty
-dicts, not None),
-the fixed nine-field order with the collaboration fields last, and kw_only
-construction with explicit stages and extend maps. These tests pin the
-contract surface — behavior lives in the logic test module.
+``delegation=None`` / ``repeat=None`` / ``gates=None`` defaults (the
+factories are applied at construction, so the default
+``stages``/``extend``/``assistants`` are empty dicts, not None),
+the fixed ten-field order with the collaboration fields followed by the
+tuning blocks last, and kw_only construction with explicit stages and
+extend maps. These tests pin the contract surface — behavior lives in the
+logic test module.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from goga.pipeline.workflow import (
     WorkflowDelegation,
     WorkflowDocument,
     WorkflowExtendStage,
+    WorkflowGates,
     WorkflowMemory,
     WorkflowRepeat,
     WorkflowStage,
@@ -60,7 +62,12 @@ class TestWorkflowDocumentContract:
         assert WorkflowDocument(build=build).build is build
 
     def test_workflow_document_field_order_fixed(self) -> None:
-        """Field order is fixed: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat."""
+        """Field order is fixed with the gates settings block trailing after ``repeat``.
+
+        prompt, stages, extend, memory, profile, build, assistants,
+        delegation, repeat, gates — the canonical top-level key order of
+        the workflow-file.
+        """
         names = [field.name for field in dataclasses.fields(WorkflowDocument)]
 
         assert names == [
@@ -73,6 +80,7 @@ class TestWorkflowDocumentContract:
             "assistants",
             "delegation",
             "repeat",
+            "gates",
         ]
 
     def test_workflow_document_constructible_kw_only_with_profile_and_build(self) -> None:
@@ -198,10 +206,22 @@ class TestWorkflowDocumentContract:
 
         The property carries the run-cycle tuning block (a
         :class:`WorkflowRepeat` with authored values only) or ``None`` when
-        the workflow-file carries no block or authors an empty block; it is
-        the LAST field of the fixed canonical order.
+        the workflow-file carries no block or authors an empty block.
         """
         assert hasattr(WorkflowDocument(), "repeat")
         assert WorkflowDocument().repeat is None
         repeat = WorkflowRepeat(max_cycles=2)
         assert WorkflowDocument(repeat=repeat).repeat is repeat
+
+    def test_workflow_document_has_gates_property(self) -> None:
+        """WorkflowDocument exposes a ``gates`` property defaulting to None.
+
+        The property carries the workflow quality-gate settings block (a
+        :class:`WorkflowGates` with authored values only) or ``None`` when
+        the workflow-file carries no block or authors an empty block; it is
+        the LAST field of the fixed canonical order and is stored verbatim.
+        """
+        assert hasattr(WorkflowDocument(), "gates")
+        assert WorkflowDocument().gates is None
+        gates = WorkflowGates(max_iterations=1)
+        assert WorkflowDocument(gates=gates).gates is gates

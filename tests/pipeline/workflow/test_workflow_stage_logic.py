@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import fields
 
-from goga.pipeline.workflow import WorkflowReflect, WorkflowStage
+from goga.pipeline.workflow import WorkflowGateStep, WorkflowReflect, WorkflowStage
 
 
 class TestWorkflowStageLogic:
@@ -114,11 +114,12 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(skip=True).skip is True
 
     def test_field_order_fixed_canonical(self) -> None:
-        """Field order is fixed across all twelve fields.
+        """Field order is fixed across all thirteen fields.
 
         agent, env, prompt, loop, skills, skip, approve, manual, notes,
-        reflect, memory, assistants — the per-stage environment instruction
-        sits second and the assistant attachments occupy the final canonical
+        reflect, memory, assistants, gates — the per-stage environment
+        instruction sits second, the assistant attachments sit before the
+        check-step list, and the gates list occupies the final canonical
         slot, matching the per-stage key order of the workflow-file.
         """
         names = [field.name for field in fields(WorkflowStage)]
@@ -136,6 +137,7 @@ class TestWorkflowStageLogic:
             "reflect",
             "memory",
             "assistants",
+            "gates",
         ]
 
     def test_workflow_stage_approve_defaults_none(self) -> None:
@@ -253,3 +255,24 @@ class TestWorkflowStageLogic:
         assert names.index("notes") == 8
         assert names.index("reflect") == 9
         assert names.index("memory") == 10
+
+    def test_workflow_stage_gates_defaults_none(self) -> None:
+        """Omitting ``gates`` yields None — existing callers construct unchanged.
+
+        The trailing field is additive: every pre-existing construction site
+        (including the ``apply_skip_stages`` replacement
+        ``WorkflowStage(skip=True, ...)``) keeps ``gates`` at ``None``
+        without edits — the replacement stage carries no gates.
+        """
+        assert WorkflowStage().gates is None
+        assert WorkflowStage(agent="codex").gates is None
+        assert WorkflowStage(skip=True).gates is None
+        assert WorkflowStage(memory=True, assistants={}).gates is None
+
+    def test_workflow_stage_gates_stored_verbatim(self) -> None:
+        """gates stores the supplied check-step list verbatim (same object)."""
+        steps = [WorkflowGateStep(name="Unit tests", script="pytest -q")]
+        stage = WorkflowStage(gates=steps)
+
+        assert stage.gates is steps
+        assert stage.gates == [WorkflowGateStep(name="Unit tests", script="pytest -q")]
