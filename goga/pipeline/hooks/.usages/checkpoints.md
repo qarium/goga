@@ -47,8 +47,10 @@ compile_flow(overlay.workflow, ...)
 
 - A tool contributes one declarative `WorkflowDocument`; authored intent
   wins per slot — the prompt appends, the memory block is whole, the repeat
-  block is whole, stage fields fill only what the author left unset, extend
-  entries add; the assistant catalog merges with field-level overrides —
+  block is whole, the gates settings block is whole, stage fields fill only
+  what the author left unset (an authored per-stage check-step list is
+  never overwritten), extend entries add; the assistant catalog merges
+  with field-level overrides —
   the winning tool-delivered entry of a name is the base and the authored
   entry replaces exactly the fields it specifies (agent, env, delegate,
   prompt, skills; an explicit empty skills/env clears), omitted fields

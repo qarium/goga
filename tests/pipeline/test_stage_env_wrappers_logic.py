@@ -567,3 +567,95 @@ class TestAssistantsInteraction:
         assert "command" not in team_member
         assert team_member["instruction"] == "I am a helper."
         assert stage["command"] == wrapper
+
+
+class TestGatesInteraction:
+    """The command patch and the stage ``verify:`` gate of a compiled flow."""
+
+    def test_apply_stage_env_wrappers_inserts_command_before_verify(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """A stage carrying both env and check steps inserts ``command`` before ``verify``.
+
+        The canonical anchor order slots ``verify`` after ``assistants``, so
+        the inserted ``command`` line lands before the emitted gate — the
+        patched stage keeps the canonical key order and the verify block
+        stays byte-identical.
+        """
+        stages, workflow, flow_path, original = _compile(
+            tmp_path,
+            "stages:\n"
+            "  build:\n"
+            "    env:\n"
+            '      E: "1"\n'
+            "    gates:\n"
+            "      - name: tests\n"
+            "        script: pytest -q\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        wrapper = str(wrapper_base / "build")
+
+        assert by_id["build"].fields["command"] == wrapper
+
+        patched_lines = flow_path.read_text().splitlines()
+
+        assert patched_lines.index(f"  command: {wrapper}") < patched_lines.index("  verify:")
+        # The gate is untouched — the patch added exactly one line.
+        assert len(patched_lines) == len(original.splitlines()) + 1
+        assert "  - name: tests" in patched_lines
+        assert "    run: pytest -q" in patched_lines
+        assert "    timeout: 1h" in patched_lines
+
+        loaded = yaml.safe_load(flow_path.read_text())
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert stage["command"] == wrapper
+        assert stage["verify"] == [{"name": "tests", "run": "pytest -q", "timeout": "1h"}]
+
+    def test_apply_stage_env_wrappers_loop_copies_env_and_gates(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """Loop-expanded copies of an env+gates stage each patch before their own gate.
+
+        Every copy carries the same ``verify`` block; each inserted
+        ``command`` lands inside its OWN stage block, before that block's
+        gate, and the re-parsed flow stays valid YAML.
+        """
+        stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            "stages:\n"
+            "  worker:\n"
+            "    loop: 2\n"
+            "    env:\n"
+            '      N: "9"\n'
+            "    gates:\n"
+            "      - name: check\n"
+            "        script: echo ok\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        loaded = yaml.safe_load(flow_path.read_text())
+
+        for index in (1, 2):
+            copy_id = f"worker-{index}"
+            wrapper = str(wrapper_base / copy_id)
+
+            assert by_id[copy_id].fields["command"] == wrapper
+
+            stage = next(entry for entry in loaded["stages"] if entry["id"] == copy_id)
+            keys = list(stage)
+
+            assert stage["command"] == wrapper
+            assert stage["verify"] == [{"name": "check", "run": "echo ok", "timeout": "1h"}]
+            assert keys.index("command") < keys.index("verify")
+            # The first copy carries no depends_on; the second depends on the first.
+            assert stage.get("depends_on") == (None if index == 1 else ["worker-1"])
