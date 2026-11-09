@@ -1,6 +1,6 @@
 """Facade contract tests for the ``goga.pipeline`` package.
 
-The pipeline cell's CODEMANIFEST declares nineteen facade names: the six
+The pipeline cell's CODEMANIFEST declares twenty-one facade names: the six
 pre-existing entities/routines (``PipelineEntry``, ``PipelineSource``,
 ``apply_skip_stages``, ``list_pipelines``, ``pipeline_cli``,
 ``run_pipeline``), the seven informational-surface names built by the
@@ -10,7 +10,8 @@ pre-existing entities/routines (``PipelineEntry``, ``PipelineSource``,
 configuration authorship routine (``write_afm_config``) added by the
 ``fix-pipeline-context`` topic, the per-stage env delivery routine
 (``apply_stage_env_wrappers``) added by the ``contributor-profile`` plan,
-and the four afm lifecycle-hook bridge routines (``build_run_event``,
+the per-step gate env delivery routine (``apply_gate_env_wrappers``) added
+by the ``gates-env`` follow-up, and the four afm lifecycle-hook bridge routines (``build_run_event``,
 ``build_stage_event``, ``map_event_action``, ``run_hook``) added by the
 ``support-afm-hooks`` topic. The two platform-carrying re-exports
 (``describe_pipeline``, ``run_pipeline``) resolve lazily (PEP 562), so a
@@ -79,13 +80,14 @@ class TestPipelineFacade:
         """__all__ keeps the alphabetical ordering convention (uppercase first)."""
         assert pipeline_facade.__all__ == sorted(pipeline_facade.__all__)
 
-    def test_facade_all_has_twenty_names(self) -> None:
-        """Fifteen pre-bridge names, the four bridge routines, and the afm skin materializer."""
-        assert len(pipeline_facade.__all__) == 20
+    def test_facade_all_has_twenty_one_names(self) -> None:
+        """Fifteen pre-bridge names, the four bridge routines, the afm skin materializer, the gate env delivery."""
+        assert len(pipeline_facade.__all__) == 21
         for name in BRIDGE_FACADE_NAMES:
             assert name in pipeline_facade.__all__
         assert "write_afm_config" in pipeline_facade.__all__
         assert "apply_stage_env_wrappers" in pipeline_facade.__all__
+        assert "apply_gate_env_wrappers" in pipeline_facade.__all__
         assert "materialize_afm_skin" in pipeline_facade.__all__
 
     def test_facade_preserves_pre_existing_names(self) -> None:
@@ -112,7 +114,7 @@ class TestPipelineFacade:
         assert sorted(zone_facade.__all__) == ZONE_ALL
         for name in BRIDGE_FACADE_NAMES:
             assert name in pipeline_facade.__all__
-        assert len(pipeline_facade.__all__) == 20
+        assert len(pipeline_facade.__all__) == 21
         assert callable(pipeline_facade.run_pipeline)
         assert callable(pipeline_facade.describe_pipeline)
         assert root_facade.__all__ == ["AST", "app"]
@@ -125,6 +127,7 @@ class TestPipelineFacade:
 
         from goga.pipeline.describe_pipeline import describe_pipeline
         from goga.pipeline.describe_pipelines import describe_pipelines
+        from goga.pipeline.gate_env_wrappers import apply_gate_env_wrappers
         from goga.pipeline.hook_bridge import build_run_event, build_stage_event, map_event_action, run_hook
         from goga.pipeline.order_stages import order_stages
         from goga.pipeline.pipeline_card import CardStage, PipelineCard
@@ -141,6 +144,7 @@ class TestPipelineFacade:
         assert pipeline_facade.describe_pipeline is describe_pipeline
         assert pipeline_facade.run_hook is run_hook
         assert pipeline_facade.map_event_action is map_event_action
+        assert pipeline_facade.apply_gate_env_wrappers is apply_gate_env_wrappers
         assert pipeline_facade.build_run_event is build_run_event
         assert pipeline_facade.build_stage_event is build_stage_event
 

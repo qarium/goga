@@ -126,6 +126,11 @@ wrapper per env-declaring stage (see `per-stage-env`) and patches exactly those 
 workflow declaring no stage env is neither read nor rewritten: the flow output stays
 byte-identical to the compiler's direct composition.
 
+Immediately after, `apply_gate_env_wrappers` applies the same closure delivery to the env maps
+authored on `gates` check steps (see `gate-env`): each env-declaring step's `run:`/`command:`
+line in the written flow-file is patched to point at its wrapper. A workflow whose gates
+declare no step env is neither read nor rewritten.
+
 ## Skip
 
 `skip` (the repeatable `-s NAME` names of the run subcommand; None and empty both mean no skip)

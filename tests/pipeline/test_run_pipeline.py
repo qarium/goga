@@ -490,6 +490,97 @@ class TestRunPipelineLogic:
             assert (prompts_dir / f"{stem}.md").read_text() != ""
 
 
+class TestRunPipelineGateEnvDelivery:
+    """Step 14b — the per-step gate env wrappers apply as a post-compile verify-step patch."""
+
+    def test_run_pipeline_delivers_gate_step_env_through_wrappers(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+    ) -> None:
+        """A workflow gate step carrying env compiles, then its verify run/command lines point at wrappers.
+
+        The real (un-mocked) compile chain runs through ``run_pipeline``; the
+        gate env delivery then rewrites the claimed steps' lines in the
+        written flow-file and generates the closures under the (autouse
+        redirected) container-local base.
+        """
+        import yaml
+
+        afm_dir.mkdir(parents=True)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text(
+            "stages:\n"
+            "  build:\n"
+            "    gates:\n"
+            "      - name: tests\n"
+            "        script: pytest -q\n"
+            "        env:\n"
+            "          FOO: bar\n"
+            "      - name: review\n"
+            "        agent: codex\n"
+            "        prompt: Review.\n"
+            "        env:\n"
+            "          MODEL: gpt\n"
+        )
+
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\ndescription: Deploy pipeline\n---\n\n- name: build\n  title: Build\n  prompt: Build it\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+
+        loaded = yaml.safe_load((afm_dir / "flow.yml").read_text())
+        steps = loaded["stages"][0]["verify"]
+
+        script_wrapper = Path(steps[0]["run"])
+        agent_wrapper = Path(steps[1]["command"])
+
+        assert script_wrapper.parent == tmp_path / "goga-gate-env"
+        assert script_wrapper.name == "build-0-tests"
+        assert agent_wrapper.name == "build-1-review"
+        assert script_wrapper.read_text() == "#!/bin/sh\nexport FOO=bar\npytest -q\n"
+        assert agent_wrapper.read_text() == (
+            '#!/bin/sh\nexport MODEL=gpt\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        )
+
+    def test_run_pipeline_without_gate_env_keeps_flow_byte_identical(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+    ) -> None:
+        """A workflow whose gates carry no env maps is neither read nor rewritten by the delivery."""
+        afm_dir.mkdir(parents=True)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text(
+            "stages:\n  build:\n    gates:\n      - name: tests\n        script: pytest -q\n",
+        )
+
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\ndescription: Deploy pipeline\n---\n\n- name: build\n  title: Build\n  prompt: Build it\n",
+        )
+
+        with (
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+        assert "run: pytest -q" in (afm_dir / "flow.yml").read_text()
+        assert not (tmp_path / "goga-gate-env").exists()
+
+
 class TestRunPipelineSkipStages:
     """Step 7 — merge the ``skip`` parameter names onto the resolved workflow
     via :func:`apply_skip_stages`, then forward the merged document to

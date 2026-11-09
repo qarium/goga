@@ -365,6 +365,22 @@ class TestTimeoutTranslation:
                 tmp_path / "flow.yml",
             )
 
+    def test_compile_script_payload_error_precedes_timeout_error(self, tmp_path: Path) -> None:
+        """With two violations, the script payload check fires first — deterministic order.
+
+        A malformed list ``script`` payload and a non-string ``timeout`` both
+        fail; the contract fixes the payload validation BEFORE the timeout
+        directive of the same pass, so the payload message is the one raised.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=r"script must be a string or a non-empty list of non-empty strings in stage build",
+        ):
+            compile_flow(
+                _write(tmp_path, "build:\n  title: Build\n  script: [run, '']\n  timeout: 5\n"),
+                tmp_path / "flow.yml",
+            )
+
     def test_timeout_pipeline_document_body_untouched(self, tmp_path: Path) -> None:
         """The ``PipelineDocument`` mirror keeps the authored body verbatim.
 

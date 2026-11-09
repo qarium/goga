@@ -91,8 +91,9 @@ class PipelineHooks:
                hook that wrote it under the same hard error
             5. A tool whose buffered document is empty — no prompt, no
                stages, no extend, no memory, no assistants, no delegation,
-               and no repeat — is a content no-op: a warning naming the
-               tool, the contribution discarded, the walk continues
+               no repeat, and no gates block — is a content no-op: a
+               warning naming the tool, the contribution discarded, the
+               walk continues
             6. Merge the committed contributions onto ``workflow`` via
                ``merge_workflow_overlay`` and return the overlay — an
                address without subscriptions returns the passthrough
@@ -147,7 +148,16 @@ class PipelineHooks:
                     # out of the delivery.
                     document = amendment._contribution
                     if document is not None:
-                        for fact in ("prompt", "stages", "extend", "memory", "assistants", "delegation", "repeat"):
+                        for fact in (
+                            "prompt",
+                            "stages",
+                            "extend",
+                            "memory",
+                            "assistants",
+                            "delegation",
+                            "repeat",
+                            "gates",
+                        ):
                             getattr(document, fact)
                 except Exception as reason:
                     # Hard: stop at the first failure. The message copies the
@@ -169,6 +179,7 @@ class PipelineHooks:
                 and not document.assistants
                 and document.delegation is None
                 and document.repeat is None
+                and document.gates is None
             ):
                 logger.warning(
                     "tool contributed an empty document; discarded",

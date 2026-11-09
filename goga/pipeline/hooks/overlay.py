@@ -9,6 +9,7 @@ from ..workflow import (
     WorkflowDelegation,
     WorkflowDocument,
     WorkflowExtendStage,
+    WorkflowGates,
     WorkflowMemory,
     WorkflowRepeat,
     WorkflowStage,
@@ -27,6 +28,7 @@ _STAGE_FIELDS: tuple[str, ...] = (
     "reflect",
     "memory",
     "assistants",
+    "gates",
 )
 """The ``WorkflowStage`` field set in declaration order."""
 
@@ -377,6 +379,32 @@ def _merge_repeat(
     return repeat
 
 
+def _merge_gates(
+    base: WorkflowDocument | None,
+    contributions: list[ToolContribution],
+) -> WorkflowGates | None:
+    """Resolve the whole-block gates settings — authored unbeatable, else later tool (no field merging).
+
+    Args:
+        base: the authored workflow, or ``None`` when no workflow resolved.
+        contributions: the committed contributions, in enumeration order.
+
+    Returns:
+        The effective quality-gate settings block, or ``None``. The block
+        rides the merge verbatim and whole — the merge never interprets,
+        validates, or rebuilds the gate settings (the compiler and the
+        engine own the gate semantics).
+    """
+    gates = base.gates if base is not None else None
+
+    if gates is None:
+        for contribution in contributions:
+            if contribution.document.gates is not None:
+                gates = contribution.document.gates
+
+    return gates
+
+
 def _authored_namespace(base: WorkflowDocument | None) -> set[str]:
     """Seed the assistant namespace — the authored catalog and inline declarations.
 
@@ -554,7 +582,12 @@ def merge_workflow_overlay(
         the same way — the authored block is unbeatable, otherwise the
         later contributing tool's block wins — and rides the rebuild
         verbatim, so a tool-amended run never loses an authored cycle
-        bound.
+        bound. The gates settings block merges whole the same way (4d) and
+        rides the rebuild verbatim, and the per-stage ``gates`` check-step
+        list is an ordinary field of the field-set-complete stage merge
+        (5b) — an authored list is never overwritten, an unset one takes
+        the later contributing tool that sets it — so a tool-amended run
+        never loses authored stage quality checks (8).
     """
 
     # Step 1 — empty contributions: the passthrough. The passed workflow
@@ -571,10 +604,11 @@ def merge_workflow_overlay(
 
     # Step 4a — the catalog merge first (it owns the namespace until it
     # returns and hands the winning entries to the stage pass), then the
-    # whole-block delegation and repeat (4b, 4c).
+    # whole-block delegation, repeat, and gates (4b, 4c, 4d).
     assistants, winning = _merge_catalog(base, contributions, namespace)
     delegation = _merge_delegation(base, contributions)
     repeat = _merge_repeat(base, contributions)
+    gates = _merge_gates(base, contributions)
 
     # Steps 2-5 — the authored-wins merge per slot: prompt, memory, stages,
     # extend. Each helper is pure; the composed document is a new instance.
@@ -592,6 +626,7 @@ def merge_workflow_overlay(
             assistants=assistants,
             delegation=delegation,
             repeat=repeat,
+            gates=gates,
         ),
         provenance=[contribution.tool for contribution in contributions],
     )

@@ -12051,3 +12051,128 @@ button.metric:hover .metric-value {
  font-size: 9px;
 }
 }
+/* === Фикс стрелок селектов: у SVG-шеврона в background-image нет width/height (только viewBox),
+   и браузеры без intrinsic-размера растягивают картинку до дефолта — гигантские ⌄ поверх
+   cost-фильтров. Явный background-size чинит это во всех движках. === */
+.usage-filter select,
+.attach-helper-field select,
+.add-stage-dialog-field select,
+.add-run-agent-field select,
+.comment-recipient-select,
+.side-agent-context-select,
+.board-view-assignee {
+  background-size: 10px 6px;
+}
+
+/* === Refresh 09.11: селекторы, появившиеся после снапшота скина (cost-таблица, шевроны и др.) === */
+
+/* — из assistants.css */
+
+.add-stage-dialog-deps label {
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* — из feed-workspace.css */
+
+.switch:not(.feed-composer-mode-option) input {
+
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  border: 0;
+}
+
+/* — из reset.css */
+
+input[type="checkbox"] {
+
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  background: var(--surface-canvas);
+  cursor: pointer;
+  transition: background var(--motion-fast, 120ms) ease, border-color var(--motion-fast, 120ms) ease;
+}
+input[type="checkbox"]::before {
+
+  content: '';
+  width: 8px;
+  height: 8px;
+  background-color: var(--surface-canvas);
+  clip-path: polygon(14% 44%, 0 59%, 40% 100%, 100% 20%, 86% 6%, 40% 70%);
+  visibility: hidden;
+}
+input[type="checkbox"]:checked::before {
+ visibility: visible;
+}
+input[type="checkbox"]:hover {
+ border-color: var(--accent-primary);
+}
+input[type="checkbox"]:checked {
+
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+input[type="checkbox"]:focus-visible {
+ outline: 2px solid var(--focus-ring); outline-offset: 2px;
+}
+input[type="checkbox"]:disabled {
+ opacity: 0.5; cursor: default;
+}
+@media (forced-colors: active) {
+input[type="checkbox"]::before {
+ background-color: CanvasText;
+}
+}
+/* === Возврат тогла-пилюли «Interrupt agent»: единый тематизированный чекбокс из refresh-слоя
+   (reset.css движка) перебил нашу пилюлю — равная специфичность, позже в файле.
+   Перекрываем с запасом специфичности; скрытые инпуты слайдера .switch не трогаем. === */
+.feed-composer-mode-option input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  position: relative;
+  box-sizing: content-box;
+  width: 28px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--surface-hover);
+  cursor: pointer;
+  transition: background var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+.feed-composer-mode-option input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform var(--motion-fast) var(--ease-out), background var(--motion-fast) ease;
+}
+.feed-composer-mode-option input[type="checkbox"]:checked {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 32%, transparent);
+}
+.feed-composer-mode-option input[type="checkbox"]:checked::after {
+  transform: translateX(14px);
+  background: var(--accent-primary);
+}
+.feed-composer-mode-option input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .feed-composer-mode-option input[type="checkbox"],
+  .feed-composer-mode-option input[type="checkbox"]::after { transition: none; }
+}

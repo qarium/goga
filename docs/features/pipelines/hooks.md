@@ -56,7 +56,7 @@ One fresh view per tool — a failing hook's buffer dies with it.
 
 | Method | Effect |
 |---|---|
-| `contribute(document)` | buffers one `WorkflowDocument`; a later call replaces the earlier whole; an empty document (no prompt, no stages, no extend, no memory, no assistants, no delegation, no repeat) is discarded with a warning — the tool identity rides the warning record as a structured field |
+| `contribute(document)` | buffers one `WorkflowDocument`; a later call replaces the earlier whole; an empty document (no prompt, no stages, no extend, no memory, no assistants, no delegation, no repeat, no gates block) is discarded with a warning — the tool identity rides the warning record as a structured field |
 
 The amendment contract:
 
@@ -69,11 +69,12 @@ The committed contributions merge onto the authored workflow **authored-wins, pe
 
 - `prompt` — the non-empty texts joined with a single blank line, authored first, then the tools in enumeration order.
 - Stage fields — an authored-set field never yields; an unset field takes the later contributing tool's value; a stage the author never named is fully tool-defined. `manual` is three-state (`True` and `False` are both authored intent); `skip: false` overrides nothing. The one keyed exception is stage `env`: it merges per key — authored entries are unbeatable per key, and a contributing tool fills only the keys the author left unset (a later tool wins per key over an earlier fill).
-- `profile` / `build` — never merged: the base workflow's values carry verbatim, and a contribution's `profile` or `build` fields never participate (a document contributing only them counts as empty — no prompt, stages, extend, memory, assistants, delegation, or repeat — and is discarded per the `contribute(document)` rule above).
+- `profile` / `build` — never merged: the base workflow's values carry verbatim, and a contribution's `profile` or `build` fields never participate (a document contributing only them counts as empty — no prompt, stages, extend, memory, assistants, delegation, repeat, or gates — and is discarded per the `contribute(document)` rule above).
 - `extend` — authored names win; among tools the later entry wins per name.
 - `memory` — whole-block: the authored block is unbeatable; otherwise the later tool's block wins.
 - `delegation` — whole-block like `memory`: the authored block is unbeatable; otherwise the later tool's block wins.
 - `repeat` — whole-block like `delegation`: the authored block is unbeatable; otherwise the later tool's block wins.
+- `gates` (the top-level settings block) — whole-block like `repeat`: the authored block is unbeatable; otherwise the later tool's block wins. Per-stage `gates` check-step lists ride the stage-field rule above (an authored list is never overwritten).
 - `assistants` (the top-level catalog) — an authored entry overrides the winning delivered entry of the same name **field by field** (authored fields replace whole, omitted fields flow from the tool's delivery — see [Workflows — Assistant overrides](workflows.md#assistant-overrides)); a fresh name takes the later contributing tool's entry verbatim. A delivered name under an authored *inline* declaration never lands in the catalog — the authored surface owns the name, and the stage pass below composes the override in place (the name must live in the namespace exactly once).
 - stage `assistants` (the per-stage attachment maps) — an authored declaration overrides the winning delivered entry of the same name **in place** (position preserved, same field-by-field rule); otherwise append-with-dedup: the authored entries first in authored order, then the contribution entries in enumeration order; a name already on the stage is dropped silently, and an appended inline declaration whose name is already in the document-wide assistant namespace is dropped the same way.
 
@@ -156,7 +157,7 @@ With no tool packages installed the registry builds empty and the overlay is the
 | `CompositionStage` | `id`, `title` |
 | `RunIdentity` | `run_id`, `run_dir`, `root_dir`, `resumed` — the run facts carried by every bridged mid-run event |
 | `StageTransition` | `id`, `name`, `from_status`, `to_status`, `phase` — the transition of one stage |
-| `WorkflowDocument` | `prompt`, `stages`, `extend`, `memory`, `profile`, `build`, `assistants`, `delegation`, `repeat` — the contribute vocabulary, covered in [Pipeline File](pipeline-file.md); a tool's `profile` / `build` contributions never merge (the base values ride verbatim) |
+| `WorkflowDocument` | `prompt`, `stages`, `extend`, `memory`, `profile`, `build`, `assistants`, `delegation`, `repeat`, `gates` — the contribute vocabulary, covered in [Pipeline File](pipeline-file.md); a tool's `profile` / `build` contributions never merge (the base values ride verbatim) |
 
 `name` is the discovered file stem; `display_name`/`description` are the authored header values. `workflow_name` is present for `explicit` and `auto-match`. `branch` is the literal `unknown` when git resolves none; `slug`/`year` belong to the hosting topic when the branch hosts one.
 

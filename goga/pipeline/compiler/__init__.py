@@ -9,6 +9,8 @@ from .flow_memory import FlowMemory
 from .flow_repeat import FlowRepeat
 from .flow_stage import FlowStage
 from .flow_team_member import FlowTeamMember
+from .flow_verify import FlowVerify
+from .flow_verify_step import FlowVerifyStep
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
@@ -28,6 +30,8 @@ __all__: list[str] = [
     "FlowRepeat",
     "FlowStage",
     "FlowTeamMember",
+    "FlowVerify",
+    "FlowVerifyStep",
     "PhaseStep",
     "PhasesBody",
     "PipelineDocument",

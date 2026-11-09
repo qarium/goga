@@ -13,13 +13,26 @@ from .workflow_build import WorkflowBuild
 from .workflow_delegation import WorkflowDelegation
 from .workflow_document import WorkflowDocument
 from .workflow_extend_stage import WorkflowExtendStage
+from .workflow_gate_step import WorkflowGateStep
+from .workflow_gates import WorkflowGates
 from .workflow_memory import WorkflowMemory
 from .workflow_reflect import WorkflowReflect
 from .workflow_repeat import WorkflowRepeat
 from .workflow_stage import WorkflowStage
 
 # Fixed keys of the top-level workflow mapping. Used for unknown-key rejection.
-_TOP_LEVEL_KEYS = ("prompt", "stages", "extend", "memory", "profile", "build", "assistants", "delegation", "repeat")
+_TOP_LEVEL_KEYS = (
+    "prompt",
+    "stages",
+    "extend",
+    "memory",
+    "profile",
+    "build",
+    "assistants",
+    "delegation",
+    "repeat",
+    "gates",
+)
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
 # rejection and for documenting the accepted per-stage field set.
@@ -36,6 +49,7 @@ _STAGE_KEYS = (
     "reflect",
     "memory",
     "assistants",
+    "gates",
 )
 
 # Fixed keys of the top-level ``memory`` block, in canonical order. Used for
@@ -108,6 +122,18 @@ _DELEGATION_KEYS = ("depth", "max_tasks")
 # absence).
 _REPEAT_KEYS = ("max_cycles", "keep_runs")
 
+# Fixed keys of the top-level ``gates`` settings block, in canonical order.
+# Used for unknown-key rejection; every key is optional and NO default
+# materializes here — the model carries authored values only (an empty block
+# equals absence).
+_GATES_KEYS = ("patience", "max_iterations", "fresh_correction")
+
+# Fixed keys of a per-stage ``gates`` check step, in canonical order. Used
+# for the unknown-key rejection of a step's own key set. ``env`` is valid on
+# both step kinds — shell and AI-review alike (the stage-env delivery
+# precedent consumes it for both).
+_GATE_STEP_KEYS = ("name", "script", "agent", "timeout", "prompt", "env")
+
 # Accepted values of an attachment's ``when`` parameter — the engagement
 # timing vocabulary the compiler translates into the afm ``trigger`` values.
 # ``message`` is the resting engagement: the engine sends no initial request,
@@ -158,7 +184,7 @@ def parse_workflow(text: str) -> WorkflowDocument:
             is malformed (non-mapping value, ``depends_on`` present, ``skip``
             present, ``manual`` present, ``notes`` present, ``reflect``
             present, ``memory`` present, ``env`` present, ``assistants``
-            present, ``before``/``after``
+            present, ``gates`` present, ``before``/``after``
             not a
             ``list[str]``, an inline
             ``agent`` not a str or ``loop`` not an ``int >= 1`` or ``approve``
@@ -181,10 +207,20 @@ def parse_workflow(text: str) -> WorkflowDocument:
             is not an ``int >= 0``, or a ``max_tasks`` that is not an
             ``int >= 1``), the ``repeat`` block is malformed (a non-mapping
             block, an unknown key, or a bound that is not an ``int >= 0``),
+            the top-level ``gates`` block is malformed (a non-mapping block,
+            an unknown key, a ``patience``/``max_iterations`` that is not an
+            ``int >= 0``, or a non-bool ``fresh_correction``), a per-stage
+            ``gates`` list is malformed (a non-list value, a non-mapping
+            step, an unknown step key, a missing or non-str ``name``, a step
+            carrying both or neither of ``script``/``agent``, an ``agent``
+            that is not a non-empty string, a ``script`` that is neither a
+            non-empty string nor a non-empty list of non-empty strings, a
+            non-str ``timeout``/``prompt``, or a ``prompt`` on a script
+            step),
             or the workflow provides neither a top-level
             prompt, any stage entry, any extend entry, the memory block, the
             profile key, the build block, the assistants block, nor the
-            delegation block, nor the repeat block.
+            delegation block, nor the repeat block, nor the gates block.
     """
     try:
         loaded = yaml.safe_load(text)
@@ -206,6 +242,7 @@ def parse_workflow(text: str) -> WorkflowDocument:
         assistants_raw,
         delegation_raw,
         repeat_raw,
+        gates_raw,
     ) = _extract_top_level(loaded)
 
     memory = _build_memory(memory_raw)
@@ -215,14 +252,15 @@ def parse_workflow(text: str) -> WorkflowDocument:
     assistants = _build_assistant_catalog(assistants_raw)
     delegation = _build_delegation(delegation_raw)
     repeat = _build_repeat(repeat_raw)
+    gates = _build_gates(gates_raw)
     _validate_instruction_correspondence(stages, memory)
     _validate_assistant_namespace(assistants, stages)
 
     # The empty-workflow rule counts CONTENT — prompt, stages, extend, memory,
-    # the build block, the assistants catalog, the delegation block, or the
-    # repeat block. ``profile`` never rescues a workflow from emptiness:
-    # activation is not content, so a ``profile:``-only workflow raises here
-    # while a ``delegation:``-only workflow is valid.
+    # the build block, the assistants catalog, the delegation block, the
+    # repeat block, or the gates block. ``profile`` never rescues a workflow
+    # from emptiness: activation is not content, so a ``profile:``-only
+    # workflow raises here while a ``gates:``-only workflow is valid.
     if (
         prompt is None
         and not stages
@@ -232,11 +270,12 @@ def parse_workflow(text: str) -> WorkflowDocument:
         and not assistants
         and delegation is None
         and repeat is None
+        and gates is None
     ):
         raise WorkflowSyntaxError(
             "empty workflow — provide at least prompt, one stage, one extend entry, "
             "the memory block, the build block, the assistants block, the delegation block, "
-            "or the repeat block"
+            "the repeat block, or the gates block"
         )
 
     return WorkflowDocument(
@@ -249,6 +288,7 @@ def parse_workflow(text: str) -> WorkflowDocument:
         assistants=assistants,
         delegation=delegation,
         repeat=repeat,
+        gates=gates,
     )
 
 
@@ -264,16 +304,17 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
     dict[str, Any] | None,
     dict[str, Any] | None,
     dict[str, Any] | None,
+    dict[str, Any] | None,
 ]:
-    """Validate the top-level mapping and split out the nine top-level blocks.
+    """Validate the top-level mapping and split out the ten top-level blocks.
 
     Args:
         loaded: The YAML-parsed top-level mapping.
 
     Returns:
-        A 9-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
-        build_raw, assistants_raw, delegation_raw, repeat_raw)`` where
-        ``prompt`` is the
+        A 10-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
+        build_raw, assistants_raw, delegation_raw, repeat_raw, gates_raw)``
+        where ``prompt`` is the
         validated top-level prompt (``None`` when absent), ``stages_raw`` is
         the raw stages mapping (``None`` when absent), ``extend_raw`` is the
         raw extend mapping (``None`` when absent), ``memory_raw`` is the raw
@@ -282,7 +323,8 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
         ``build_raw`` is the raw build block (``None`` when absent),
         ``assistants_raw`` is the raw assistants catalog map (``None`` when
         absent), ``delegation_raw`` is the raw delegation block (``None``
-        when absent), and ``repeat_raw`` is the raw repeat block (``None``
+        when absent), ``repeat_raw`` is the raw repeat block (``None`` when
+        absent), and ``gates_raw`` is the raw gates settings block (``None``
         when absent).
 
     Raises:
@@ -290,7 +332,8 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
             str, ``stages`` is not a mapping, ``extend`` is not a mapping,
             ``memory`` is not a mapping, ``profile`` is not a str, ``build``
             is not a mapping, ``assistants`` is not a mapping, ``delegation``
-            is not a mapping, or ``repeat`` is not a mapping.
+            is not a mapping, ``repeat`` is not a mapping, or ``gates`` is
+            not a mapping.
     """
     prompt: str | None = None
     stages_raw: dict[str, Any] | None = None
@@ -301,6 +344,7 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
     assistants_raw: dict[str, Any] | None = None
     delegation_raw: dict[str, Any] | None = None
     repeat_raw: dict[str, Any] | None = None
+    gates_raw: dict[str, Any] | None = None
 
     for key, value in loaded.items():
         if key == "prompt":
@@ -323,10 +367,23 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
             delegation_raw = _validate_top_level_mapping("non-mapping delegation block in workflow", value)
         elif key == "repeat":
             repeat_raw = _validate_top_level_mapping("non-mapping repeat block in workflow", value)
+        elif key == "gates":
+            gates_raw = _validate_top_level_mapping("non-mapping gates block in workflow", value)
         else:
             raise WorkflowSyntaxError(f"unknown key in workflow: {key}; valid keys: {', '.join(_TOP_LEVEL_KEYS)}")
 
-    return prompt, stages_raw, extend_raw, memory_raw, profile, build_raw, assistants_raw, delegation_raw, repeat_raw
+    return (
+        prompt,
+        stages_raw,
+        extend_raw,
+        memory_raw,
+        profile,
+        build_raw,
+        assistants_raw,
+        delegation_raw,
+        repeat_raw,
+        gates_raw,
+    )
 
 
 def _validate_top_level_prompt(field_value: Any) -> str:
@@ -426,8 +483,9 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
             one of ``auto``/``plan``/``dialog``, ``manual`` is not a
             ``bool``, ``notes`` is not a ``dict`` of ``str``→``str``,
             ``reflect`` is malformed (see ``_build_reflect``), ``memory``
-            is not a ``bool``, or the ``assistants`` map is malformed (see
-            ``_build_stage_assistants``).
+            is not a ``bool``, the ``assistants`` map is malformed (see
+            ``_build_stage_assistants``), or the ``gates`` list is malformed
+            (see ``_build_stage_gates``).
     """
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(f"non-mapping stage {name} in workflow.stages")
@@ -454,6 +512,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
         reflect=fields.get("reflect"),
         memory=fields.get("memory"),
         assistants=fields.get("assistants"),
+        gates=fields.get("gates"),
     )
 
 
@@ -472,8 +531,10 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:  # noqa
         equal to one of ``auto``/``plan``/``dialog``, ``manual`` bool,
         ``notes`` a non-empty ``dict[str, str]`` — ``None`` when the map is
         empty —, ``reflect`` a ``WorkflowReflect``, ``memory`` a bool —
-        ``None`` when explicitly ``False`` —, or ``assistants`` a
-        ``dict[str, WorkflowAssistant]`` — ``None`` when the map is empty).
+        ``None`` when explicitly ``False`` —, ``assistants`` a
+        ``dict[str, WorkflowAssistant]`` — ``None`` when the map is empty —,
+        or ``gates`` a ``list[WorkflowGateStep]`` — ``None`` when the list
+        is empty).
 
     Raises:
         WorkflowSyntaxError: If ``key`` is an unknown per-stage key, or the
@@ -483,8 +544,9 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:  # noqa
             is not a str equal to ``auto``/``plan``/``dialog``, a non-bool
             ``manual``, ``notes`` that is non-mapping or carries a non-str
             value, a malformed ``reflect`` instruction, a non-bool
-            ``memory``, or a malformed ``assistants`` map — see
-            ``_build_stage_assistants``).
+            ``memory``, a malformed ``assistants`` map — see
+            ``_build_stage_assistants`` —, or a malformed ``gates`` list —
+            see ``_build_stage_gates``).
     """
     scope = f"workflow.stages.{name}"
 
@@ -513,10 +575,166 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:  # noqa
         # location; each validator owns its own message shape.
         validator = _build_reflect if key == "reflect" else _validate_memory_instruction
         return validator(name, field_value)
-    elif key == "assistants":
-        return _build_stage_assistants(name, field_value)
+    elif key in ("assistants", "gates"):
+        # Two stage-scoped builder validators sharing the stage name; each
+        # builder owns its own message shape.
+        builder = _build_stage_assistants if key == "assistants" else _build_stage_gates
+        return builder(name, field_value)
     else:
         raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {', '.join(_STAGE_KEYS)}")
+
+
+def _build_stage_gates(name: Any, value: Any) -> list[WorkflowGateStep] | None:
+    """Validate a per-stage ``gates`` list and build the check-step models (contract 6.1.15).
+
+    Args:
+        name: The stage-name map key (used in error messages).
+        value: The raw ``gates`` value of the stage entry.
+
+    Returns:
+        The list of validated :class:`WorkflowGateStep` check steps in
+        authored order, or ``None`` when the list is empty (an empty list
+        equals absence).
+
+    Raises:
+        WorkflowSyntaxError: If ``value`` is not a list, or a step is
+            malformed (see :func:`_validate_gate_step`).
+    """
+    if not isinstance(value, list):
+        raise WorkflowSyntaxError(f"non-list gates in workflow.stages.{name}")
+
+    if not value:
+        # An empty list equals absence.
+        return None
+
+    return [_validate_gate_step(name, index, step) for index, step in enumerate(value)]
+
+
+def _validate_gate_step(name: Any, index: int, step: Any) -> WorkflowGateStep:
+    """Validate one gate step and build its ``WorkflowGateStep`` (the checks in their normative order).
+
+    Args:
+        name: The stage-name map key (used in error messages).
+        index: The step's position in the authored list (used in error
+            messages).
+        step: The raw step value.
+
+    Returns:
+        The validated :class:`WorkflowGateStep` — exactly one of
+        ``script``/``agent`` carries the authored payload (the other stays
+        ``None``), a list-form ``script`` payload is joined with newlines
+        into one multi-line script string, ``prompt`` is ``None`` on every
+        script step, and ``env`` is ``None`` on every step without an
+        authored non-empty map.
+
+    Raises:
+        WorkflowSyntaxError: If the step is not a mapping, carries an unknown
+            key, omits ``name`` or carries a non-str one, carries both or
+            neither of ``script``/``agent``, carries a non-empty-string
+            ``agent``, carries a ``script`` that is neither a non-empty
+            string nor a non-empty list of non-empty strings, carries a
+            non-str ``timeout``/``prompt``, authors ``prompt`` on a script
+            step, or carries a malformed ``env`` map (non-mapping, a non-str
+            key, a non-str value).
+    """
+    scope = f"workflow.stages.{name}.gates[{index}]"
+
+    if not isinstance(step, dict):
+        raise WorkflowSyntaxError(f"non-mapping gate step in {scope}")
+
+    _reject_unknown_gate_step_keys(scope, step)
+
+    if "name" not in step:
+        raise WorkflowSyntaxError(f"gates step without name in {scope}")
+
+    if not isinstance(step["name"], str):
+        raise WorkflowSyntaxError(f"non-str value in {scope}.name")
+
+    if ("script" in step) == ("agent" in step):
+        raise WorkflowSyntaxError(f"gates step must carry exactly one of script/agent in {scope}")
+
+    # Exactly one of the two is authored (the exclusivity check above); the
+    # payload validator owns the non-empty-string message with the authored
+    # key landing verbatim in it. Only ``script`` accepts the list-of-lines
+    # form — an agent alias is a single string.
+    if "script" in step:
+        script = _validate_gate_step_payload(scope, "script", step["script"], allow_lines=True)
+        agent = None
+    else:
+        script = None
+        agent = _validate_gate_step_payload(scope, "agent", step["agent"])
+
+    if "timeout" in step and not isinstance(step["timeout"], str):
+        raise WorkflowSyntaxError(f"non-str value in {scope}.timeout")
+
+    if "prompt" in step and not isinstance(step["prompt"], str):
+        raise WorkflowSyntaxError(f"non-str value in {scope}.prompt")
+
+    if "prompt" in step and "script" in step:
+        # The engine accepts ``prompt`` on AI steps only — the parser binds
+        # it to an agent step at authoring time.
+        raise WorkflowSyntaxError(f"prompt is forbidden on a script gate step in {scope}")
+
+    return WorkflowGateStep(
+        name=step["name"],
+        script=script,
+        agent=agent,
+        timeout=step.get("timeout"),
+        prompt=step.get("prompt"),
+        env=_validate_stage_env(scope, step["env"]) if "env" in step else None,
+    )
+
+
+def _reject_unknown_gate_step_keys(scope: str, step: dict[str, Any]) -> None:
+    """Reject any key of a gate step outside the six-step key set.
+
+    Args:
+        scope: The dotted location of the step (used in error messages).
+        step: The raw step mapping.
+
+    Raises:
+        WorkflowSyntaxError: If the step carries a key outside
+            ``name``/``script``/``agent``/``timeout``/``prompt``/``env``.
+    """
+    for key in step:
+        if key not in _GATE_STEP_KEYS:
+            raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {', '.join(_GATE_STEP_KEYS)}")
+
+
+def _validate_gate_step_payload(scope: str, key: str, field_value: Any, *, allow_lines: bool = False) -> str:
+    """Validate one gate step's ``script``/``agent`` payload and return it.
+
+    Args:
+        scope: The dotted location of the step (used in error messages).
+        key: The payload field name (``"script"`` or ``"agent"``) — lands
+            verbatim in the error message.
+        field_value: The raw payload value.
+        allow_lines: Whether the list-of-lines form is accepted (the
+            ``script`` shell payload only — an ``agent`` alias is a single
+            string, never a list).
+
+    Returns:
+        The validated non-empty ``str`` — a list payload joined with
+        newlines into one multi-line script (shell-identical to authoring
+        the same text as a block scalar).
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``str``, or is an
+            empty ``str`` (an authored ``null`` included — the exclusivity
+            check has already passed, so the key IS authored). With
+            ``allow_lines``, a list that is empty or carries a non-str or
+            empty element raises the list-form message.
+    """
+    if allow_lines and isinstance(field_value, list):
+        if not field_value or not all(isinstance(line, str) and line for line in field_value):
+            raise WorkflowSyntaxError(f"{key} must be a non-empty list of non-empty strings in {scope}")
+
+        return "\n".join(field_value)
+
+    if not isinstance(field_value, str) or not field_value:
+        raise WorkflowSyntaxError(f"{key} must be a non-empty string in {scope}")
+
+    return field_value
 
 
 def _build_extend(extend_raw: dict[str, Any] | None) -> dict[str, WorkflowExtendStage]:
@@ -614,10 +832,10 @@ def _reject_forbidden_extend_keys(name: Any, value: dict[str, Any]) -> None:
 
     Raises:
         WorkflowSyntaxError: If the entry carries ``depends_on``, ``skip``,
-            ``manual``, ``notes``, ``reflect``, ``memory``, ``env``, or
-            ``assistants`` (checked in that order).
+            ``manual``, ``notes``, ``reflect``, ``memory``, ``env``,
+            ``assistants``, or ``gates`` (checked in that order).
     """
-    for forbidden_key in ("depends_on", "skip", "manual", "notes", "reflect", "memory", "env", "assistants"):
+    for forbidden_key in ("depends_on", "skip", "manual", "notes", "reflect", "memory", "env", "assistants", "gates"):
         if forbidden_key in value:
             raise WorkflowSyntaxError(f"{forbidden_key} is forbidden in workflow.extend.{name}")
 
@@ -1689,5 +1907,75 @@ def _validate_repeat_bound(key: str, field_value: Any) -> int:
 
     if field_value < 0:
         raise WorkflowSyntaxError(f"{key} must be >= 0 in workflow.repeat")
+
+    return field_value
+
+
+def _build_gates(gates_raw: dict[str, Any] | None) -> WorkflowGates | None:
+    """Validate the ``gates`` settings block and build the ``WorkflowGates`` (contract 6.10).
+
+    Args:
+        gates_raw: The raw ``gates`` mapping, or ``None`` when the block is
+        absent.
+
+    Returns:
+        The validated :class:`WorkflowGates` carrying the authored values
+        only — an authored ``0`` is a VALUE, never an absence, and no
+        default materializes here — or ``None`` when the block is absent or
+        empty (an empty block equals absence).
+
+    Raises:
+        WorkflowSyntaxError: If the block carries an unknown key, a
+            ``patience``/``max_iterations`` that is not an ``int >= 0``
+            (``bool`` counts as non-int), or a non-bool
+            ``fresh_correction``.
+    """
+    if gates_raw is None:
+        return None
+
+    patience: int | None = None
+    max_iterations: int | None = None
+    fresh_correction: bool | None = None
+
+    for key, field_value in gates_raw.items():
+        if key == "patience":
+            patience = _validate_gates_bound("patience", field_value)
+        elif key == "max_iterations":
+            max_iterations = _validate_gates_bound("max_iterations", field_value)
+        elif key == "fresh_correction":
+            if not isinstance(field_value, bool):
+                raise WorkflowSyntaxError("non-bool value in workflow.gates.fresh_correction")
+
+            fresh_correction = field_value
+        else:
+            raise WorkflowSyntaxError(f"unknown key in workflow.gates: {key}; valid keys: {', '.join(_GATES_KEYS)}")
+
+    if not gates_raw:
+        # An empty block equals absence.
+        return None
+
+    return WorkflowGates(patience=patience, max_iterations=max_iterations, fresh_correction=fresh_correction)
+
+
+def _validate_gates_bound(key: str, field_value: Any) -> int:
+    """Validate one ``gates`` bound and return the confirmed ``int``.
+
+    Args:
+        key: The gates field name (``"patience"`` or ``"max_iterations"``) —
+            lands verbatim in the error messages.
+        field_value: The raw bound value.
+
+    Returns:
+        The validated ``int`` (an ``int >= 0``).
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not an ``int`` (``bool``
+            counts as non-int), or is below zero.
+    """
+    if isinstance(field_value, bool) or not isinstance(field_value, int):
+        raise WorkflowSyntaxError(f"non-int value in workflow.gates.{key}")
+
+    if field_value < 0:
+        raise WorkflowSyntaxError(f"{key} must be >= 0 in workflow.gates")
 
     return field_value

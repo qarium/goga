@@ -169,6 +169,12 @@ below have assigned semantics:
 > Authoring `reflect` or `memory_use` in a stage body is rejected with a
 > structural error.
 >
+> The quality gates likewise have no pipeline-file authoring key: they are
+> assembled by the compiler from the workflow `gates` instructions (see
+> [Workflows — Quality gates](workflows.md#quality-gates-gates)).
+> Authoring `gates` or `verify` in a stage body is rejected with a
+> structural error.
+>
 > The legacy `agents` key is forbidden in both the header and a stage
 > body — author `roles` instead.
 
@@ -180,8 +186,8 @@ below have assigned semantics:
 | `title`       | string           | — (required)                | Display label of the stage — what end users see in stage listings. A missing or non-string `title` is a structural error in both body formats. |
 | `trigger`     | string (`on_success` \| `manual`) | `on_success` | Launch mode of the stage. `manual` — the stage pauses when reached and runs only when launched manually; `on_success` (or an absent key) — the stage starts automatically once its dependencies succeed; any other value is a structural error. Authoring the compiler-output key `auto_run` directly is a structural error. Valid in both body formats and in workflow `extend` bodies; a workflow `stages` block can force or cancel it per-stage via `manual` (see [Workflows](workflows.md)). |
 | `depends_on`  | list of strings  | auto (phases) / none (stages) | Stage dependencies.                                                        |
-| `before_script` | string         | —                           | Shell script run at the start of any stage — agent or script — before its body. See [Script directives](#script-directives). |
-| `after_script`  | string         | —                           | Shell script run at the end of any stage — agent or script — after its body. See [Script directives](#script-directives). |
+| `before_script` | string or list of strings | —                | Shell script run at the start of any stage — agent or script — before its body. See [Script directives](#script-directives). |
+| `after_script`  | string or list of strings | —                | Shell script run at the end of any stage — agent or script — after its body. See [Script directives](#script-directives). |
 
 ### Agent-stage fields
 
@@ -196,7 +202,7 @@ below have assigned semantics:
 
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
-| `script`      | string           | —                           | Shell script run as the stage body itself. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
+| `script`      | string or list of strings | —                 | Shell script run as the stage body itself. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
 | `timeout`       | string         | —                           | Timeout for the stage's script action (a duration string, e.g. `30m`). Requires `script` in the same body; the value passes verbatim — a malformed duration fails the stage at run time. See [Script directives](#script-directives). |
 
 ### Body step `title` field
@@ -221,6 +227,22 @@ points relative to the stage's body:
 A multi-line value serializes as a YAML block-literal (e.g. `script: |`);
 a single-line value stays a plain scalar. The rule is uniform across all
 four slots.
+
+Each of the three script slots accepts either a single string or the
+script's lines — a list of strings. A list is joined with newlines into one
+multi-line script, identical in shell semantics to writing the same lines
+as a block scalar:
+
+```yaml
+build:
+  title: Build
+  script:
+    - pytest ./
+    - ruff check .
+```
+
+A list payload must be non-empty and every element a non-empty string —
+anything else is a structural error naming the stage and the directive.
 
 `script` is **mutually exclusive** with `prompt` and `skills`: a stage runs
 either an agent-driven prompt (`prompt`/`skills`) or a literal shell script

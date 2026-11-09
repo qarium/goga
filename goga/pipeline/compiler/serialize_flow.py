@@ -11,6 +11,8 @@ from .flow_document import FlowDocument
 from .flow_repeat import FlowRepeat
 from .flow_stage import FlowStage
 from .flow_team_member import FlowTeamMember
+from .flow_verify import FlowVerify
+from .flow_verify_step import FlowVerifyStep
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +154,67 @@ def _repeat_repr(directive: FlowRepeat) -> bool | dict[str, int]:
     return block
 
 
+def _verify_step_repr(step: FlowVerifyStep) -> dict[str, object]:
+    """Build one verify-step mapping in fixed key order (name, run/command, timeout, prompt).
+
+    Args:
+        step: One ``FlowVerifyStep`` of a stage's ``verify`` gate.
+
+    Returns:
+        The ordered mapping to feed to ``yaml.dump``: ``name``, then
+        ``run`` or ``command`` — whichever is not ``None``; the step form
+        mirrors the authored exclusivity, exactly one is present — then
+        ``timeout`` and ``prompt`` when not ``None``. Each of
+        ``run``/``command``/``timeout``/``prompt`` wraps in
+        ``_BlockLiteralScript`` iff it is a string containing a newline.
+    """
+    step_repr: dict[str, object] = {"name": step.name}
+
+    for key, value in (
+        ("run", step.run),
+        ("command", step.command),
+        ("timeout", step.timeout),
+        ("prompt", step.prompt),
+    ):
+        if value is not None:
+            step_repr[key] = _BlockLiteralScript(value) if "\n" in value else value
+
+    return step_repr
+
+
+def _verify_repr(gate: FlowVerify) -> list[dict[str, object]] | dict[str, object]:
+    """Build a stage's ``verify`` value — the steps list or the ordered container map.
+
+    Args:
+        gate: The compiled stage gate (an instance carrying no authored
+            setting IS the list emission form).
+
+    Returns:
+        The list of per-step mappings when no setting is authored (the
+        engine list form, written directly under ``verify:``); otherwise an
+        insertion-ordered dict — ``steps`` first, then the present settings
+        in the fixed order ``max_failures``, ``review_patience``,
+        ``fresh_correction`` (plain scalars — no representer needed, the
+        container rides the SafeDumper defaults exactly as the memory block
+        does; step fields never appear at the container top level).
+    """
+    steps = [_verify_step_repr(step) for step in gate.steps]
+
+    if gate.max_failures is None and gate.review_patience is None and gate.fresh_correction is None:
+        return steps
+
+    container: dict[str, object] = {"steps": steps}
+
+    if gate.max_failures is not None:
+        container["max_failures"] = gate.max_failures
+    if gate.review_patience is not None:
+        container["review_patience"] = gate.review_patience
+    if gate.fresh_correction is not None:
+        container["fresh_correction"] = gate.fresh_correction
+
+    return container
+
+
 def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
     """Build the per-stage dict in fixed order (id, name, canonical fields, depends_on).
 
@@ -164,7 +227,9 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
         ``script_*`` strings and multi-line ``buttons`` values wrapped in
         ``_BlockLiteralScript``; the ``buttons`` map rebuilt preserving its
         insertion order; the ``assistants`` list rebuilt as ordered
-        per-entry mappings), then ``depends_on`` only when not ``None``.
+        per-entry mappings; the ``verify`` gate rebuilt as the steps list
+        or the ordered ``steps`` + settings container), then ``depends_on``
+        only when not ``None``.
     """
     stage_repr: dict[str, object] = {"id": stage.id, "name": stage.name}
 
@@ -184,6 +249,8 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
             }
         elif key == "assistants" and isinstance(value, list):
             stage_repr[key] = [_assistant_repr(entry) for entry in value]
+        elif key == "verify" and isinstance(value, FlowVerify):
+            stage_repr[key] = _verify_repr(value)
         else:
             stage_repr[key] = value
 
@@ -222,8 +289,12 @@ def serialize_flow(doc: FlowDocument) -> str:
         ``name``, ``fields`` verbatim (the ``assistants`` list rebuilt as
         ordered per-entry mappings ``profile, title, instruction, mode,
         trigger`` — no ``skills`` key; the engine strict-parses stage entries
-        and the skills travel on the ``team`` member), then ``depends_on`` only
-        when not ``None``.
+        and the skills travel on the ``team`` member; the ``verify`` gate
+        rebuilt as the steps list — an instance carrying no authored setting
+        IS the list form — or as the ordered container ``steps`` plus the
+        present settings in the fixed order ``max_failures, review_patience,
+        fresh_correction``, step fields never at the container top level),
+        then ``depends_on`` only when not ``None``.
         ``agents`` serializes flow-style; multi-line ``script_*`` and
         ``buttons`` values serialize block-literal.
     """

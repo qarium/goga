@@ -16,6 +16,9 @@ catalog, the `delegation` block, and the per-stage `assistants` instruction
 (see [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation)),
 tune **repeating run cycles** via the top-level `repeat` block
 (see [Run cycles (`repeat`)](#run-cycles-repeat)),
+declare **stage-completion quality gates** via the top-level `gates` block
+and the per-stage `gates` check-step list
+(see [Quality gates (`gates`)](#quality-gates-gates)),
 and adapt the whole file per contributor through **profile-driven rendering**
 (see [Profiles](#profiles)) plus a `build:` block that configures nested
 `goga build` runs.
@@ -36,7 +39,7 @@ traversal via `..` or an absolute prefix is rejected.
 
 ## Document shape
 
-A workflow-file is a YAML mapping with up to nine top-level keys (the whole
+A workflow-file is a YAML mapping with up to ten top-level keys (the whole
 file is first rendered as a Jinja2 template with the active profile's
 content as context — see [Profiles](#profiles)):
 
@@ -60,6 +63,9 @@ stages:
     assistants:               # optional stage assistant attachments (a name-keyed map)
       reviewer:
         when: finish
+    gates:                    # optional quality-gate check steps (a list)
+      - name: tests
+        script: pytest -q
 
 assistants:                   # optional catalog of run-level assistants (a name-keyed map)
   reviewer:
@@ -71,6 +77,9 @@ delegation:                   # optional delegation-bounds block
 
 repeat:                       # optional run-cycle tuning block (repeatable pipelines only)
   max_cycles: 3
+
+gates:                        # optional quality-gate settings block (see Quality gates)
+  max_iterations: 2
 
 memory:                       # optional workflow-memory configuration block
   method: reflect             # reflect | alignment (the instruction vocabulary selector)
@@ -95,19 +104,20 @@ extend:
 | `assistants` | map | no*   | Catalog of run-level assistants keyed by assistant name (see [Collaboration](#collaboration-assistants-delegation)). An `assistants:`-only workflow is valid. |
 | `delegation` | map | no*   | Delegation bounds — `depth` and `max_tasks` (see [Collaboration](#collaboration-assistants-delegation)). A `delegation:`-only workflow is valid. |
 | `repeat` | map | no*   | Run-cycle tuning for a repeatable pipeline — `max_cycles` / `keep_runs` (see [Run cycles](#run-cycles-repeat)). A `repeat:`-only workflow is valid. |
+| `gates` | map | no*   | Quality-gate retry tuning — `patience` / `max_iterations` / `fresh_correction` (see [Quality gates](#quality-gates-gates)). A `gates:`-only workflow is valid (and inert without gated stages). |
 
 \* At least one of `prompt`, a non-empty `stages` block, a non-empty
 `extend` block, a `memory` block, a `build` block, an `assistants`
-block, a `delegation` block, or a `repeat` block must be present; an
-empty workflow is rejected with a structural error. `profile` does not
-count — a `profile:`-only workflow is invalid.
+block, a `delegation` block, a `repeat` block, or a `gates` block must
+be present; an empty workflow is rejected with a structural error.
+`profile` does not count — a `profile:`-only workflow is invalid.
 
 Unknown top-level keys are rejected with
-`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat`.
+`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat, gates`.
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to twelve
+Each entry under `stages` is keyed by stage name and accepts up to thirteen
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
@@ -124,12 +134,13 @@ fields:
 | `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` naming which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `memory` | bool | — | Memory-participation instruction (alignment method): `true` marks the stage as participating in project memory. An explicit `false` equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `assistants` | map | — | Stage assistant attachments keyed by assistant name — each entry a reference (`gate`/`when`, with `when` required) or a full inline declaration; an empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation). |
+| `gates` | list | — | Quality-gate check steps the stage must pass before it counts as done — a list of `{name, script xor agent, timeout?, prompt?, env?}` mappings; an empty list equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` and in any stage body. See [Quality gates (`gates`)](#quality-gates-gates). |
 
 Rules:
 
-- Only `agent`, `env`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory`, `assistants` are valid. An
+- Only `agent`, `env`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory`, `assistants`, `gates` are valid. An
   unknown key is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory, assistants`.
+  agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory, assistants, gates`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
@@ -701,6 +712,229 @@ Rules:
   run-directory pruning, and the `flow_repeated` events the engine emits
   between cycles all belong to afm — the run stays a single `afm run`
   invocation.
+
+## Quality gates (`gates`)
+
+A workflow can attach **quality gates** to its stages: a per-stage list of
+**check steps** the stage must pass before it counts as done, plus an
+optional top-level settings block tuning the correction retries. Gates
+compile one-directionally into the engine's stage-completion gate — the
+`verify` field of the flow-file (afm 2.0+; the shipped image carries it).
+goga never runs the checks: the engine executes the compiled gate and owns
+every retry semantic.
+
+```yaml
+gates:                          # optional workflow-level settings block
+  max_iterations: 2             # bound of failed correction attempts
+  fresh_correction: true        # whether a correction session starts fresh
+
+stages:
+  implementation:
+    gates:                      # the check steps of this stage, in authored order
+      - name: Unit tests        # the dashboard label; required on every step
+        script: pytest -q       # a shell check step (script xor agent)
+        timeout: 30m            # optional; carried verbatim
+        env:                    # optional; environment variables of the step
+          FOO: bar
+      - name: Code review       # an AI-review step
+        agent: codex
+        prompt: |               # the review instruction — agent steps only
+          Review the diff for correctness.
+        env:                    # valid on agent steps too
+          REVIEW_STRICTNESS: strict
+```
+
+The top-level `gates:` block accepts these keys — authored keys only; goga
+materializes no settings defaults, and the engine defaults apply for
+unauthored keys:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `patience` | int `>= 0` | — | Tolerance for an unchanged correction stalemate. Compiles to `review_patience`. |
+| `max_iterations` | int `>= 0` | — | Bound of failed correction attempts. Compiles to `max_failures`. |
+| `fresh_correction` | bool | — | Whether a correction session starts fresh. Compiles verbatim. |
+
+The workflow vocabulary maps one-directionally onto the engine's stage
+`verify` vocabulary:
+
+| Workflow (`gates`) | Engine (`verify`) | Notes |
+|--------------------|------------------|-------|
+| `patience` | `review_patience` | Setting keys translate; absent keys stay absent. |
+| `max_iterations` | `max_failures` | An authored `0` is a value, not an omission. |
+| `fresh_correction` | `fresh_correction` | Unchanged. |
+| step `script` | step `run` | A shell check step — gated on the exit status. |
+| step `agent` | step `command` | The agent name composed into the wrapper path `/home/goga/bin/<agent>-as-claude.sh` (the same template as the per-stage `agent` override; no agent-name existence check). |
+| step `name` / `prompt` / `timeout` | same names | Carried verbatim. |
+| step `env` | — (no emitted key) | Never reaches the flow-file — see [Gate step env](#gate-step-env) below. |
+
+Each check step is a mapping with up to six keys:
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `name` | string | yes | The step's dashboard label — required on every step. |
+| `script` | non-empty string, or a non-empty list of non-empty strings | xor `agent` | A shell check step. A list is the script's lines, joined with newlines into one multi-line script — identical in shell semantics to writing the same lines as a block scalar. |
+| `agent` | non-empty string | xor `script` | An AI-review step — the same agent-name vocabulary as the per-stage `agent` override. A single string, never a list. |
+| `timeout` | string | no | Carried verbatim; the duration grammar is engine-owned. |
+| `prompt` | string | no | The review instruction of an AI step — forbidden on a `script` step (`prompt is forbidden on a script gate step in workflow.stages.<NAME>.gates[<i>]`). |
+| `env` | map of string → string | no | Environment variables of the step — valid on both step kinds; an empty map equals absence. |
+
+A shell step without an authored `timeout` carries the materialized default
+`1h`; an AI step materializes no timeout default. The `1h` is a goga-side
+product default, not an engine contract.
+
+A multi-command check authors as the script's lines — a list, joined with
+newlines into one multi-line script at parse time:
+
+```yaml
+stages:
+  build:
+    gates:
+      - name: checks
+        script:
+          - pytest ./
+          - ruff check .
+```
+
+Rules:
+
+- **Exactly one of `script`/`agent` per step.** Both or neither is a
+  structural error (`gates step must carry exactly one of script/agent in
+  workflow.stages.<NAME>.gates[<i>]`); a missing `name` raises `gates step
+  without name in workflow.stages.<NAME>.gates[<i>]`. A scalar `script`/`agent`
+  defect raises `script must be a non-empty string in
+  workflow.stages.<NAME>.gates[<i>]` (and the `agent` counterpart); a list-form
+  `script` that is empty or carries a non-string/empty element raises `script
+  must be a non-empty list of non-empty strings in
+  workflow.stages.<NAME>.gates[<i>]`.
+- **Empty equals absence.** An empty settings block (`gates: {}`) and an
+  empty step list (`gates: []`) are treated as absent keys.
+- **The settings block alone is inert.** A workflow consisting of the
+  `gates:` block alone is valid — but the settings travel only with stages
+  that declare check steps: without a gated stage nothing is emitted, no
+  error is raised.
+- **The settings ride on every gated stage when authored.** When the
+  settings block authored at least one key, every gated stage's `verify`
+  carries the steps plus the authored settings (the container form); with
+  no settings block authored, a gated stage carries the steps alone (the
+  list form).
+- **Gates attach to execution stages only.** A gate on a stage whose body
+  carries `script` raises `gates are forbidden on a script stage in
+  workflow.stages.<NAME>`; a gate on a planning-only stage raises `gates
+  are forbidden on a planning-only stage in workflow.stages.<NAME>` — the
+  engine rejects both.
+- **Gates are authored ONLY in the `stages` block.** A `gates` key in an
+  `extend`-entry is a structural error (`gates is forbidden in
+  workflow.extend.<NAME>`) — the checks of a new stage are authored in the
+  `stages` block under its name, like any other stage. Authoring `gates`
+  or a raw `verify` key in any stage body (a pipeline-file stage or an
+  `extend` body) is likewise a structural error — `verify` is a
+  compiled-only key.
+- **Structural validation at parse time.** A non-mapping settings value
+  raises `non-mapping gates block in workflow`; an unknown settings key
+  raises `unknown key in workflow.gates: <KEY>; valid keys: patience,
+  max_iterations, fresh_correction`; a non-int or negative value raises
+  `non-int value in workflow.gates.<KEY>` / `<KEY> must be >= 0 in
+  workflow.gates`; a non-list stage value raises `non-list gates in
+  workflow.stages.<NAME>`. A boolean is not an integer for these checks.
+- **Every `loop`-expanded copy carries the same gate; a skipped stage
+  attaches nothing** — skip removal runs first, so the gates of a skipped
+  stage drop silently.
+- **Engine-owned semantics.** Step sequencing (in order, fail-fast),
+  full-list re-runs after a correction, the correction budget and
+  stalemate rules, verdict parsing, and human waiver all belong to the
+  engine — the run stays a single `afm run` invocation. Older engines
+  reject a gated flow at load (a downgrade is never silent); a malformed
+  `timeout` or a whitespace-only `name` passes verbatim and surfaces at
+  engine load/preflight.
+
+### Gate step env
+
+Each check step may carry an `env` map — environment variables for that
+step's execution, valid on both step kinds (a shell `script` step and an
+AI `agent` step alike):
+
+```yaml
+stages:
+  implementation:
+    gates:
+      - name: Unit tests
+        script: pytest -q
+        env:
+          FOO: bar
+      - name: Code review
+        agent: codex
+        prompt: Review the diff.
+        env:
+          REVIEW_STRICTNESS: strict
+```
+
+The engine's verify-step schema has no `env` field, so the map never
+reaches the flow-file as an emitted key. Instead goga delivers it through
+the same mechanism as the per-stage `env` instruction (see the
+[`env` row](#stage-entries) of the stage-entries table):
+after compilation, one generated sh closure wrapper per env-declaring step
+exports the values verbatim and carries the payload (the authored script
+lines on a shell step, or the exec of the agent wrapper on an AI step), and
+the step's `run`/`command` line in the written flow-file is patched to
+point at the wrapper. Every other byte of the flow-file stays untouched; a
+workflow whose gates declare no step env compiles byte-identically.
+
+Keys must be legal environment variable names (POSIX shape) — anything
+else is a strict pre-run error naming the stage, the step, and the key,
+raised before any wrapper is written. Values layer above every global env
+layer.
+
+### Worked example
+
+A STAGES pipeline whose `implementation` stage is gated by two check steps
+(a shell step with an authored timeout, an AI-review step), with the
+settings block authoring a correction budget:
+
+```yaml
+gates:
+  max_iterations: 2
+  fresh_correction: true
+
+stages:
+  implementation:
+    gates:
+      - name: Unit tests
+        script: pytest -q
+        timeout: 30m
+      - name: Code review
+        agent: codex
+        prompt: |
+          Review the diff for correctness.
+```
+
+Compiled effect — the stage carries a `verify` block (after `agents`) in
+the container form, steps in authored order, then the authored settings in
+the fixed order `max_failures`, `review_patience`, `fresh_correction`
+(exactly as emitted, stage fields at two spaces):
+
+```yaml
+  verify:
+    steps:
+    - name: Unit tests
+      run: pytest -q
+      timeout: 30m
+    - name: Code review
+      command: /home/goga/bin/codex-as-claude.sh
+      prompt: |
+        Review the diff for correctness.
+    max_failures: 2
+    fresh_correction: true
+```
+
+Without the settings block the same gate compiles to the list form, with
+the shell default timeout materialized:
+
+```yaml
+  verify:
+  - name: Unit tests
+    run: pytest -q
+    timeout: 1h
+```
 
 ## Extending the pipeline with new stages
 

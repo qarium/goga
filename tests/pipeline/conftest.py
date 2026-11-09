@@ -37,6 +37,11 @@ _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 # write_afm_config) — resolve the real module for direct attribute patching.
 _afm_config_module = sys.modules["goga.pipeline.afm_config"]
 
+# goga.pipeline.gate_env_wrappers carries no facade shadowing; its fixed
+# closure-base constant is patched the same direct way so no test creates or
+# chmods /tmp/goga-gate-env on the host.
+_gate_env_wrappers_module = sys.modules["goga.pipeline.gate_env_wrappers"]
+
 # goga.pipeline.afm_skin carries no facade shadowing, but its module constant
 # is patched the same direct way for symmetry with the two above.
 _afm_skin_module = sys.modules["goga.pipeline.afm_skin"]
@@ -74,6 +79,9 @@ def _in_container_run_context(
     - the fixed closure-base constant of the collaboration profiles
       redirects into the tmp tree the same way, so no test creates or
       chmods ``/tmp/goga-assistant-env`` on the host;
+    - the fixed closure-base constant of the gate env wrappers redirects
+      into the tmp tree the same way, so no test creates or chmods
+      ``/tmp/goga-gate-env`` on the host;
     - the fixed skins-base constant of the afm skin materialization
       redirects into the tmp tree too, so no test writes the real
       ``~/.afm/skins``.
@@ -87,6 +95,7 @@ def _in_container_run_context(
     pin_package_environment({})
     monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
     monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", tmp_path / "goga-assistant-env")
+    monkeypatch.setattr(_gate_env_wrappers_module, "_GATE_WRAPPER_BASE", tmp_path / "goga-gate-env")
     monkeypatch.setattr(_afm_skin_module, "_SKINS_TARGET_BASE", tmp_path / ".afm-home" / "skins")
 
 

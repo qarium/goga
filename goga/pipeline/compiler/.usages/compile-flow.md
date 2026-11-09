@@ -13,7 +13,7 @@ prompt, root_dir, name, description, repeat, memory, collaboration, team, stages
 Output FlowStage fields, canonical order:
 interactive, auto_approve, auto_run, command, prompt, description, buttons, agents, supervisor,
 supervisor_prompt, skills, script_before, script, script_after, script_timeout, reflect,
-memory_use, assistants, <unknown A-Z>.
+memory_use, assistants, verify, <unknown A-Z>.
 
 Authoring key → output key (the authoring key is consumed, not passed through):
 - communication → interactive (value true/false)
@@ -156,8 +156,26 @@ from the body — the compiler joins them. PipelineDocument is unaffected
 
 ## Stage script directives
 
-before_script, script, after_script are string stage-body directives that
-translate (word-order reversal) to script_before, script, script_after.
+before_script, script, after_script are stage-body directives that translate
+(word-order reversal) to script_before, script, script_after. Each payload is
+a string or the script's lines — a list:
+
+```yaml
+build:
+  title: Build
+  before_script: [echo prep1, echo prep2]
+  script:
+    - pytest ./
+    - ruff check .
+```
+
+- a string payload passes verbatim
+- a non-empty list of non-empty strings joins with newlines into ONE
+  multi-line string — shell-identical to authoring the same text as a block
+  scalar; the serializer emits the multi-line result as a block literal
+- any other value → structural error "before_script|script|after_script must
+  be a string or a non-empty list of non-empty strings in stage <name>"
+  (the message names the authored key)
 
 Structural error: a stage body that carries script together with prompt
 and/or skills is rejected at compile time — "script is mutually exclusive with
@@ -185,6 +203,49 @@ body) translated to the afm per-stage key `script_timeout`.
   `script_timeout` are authored, the translated `timeout` value wins
 - loop-expanded copies inherit `script_timeout` verbatim; `PipelineDocument`
   is unaffected (output-side only)
+
+## Gates compilation (`verify`)
+
+A stage carrying authored check steps compiles a stage-level completion
+gate — the engine `verify` field, in the canonical slot after `assistants`.
+
+Translation (authored → engine):
+
+| Authored | Emitted | Note |
+|----------|---------|------|
+| `script` | `run` | shell step; timeout materializes `1h` when not authored |
+| `agent` | `command` | `/home/goga/bin/<agent>-as-claude.sh` — composed directly, no existence checks |
+| `patience` | `review_patience` | settings, authored keys only |
+| `max_iterations` | `max_failures` | settings, authored keys only |
+| `fresh_correction` | `fresh_correction` | unchanged |
+| `name`/`prompt`/authored `timeout` | same | verbatim |
+
+- No workflow-level settings block → the gate is the steps alone (list
+  form); any authored setting key → the container form (steps + settings).
+  The settings block without per-stage steps is inert.
+- Steps compile in authored order; every loop-expanded copy carries the
+  same gate; a skipped stage emits nothing; an empty gates list equals
+  absence (authored emptiness normalizes to `None` at parse, and the
+  emission guard treats an empty programmatic list the same — no `verify`
+  key, no body check).
+- Pre-run strict errors (naming the stage): gates on a stage whose body
+  carries `script`; gates on a planning-only stage (translated agents
+  exactly `["planning"]`); an authoring `gates` or raw `verify` key in a
+  stage body — `verify` is compiled-only, authored through
+  `workflow.stages`. A check step carrying both or neither of
+  `script`/`agent`, or carrying `prompt` alongside `script` (the engine
+  accepts `prompt` on AI steps only), fails with the parser's message —
+  authored files hit the parser first, but a programmatic workflow (a tool
+  contribution) reaches the compiler unvalidated.
+- Value grammar (durations, name text) passes verbatim — the engine
+  reports malformed values at preflight. goga performs no cross-field
+  checks of engine constraints and never executes or interprets the gate.
+- A step's authored `env` map never reaches the emission (the engine's
+  verify-step schema has no `env` field) — the compiler emits an
+  env-carrying step exactly like an env-free one; the pipeline run
+  coordination's gate wrapper generation delivers the env downstream (see
+  the pipeline cell's `gate-env` practice).
+- A gate-free workflow compiles byte-identically.
 
 ## Collaboration emission
 

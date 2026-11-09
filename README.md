@@ -116,7 +116,7 @@ goga pipeline review         # scoped review of code, contracts, docs, then lint
 goga pipeline sync           # sync specifications & tests with the code after changes
 ```
 
-Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation, helper-agent collaboration, run cycles) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
+Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation, helper-agent collaboration, run cycles, stage quality gates) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
 
 **4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 
@@ -210,7 +210,7 @@ A running pipeline executes inside a Docker container, where its flows, run-stat
 
 ### Workflows — configure and extend a pipeline
 
-A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Fourteen levers, each with a short example.
+A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Fifteen levers, each with a short example.
 
 **`agent` — hire a different agent per stage.** Authoring on `codex`, reviews on `claude`, no pipeline duplication:
 
@@ -349,6 +349,18 @@ stages:
 ```yaml
 repeat:
   max_cycles: 3
+```
+
+**`gates` — attach stage-completion quality gates.** A per-stage check-step list (`name` + `script` xor `agent`, optional `timeout`/`prompt`) plus a top-level settings block (`patience`/`max_iterations`/`fresh_correction`), compiled one-directionally into the engine's stage `verify` field (`script` → `run`, `agent` → `command`, `patience` → `review_patience`, `max_iterations` → `max_failures`); a shell step defaults its timeout to `1h`. goga never runs the checks — the engine executes the gate and owns every retry semantic. Requires afm 2.0+ (the shipped image carries it):
+
+```yaml
+gates:
+  max_iterations: 2
+stages:
+  implementation:
+    gates:
+      - name: Unit tests
+        script: pytest -q
 ```
 
 Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning (a new stage's own launch mode is authored in its body via `trigger: manual`). Names under `stages:` must name stages of the target pipeline — `specify` exists only in `refinement`, `prototype-architecture` only in `development`; brand-new stages come via `extend:`. The full model is in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) documentation. Workflow memory requires afm 0.5.60+ (the shipped image carries it).

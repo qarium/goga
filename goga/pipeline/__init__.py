@@ -10,6 +10,7 @@ from .afm_skin import materialize_afm_skin
 from .apply_skip_stages import apply_skip_stages
 from .cli import pipeline_cli
 from .describe_pipelines import describe_pipelines
+from .gate_env_wrappers import apply_gate_env_wrappers
 from .hook_bridge import build_run_event, build_stage_event, map_event_action, run_hook
 from .list_pipelines import list_pipelines
 from .order_stages import order_stages
@@ -25,6 +26,7 @@ __all__: list[str] = [
     "PipelineEntry",
     "PipelineSource",
     "PipelineSummary",
+    "apply_gate_env_wrappers",
     "apply_skip_stages",
     "apply_stage_env_wrappers",
     "build_run_event",

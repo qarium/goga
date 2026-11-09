@@ -38,10 +38,14 @@ def wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return base
 
 
-def _compile(tmp_path: Path, workflow_text: str) -> tuple[list[FlowStage], object, Path, str]:
-    """Compile the fixture pipeline under ``workflow_text``; return stages, workflow, flow path, original text."""
+def _compile(
+    tmp_path: Path,
+    workflow_text: str,
+    pipeline_text: str | None = None,
+) -> tuple[list[FlowStage], object, Path, str]:
+    """Compile the pipeline (optionally overridden) under ``workflow_text``; return stages, workflow, flow, text."""
     pipeline_path = tmp_path / "deploy.yml"
-    pipeline_path.write_text(_PIPELINE_TEXT)
+    pipeline_path.write_text(pipeline_text if pipeline_text is not None else _PIPELINE_TEXT)
 
     flow_path = tmp_path / "flow.yml"
     workflow = parse_workflow(workflow_text)
@@ -567,3 +571,321 @@ class TestAssistantsInteraction:
         assert "command" not in team_member
         assert team_member["instruction"] == "I am a helper."
         assert stage["command"] == wrapper
+
+
+class TestGatesInteraction:
+    """The command patch and the stage ``verify:`` gate of a compiled flow."""
+
+    def test_apply_stage_env_wrappers_inserts_command_before_verify(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """A stage carrying both env and check steps inserts ``command`` before ``verify``.
+
+        The canonical anchor order slots ``verify`` after ``assistants``, so
+        the inserted ``command`` line lands before the emitted gate — the
+        patched stage keeps the canonical key order and the verify block
+        stays byte-identical.
+        """
+        stages, workflow, flow_path, original = _compile(
+            tmp_path,
+            "stages:\n"
+            "  build:\n"
+            "    env:\n"
+            '      E: "1"\n'
+            "    gates:\n"
+            "      - name: tests\n"
+            "        script: pytest -q\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        wrapper = str(wrapper_base / "build")
+
+        assert by_id["build"].fields["command"] == wrapper
+
+        patched_lines = flow_path.read_text().splitlines()
+
+        assert patched_lines.index(f"  command: {wrapper}") < patched_lines.index("  verify:")
+        # The gate is untouched — the patch added exactly one line.
+        assert len(patched_lines) == len(original.splitlines()) + 1
+        assert "  - name: tests" in patched_lines
+        assert "    run: pytest -q" in patched_lines
+        assert "    timeout: 1h" in patched_lines
+
+        loaded = yaml.safe_load(flow_path.read_text())
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert stage["command"] == wrapper
+        assert stage["verify"] == [{"name": "tests", "run": "pytest -q", "timeout": "1h"}]
+
+    def test_apply_stage_env_wrappers_loop_copies_env_and_gates(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """Loop-expanded copies of an env+gates stage each patch before their own gate.
+
+        Every copy carries the same ``verify`` block; each inserted
+        ``command`` lands inside its OWN stage block, before that block's
+        gate, and the re-parsed flow stays valid YAML.
+        """
+        stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            "stages:\n"
+            "  worker:\n"
+            "    loop: 2\n"
+            "    env:\n"
+            '      N: "9"\n'
+            "    gates:\n"
+            "      - name: check\n"
+            "        script: echo ok\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        loaded = yaml.safe_load(flow_path.read_text())
+
+        for index in (1, 2):
+            copy_id = f"worker-{index}"
+            wrapper = str(wrapper_base / copy_id)
+
+            assert by_id[copy_id].fields["command"] == wrapper
+
+            stage = next(entry for entry in loaded["stages"] if entry["id"] == copy_id)
+            keys = list(stage)
+
+            assert stage["command"] == wrapper
+            assert stage["verify"] == [{"name": "check", "run": "echo ok", "timeout": "1h"}]
+            assert keys.index("command") < keys.index("verify")
+            # The first copy carries no depends_on; the second depends on the first.
+            assert stage.get("depends_on") == (None if index == 1 else ["worker-1"])
+
+
+class TestScriptStageDelivery:
+    """The env delivery of a claimed script stage — the payload closure form."""
+
+    def test_env_on_script_stage_patches_script_field(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """A claimed script stage's script is patched; no command is inserted; the closure carries the payload."""
+        stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            'stages:\n  build:\n    env:\n      E: "1"\n',
+            "name: Deploy\ndescription: d\n---\n\n"
+            "build:\n  title: Build\n  script: |\n    echo building\n    echo done\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        wrapper = str(wrapper_base / "build")
+
+        assert by_id["build"] is not {stage.id: stage for stage in stages}["build"]
+        assert by_id["build"].fields["script"] == wrapper
+        assert "command" not in by_id["build"].fields
+
+        patched = flow_path.read_text()
+
+        assert f"  script: {wrapper}\n" in patched
+        assert "command:" not in patched
+
+        loaded = yaml.safe_load(patched)
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert stage["script"] == wrapper
+        assert list(stage) == ["id", "name", "script"]
+
+        assert (wrapper_base / "build").read_text() == "#!/bin/sh\nexport E=1\necho building\necho done\n"
+
+    def test_script_stage_needs_no_agent(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """A claimed script stage wraps without any agent — ``global_agent=None`` raises nothing."""
+        stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            'stages:\n  build:\n    env:\n      E: "1"\n',
+            "name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n  script: echo ok\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, None, flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+
+        assert by_id["build"].fields["script"] == str(wrapper_base / "build")
+        assert (wrapper_base / "build").read_text() == "#!/bin/sh\nexport E=1\necho ok\n"
+
+    def test_script_closure_executes_env_and_payload(self, tmp_path: Path, wrapper_base: Path) -> None:
+        """The generated closure exports the env and runs the authored payload — the delivery is real."""
+        import subprocess
+
+        _stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            "stages:\n  build:\n    env:\n      GREETING: hello env\n",
+            "name: Deploy\ndescription: d\n---\n\n"
+            "build:\n  title: Build\n  script: |\n    echo \"$GREETING from $PWD-marker\"\n    exit 0\n",
+        )
+
+        stage_env_wrappers.apply_stage_env_wrappers(_stages, workflow, None, flow_path)
+
+        completed = subprocess.run(
+            [str(wrapper_base / "build")],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": "/usr/bin:/bin"},
+        )
+
+        assert completed.returncode == 0
+        assert "hello env from" in completed.stdout
+        assert "marker" in completed.stdout
+
+    def test_multiline_script_consumed_whole_and_following_fields_intact(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """The block-literal value is replaced whole; every other byte stays identical."""
+        stages, workflow, flow_path, original = _compile(
+            tmp_path,
+            'stages:\n  build:\n    env:\n      E: "1"\n',
+            "name: Deploy\ndescription: d\n---\n\n"
+            "build:\n  title: Build\n"
+            "  script: |\n    echo one\n\n    echo two\n"
+            "  timeout: 5m\n"
+            "review:\n  title: Review\n  depends_on: [build]\n",
+        )
+
+        stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        wrapper = str(wrapper_base / "build")
+        expected = original.replace(
+            "  script: |\n    echo one\n\n    echo two\n",
+            f"  script: {wrapper}\n",
+        )
+
+        assert flow_path.read_text() == expected
+
+        loaded = yaml.safe_load(flow_path.read_text())
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert stage["script"] == wrapper
+        assert stage["script_timeout"] == "5m"
+
+        review = next(entry for entry in loaded["stages"] if entry["id"] == "review")
+
+        assert review["depends_on"] == ["build"]
+
+    def test_loop_expanded_script_copies_each_get_wrapper(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """Loop-expanded copies of an env-declaring script stage each receive their own payload wrapper."""
+        stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            'stages:\n  worker:\n    loop: 2\n    env:\n      N: "9"\n',
+            "name: Deploy\ndescription: d\n---\n\nworker:\n  title: Worker\n  script: echo run $N\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        loaded = yaml.safe_load(flow_path.read_text())
+
+        for index in (1, 2):
+            copy_id = f"worker-{index}"
+            wrapper = str(wrapper_base / copy_id)
+
+            assert by_id[copy_id].fields["script"] == wrapper
+
+            stage = next(entry for entry in loaded["stages"] if entry["id"] == copy_id)
+
+            assert stage["script"] == wrapper
+            assert "command" not in stage
+            assert (wrapper_base / copy_id).read_text() == "#!/bin/sh\nexport N=9\necho run $N\n"
+
+    def test_mixed_script_and_agent_claims_each_patch_their_own_field(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """A script claim patches script; an agent claim of the same flow patches command."""
+        stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            "stages:\n"
+            "  build:\n"
+            "    env:\n"
+            '      E: "1"\n'
+            "  review:\n"
+            "    agent: codex\n"
+            "    env:\n"
+            '      R: "2"\n',
+            "name: Deploy\ndescription: d\n---\n\n"
+            "build:\n  title: Build\n  script: echo ok\n"
+            "review:\n  title: Review\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+
+        assert by_id["build"].fields["script"] == str(wrapper_base / "build")
+        assert "command" not in by_id["build"].fields
+        assert by_id["review"].fields["command"] == str(wrapper_base / "review")
+
+        assert (wrapper_base / "build").read_text() == "#!/bin/sh\nexport E=1\necho ok\n"
+        assert (wrapper_base / "review").read_text() == (
+            '#!/bin/sh\nexport R=2\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        )
+
+    def test_illegal_env_key_on_script_stage_rejected_before_any_write(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """An illegal env key of a script stage is a strict pre-run error — no wrapper, no rewrite."""
+        stages, workflow, flow_path, original = _compile(
+            tmp_path,
+            "stages:\n  build:\n    env:\n      BAD-KEY: v\n",
+            "name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n  script: echo ok\n",
+        )
+
+        with pytest.raises(ValueError, match="BAD-KEY"):
+            stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        assert flow_path.read_text() == original
+        assert not wrapper_base.exists()
+
+    def test_script_before_and_after_of_a_script_stage_stay_untouched(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """The exact ``  script:`` prefix never captures ``script_before``/``script_after``."""
+        stages, workflow, flow_path, original = _compile(
+            tmp_path,
+            'stages:\n  build:\n    env:\n      E: "1"\n',
+            "name: Deploy\ndescription: d\n---\n\n"
+            "build:\n"
+            "  title: Build\n"
+            "  before_script: echo prep\n"
+            "  script: echo run\n"
+            "  after_script: echo teardown\n",
+        )
+
+        stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        wrapper = str(wrapper_base / "build")
+        expected = original.replace("  script: echo run\n", f"  script: {wrapper}\n")
+
+        assert flow_path.read_text() == expected
+
+        assert (wrapper_base / "build").read_text() == "#!/bin/sh\nexport E=1\necho run\n"

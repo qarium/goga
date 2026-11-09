@@ -10,7 +10,7 @@ all of that is the compiler's job.
 ## Accepted structure
 
 Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
-`assistants`, `delegation`, `repeat`.
+`assistants`, `delegation`, `repeat`, `gates`.
 
 - `profile` — optional top-level string default naming the workflow's default
   contributor profile (`profile: default`); a non-str value is a structural
@@ -75,6 +75,21 @@ no pruning. The compiler emits the block (authored keys only) for a
 repeatable pipeline and rejects it for a non-repeatable one; the engine owns
 every cycle semantic.
 
+## The gates blocks (settings + per-stage steps)
+
+`gates` is the stage quality-gate instruction set: an optional top-level
+settings block (`patience`, `max_iterations`, `fresh_correction` — authored
+keys only, an empty block equals absence, a workflow consisting of the block
+alone is valid) and an optional per-stage list of check steps in the stages
+block (an empty list equals absence). Each step carries a required `name`
+(the dashboard label), exactly one of `script` (a shell check — a non-empty
+string or a non-empty list of non-empty strings joined with newlines into one
+multi-line script) / `agent`
+(an AI review — a single string), and optional `timeout`/`prompt` (`prompt`
+belongs to an `agent` step — it is forbidden on a `script` step); value
+grammar (durations, name text) is engine-owned. Every structural violation
+raises a one-line error naming the workflow location.
+
 ## Per-stage override keys (workflow.stages.<name>)
 
 | Key | Type | Notes |
@@ -91,6 +106,7 @@ every cycle semantic.
 | reflect | map {file, mode?} | memory-reflection instruction — reflect method only; compiled into the stage's `reflect` field; stages block only; declarative |
 | memory | bool | memory-participation instruction — alignment method only; `true` participates, `false` equals absence; compiled into the stage's `memory_use` field; stages block only; declarative |
 | assistants | map | the stage's assistant attachments keyed by assistant name — a reference (`gate`/`when`) or a full inline declaration; `when` is required on every entry; an empty map equals absence; stages block only; declarative (override-style entries — no prompt/skills — are valid declarations; content resolves at compilation) |
+| gates | list | the stage's check steps — a required `name`, exactly one of `script` (str or list of lines, joined at parse)/`agent` (str), optional `timeout`/`prompt` (`prompt` on `agent` steps only); an empty list equals absence; compiled into the stage's `verify` gate; stages block only; declarative |
 
 ## The notes field
 

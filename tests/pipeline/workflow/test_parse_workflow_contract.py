@@ -141,8 +141,8 @@ class TestParseWorkflowContract:
         per-stage key set and of the unknown-key ``valid keys`` message fragment,
         so it must carry ``env`` (right after ``agent``), then ``prompt``,
         ``loop``, ``skills``, ``skip``, ``approve``, ``manual``, ``notes``,
-        ``reflect``, ``memory``, and ``assistants`` last — the fixed canonical
-        order.
+        ``reflect``, ``memory``, ``assistants``, and ``gates`` last — the fixed
+        canonical order.
         """
         from goga.pipeline.workflow.parse_workflow import _STAGE_KEYS
 
@@ -160,15 +160,16 @@ class TestParseWorkflowContract:
             "reflect",
             "memory",
             "assistants",
+            "gates",
         )
 
     def test_parse_workflow_top_level_keys_includes_profile_and_build(self) -> None:
-        """The internal ``_TOP_LEVEL_KEYS`` tuple carries the nine accepted keys (contract surface).
+        """The internal ``_TOP_LEVEL_KEYS`` tuple carries the ten accepted keys (contract surface).
 
         Pins the contract: the unknown top-level key message is generated from
         ``_TOP_LEVEL_KEYS`` and therefore lists ``profile`` and ``build`` after
-        the four original keys, then ``assistants``, ``delegation``, and
-        ``repeat`` last.
+        the four original keys, then ``assistants``, ``delegation``,
+        ``repeat``, and ``gates`` last.
         """
         from goga.pipeline.workflow.parse_workflow import _TOP_LEVEL_KEYS
 
@@ -182,6 +183,7 @@ class TestParseWorkflowContract:
             "assistants",
             "delegation",
             "repeat",
+            "gates",
         )
 
     def test_parse_workflow_manual_is_accepted_stage_key(self) -> None:
