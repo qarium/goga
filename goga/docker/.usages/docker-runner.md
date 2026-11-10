@@ -13,7 +13,7 @@ path.
 
 ## Public API
 
-    from goga.docker import DockerRunner
+    from goga.docker import DockerRunner, translate_params
 
 - `DockerRunner(image)` — stateful runner. The image to run is concrete, so it is
   supplied to the constructor.
@@ -22,6 +22,17 @@ path.
   container exit code. `extra_args` are raw docker tokens appended verbatim after
   the translated params flags and before the image (structural-only; docker
   surfaces conflicts). Defaults to `None` (normalized to `[]`).
+- `translate_params(params) -> list[str]` — the same param→flag rule `run` (and
+  the builder) apply internally, exposed for composing the identical launch
+  line without running it — the dry-run print pattern:
+
+  ```python
+  import shlex
+  from goga.docker import translate_params
+
+  line = shlex.join(["docker", "run", *translate_params(params), image, *args])
+  print(line, file=sys.stderr)  # what a launch would execute — never launched
+  ```
 
 ## Typical usage
 

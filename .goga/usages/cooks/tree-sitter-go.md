@@ -42,6 +42,11 @@ root = tree.root_node
 ### Interface methods
 - `method_elem` — interface method inside an interface_type (fields: name, parameters, result)
 
+### Imports
+- `import_declaration` — single `import "path"` or block `import (...)` (children: import_spec or import_spec_list)
+- `import_spec_list` — list inside a block import (children: import_spec)
+- `import_spec` — one import (fields: path — interpreted_string_literal, optional name — package_identifier alias or blank_identifier `_`)
+
 ### Names
 - `identifier` — identifier (variable name, parameter)
 - `field_identifier` — field/method name (in a receiver, struct)

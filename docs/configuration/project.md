@@ -16,6 +16,31 @@ The config loader looks for this file relative to the current working directory.
 
 For the machine-wide `~/.goga/config.yml`, see [Home Configuration](home.md). To read values back from the command line, see [`goga config`](cli.md).
 
+## Environment references (`!ENV`)
+
+Any scalar value in the file may be written as `!ENV NAME` — resolved from the
+process environment at load time into the variable's value:
+
+```yaml
+pipeline:
+  agent: !ENV PIPELINE_AGENT
+  env:
+    ANTHROPIC_API_KEY: !ENV ANTHROPIC_API_KEY
+```
+
+Rules:
+
+- Resolution is always a **string** — no coercion. A field expecting an int or
+  bool rejects an `!ENV` value per its own validation (`build.review.additional.patience: !ENV N` fails with `... must be an int`), even when the text looks numeric.
+- An **unset** variable resolves to `""` — fields with their own empty-means-unset
+  rule (the agent fields) then behave as if unset; other fields see the empty string.
+- The tag applies to **scalars only** — `!ENV` on a mapping or a list value, or
+  with an empty argument, fails the load with the YAML library's own error
+  naming the position.
+- The tag is registered on the project-configuration (and
+  [tool-configuration](../features/tools/configuration.md)) load only; the
+  [home configuration](home.md) is plain YAML and does not resolve it.
+
 ## Example configuration
 
 ```yaml
@@ -75,7 +100,7 @@ codemanifest:
 #       ref: 8.1.7         # optional — branch, tag, or commit; omit for the default branch
 #       root: docs         # optional — subpath inside the repo to walk .usages from; omit for the clone root
 
-# lint: optional — directories ignored by `goga lint` (exact relative paths, no glob)
+# lint: optional — directories ignored by `goga lint` and the `goga codegraph` source walk (exact relative paths, no glob)
 # lint:
 #   ignore:
 #     - .venv/
@@ -109,7 +134,7 @@ codemanifest:
 | `pipeline` | mapping | No | Pipeline execution settings — see [Pipelines — Configuration](../features/pipelines/configuration.md) |
 | `tools` | mapping | No | goga-tool version declarations for bulk install — see [Install — Configuration](../features/install/configuration.md) |
 | `usages` | mapping | No | Git dependencies of cell-level usages — see [Usages — Configuration](../features/usages/configuration.md) |
-| `lint` | mapping | No | Linter ignore list — see [Lint — Configuration](../features/lint/configuration.md) |
+| `lint` | mapping | No | Linter ignore list, also reused by `goga codegraph` — see [Lint — Configuration](../features/lint/configuration.md) |
 | `topics` | mapping | No | Topic exchange base, per-command commit templates, and the update/propagate strategies — see [Topics — Configuration](../features/topics/configuration.md) |
 
 ### Domain sections
@@ -136,7 +161,7 @@ The `codemanifest` section is global — it belongs to no single domain. It feed
 
 ## Pre-built Docker images
 
-goga provides prebuilt language images for build execution:
+goga provides pre-built language images for build execution:
 
 | Language | Images |
 |----------|--------|
@@ -154,7 +179,7 @@ The config loader raises specific exceptions for invalid configuration:
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
 | `KeyError` | Missing required field (`language`) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected); the same per-field pattern covers the `pipeline` (`pipeline.env` / `proxy` / `hosts`), `codemanifest`, `lint`, `tools` (`'tools' must be a mapping in .goga/config.yml`), and `usages` sections (including `usages.<group>.<dep>.git is required` for a missing dep `git`). `build` adds: a non-string `agent` / session knob / `prompts_dir` / `agents_dir` / review string field (`build.agent must be a string in .goga/config.yml`, and the same pattern for every session knob and `build.review.*` string field), a non-int `max_iterations` including a YAML boolean, a non-mapping `env` (`build.env must be a mapping in .goga/config.yml`, `build.review.env` likewise), `env` with non-string keys/values (`build.env must have string keys and values`), a non-mapping `build.review` (`build.review must be a mapping in .goga/config.yml`), a non-bool `build.review.skip` (a YAML `1` is rejected), `roles` that is not a list of strings, a non-mapping `build.review.additional`, or a non-int `patience`/`max_iterations` of the additional block including a YAML boolean. The retired keys (`worktree`, `skip_finalize`, `codex_review`, `task_executor`, `review_executor`) raise nothing — they are silently ignored. `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`), a non-mapping sub-section (`'topics.create' must be a mapping in .goga/config.yml`, and the same for `topics.update` and `topics.propagate`), or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.create.commit must be a string in .goga/config.yml`, `topics.update.strategy must be a string in .goga/config.yml`, `topics.update.commit must be a string in .goga/config.yml`, `topics.propagate.strategy must be a string in .goga/config.yml`, `topics.propagate.commit must be a string in .goga/config.yml`). The retired `topics.publish_commit` key raises nothing — it is silently ignored |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected); the same per-field pattern covers the `pipeline` (`pipeline.env` / `proxy` / `hosts`), `codemanifest`, `lint`, `tools` (`'tools' must be a mapping in .goga/config.yml`), and `usages` sections (including `usages.<group>.<dep>.git is required` for a missing dep `git`). `build` adds: a non-string `agent` / session knob / `prompts_dir` / `agents_dir` / review string field (`build.agent must be a string in .goga/config.yml`, and the same pattern for every session knob and `build.review.*` string field), a non-int `max_iterations` including a YAML boolean, a non-mapping `env` (`build.env must be a mapping in .goga/config.yml`, `build.review.env` likewise), `env` with non-string keys/values (`build.env must have string keys and values`), a non-mapping `build.review` (`build.review must be a mapping in .goga/config.yml`), a non-bool `build.review.skip` (a YAML `1` is rejected), `roles` that is not a list of strings, a non-mapping `build.review.additional`, a non-int `patience`/`max_iterations` of the additional block including a YAML boolean, or an `env` of the additional block that is non-mapping or carries non-string keys/values (`build.review.additional.env must be a mapping in .goga/config.yml`, `build.review.additional.env must have string keys and values`). The retired keys (`worktree`, `skip_finalize`, `codex_review`, `task_executor`, `review_executor`) raise nothing — they are silently ignored. `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`), a non-mapping sub-section (`'topics.create' must be a mapping in .goga/config.yml`, and the same for `topics.update` and `topics.propagate`), or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.create.commit must be a string in .goga/config.yml`, `topics.update.strategy must be a string in .goga/config.yml`, `topics.update.commit must be a string in .goga/config.yml`, `topics.propagate.strategy must be a string in .goga/config.yml`, `topics.propagate.commit must be a string in .goga/config.yml`). The retired `topics.publish_commit` key raises nothing — it is silently ignored |
 
 ## Implementation details
 

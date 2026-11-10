@@ -8,15 +8,31 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..workflow import WorkflowDocument, WorkflowExtendStage, WorkflowMemory, WorkflowStage
+from ..workflow import (
+    WorkflowAssistant,
+    WorkflowDocument,
+    WorkflowExtendStage,
+    WorkflowGates,
+    WorkflowGateStep,
+    WorkflowMemory,
+    WorkflowRepeat,
+    WorkflowStage,
+)
 from .body_format import BodyFormat
+from .flow_assistant import FlowAssistant
+from .flow_collaboration import FlowCollaboration
 from .flow_document import FlowDocument
 from .flow_memory import FlowMemory
+from .flow_repeat import FlowRepeat
 from .flow_stage import FlowStage
+from .flow_team_member import FlowTeamMember
+from .flow_verify import FlowVerify
+from .flow_verify_step import FlowVerifyStep
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
 from .pipeline_document import PipelineDocument
+from .pipeline_header import PipelineHeader
 from .serialize_flow import serialize_flow
 from .stage_step import StageStep
 from .stages_body import StagesBody
@@ -37,7 +53,10 @@ logger = logging.getLogger(__name__)
 # assembled; afm pauses such a stage until a manual launch). The author
 # script directives (``before_script``/``script``/``after_script``) are translated
 # to ``script_before``/``script``/``script_after`` and slotted after ``skills``;
-# they appear only when authored, so flow-files without them compile byte-identically.
+# a list payload is the script's lines, joined with newlines into one
+# multi-line string (shell-identical to authoring the same text as a block
+# scalar); they appear only when authored, so flow-files without them compile
+# byte-identically.
 # ``script_timeout`` (str) sits immediately after ``script_after`` — the
 # translated form of the authoring ``timeout`` directive — and is likewise
 # present only when authored (or directly authored under its output name).
@@ -54,7 +73,14 @@ logger = logging.getLogger(__name__)
 # emitted under the alignment method — ``True`` on a participating stage, an
 # explicit ``False`` on every non-participating one. A stage of a memory-free
 # workflow carries neither key, so pipelines without memory participation
-# compile byte-identically.
+# compile byte-identically. ``assistants`` (list of FlowAssistant) —
+# the compiled form of the workflow stage attachments, present only when
+# the stage carries a non-empty effective attachment list (uniform across
+# every loop-expanded copy), so attachment-free workflows compile
+# byte-identically. ``verify`` (FlowVerify) closes the list — the compiled
+# form of the workflow stage gates, present only when the stage carries a
+# non-empty effective gates list (uniform across every loop-expanded copy),
+# so gate-free workflows compile byte-identically.
 _CANONICAL_KEY_ORDER = [
     "interactive",
     "auto_approve",
@@ -73,6 +99,8 @@ _CANONICAL_KEY_ORDER = [
     "script_timeout",
     "reflect",
     "memory_use",
+    "assistants",
+    "verify",
 ]
 
 # The fixed project-memory root of the emitted memory block. The authored
@@ -139,6 +167,30 @@ _ROLE_ALIASES: dict[str, str] = {
     "planner": "planning",
     "executor": "implementation",
     "reviewer": "review",
+}
+
+# The generated profile-id prefix — every flow-referenced assistant binds to
+# a ``goga-<name>`` profile that the engine configuration materializes for
+# the flow (the single binding site; ``afm_config`` derives its profile ids
+# from the emitted surface, never from a second composition).
+_PROFILE_PREFIX = "goga-"
+
+# The attachment ``gate`` → afm ``mode`` vocabulary (step 4.10). Written
+# explicitly on every attachment — the engine default is advisory and is
+# never relied upon.
+_GATE_MODE: dict[bool, str] = {True: "required", False: "advisory"}
+
+# The attachment ``when`` → afm ``trigger`` vocabulary (step 4.10). Written
+# explicitly on every attachment — the engine default is ``one_shot`` and is
+# never relied upon (``checkpoints`` is written out even though it is the
+# authoring default). ``message`` maps to the resting engagement: the engine
+# sends no initial request, the helper waits for messages (one turn each) and
+# stays attached afterwards.
+_WHEN_TRIGGER: dict[str, str] = {
+    "start": "one_shot",
+    "checkpoints": "checkpoints",
+    "finish": "on_completion",
+    "message": "on_message",
 }
 
 
@@ -230,8 +282,11 @@ def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
             (author ``roles``), ``interactive`` (author ``communication``),
             ``auto_run`` (author ``trigger``), ``buttons`` (author the workflow
             ``notes`` instruction), ``reflect``/``memory_use`` (author the
-            workflow memory instructions) — with the message naming the
-            authoring-side field.
+            workflow memory instructions), ``assistants`` (author the workflow
+            stage attachments), ``gates``/``verify`` (author the workflow
+            stage gates — ``verify`` is a compiled-only key, never an
+            authoring-side one) — with the message naming the authoring-side
+            field.
     """
     if "agents" in body:
         raise StructuralError("agents key is forbidden in stage body; use roles")
@@ -250,6 +305,15 @@ def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
 
     if "memory_use" in body:
         raise StructuralError("memory_use key is forbidden in stage body; use memory in workflow.stages")
+
+    if "assistants" in body:
+        raise StructuralError("assistants key is forbidden in stage body; use assistants in workflow.stages")
+
+    if "gates" in body:
+        raise StructuralError("gates key is forbidden in stage body; use gates in workflow.stages")
+
+    if "verify" in body:
+        raise StructuralError("verify key is forbidden in stage body; use gates in workflow.stages")
 
 
 def _validate_trigger(body: dict[str, Any]) -> str | None:
@@ -336,11 +400,122 @@ def _assemble_memory_keys(source: dict[str, Any], memory_fields: dict[str, Any] 
         source.update(memory_fields)
 
 
-def _canonical_fields(
+def _assemble_assistants(source: dict[str, Any], assistants: list[FlowAssistant] | None) -> None:
+    """Assign the stage's resolved attachment entries into the output fields dict.
+
+    Args:
+        source: The REBUILT body dict (authoring keys already translated) —
+            mutated in place by the assignment (the caller's fresh dict, never
+            the caller's original parsed body).
+        assistants: The stage's resolved attachment entries (already built by
+            ``_collaboration_emission`` — one list per base stage, shared by
+            every loop-expanded copy), or ``None``/empty when the stage
+            carries none. Assigned as-is BEFORE the canonical-order loop, which
+            deep-copies the value like every other field (so ``FlowStage.fields``
+            never aliases the emission's list); ``None`` or empty assembles no
+            key at all.
+    """
+    if assistants:
+        source["assistants"] = assistants
+
+
+def _assemble_verify(source: dict[str, Any], verify: FlowVerify | None) -> None:
+    """Assign the stage's compiled gate into the output fields dict.
+
+    Args:
+        source: The REBUILT body dict (authoring keys already translated) —
+            mutated in place by the assignment (the caller's fresh dict, never
+            the caller's original parsed body).
+        verify: The stage's compiled gate (already built by
+            ``_gates_emission`` — the same ``FlowVerify`` for every
+            loop-expanded copy of one base stage), or ``None`` when the stage
+            carries none. Assigned as-is BEFORE the canonical-order loop, which
+            deep-copies the value like every other field (so
+            ``FlowStage.fields`` never aliases the emission's gate); ``None``
+            assembles no key at all.
+    """
+    if verify is not None:
+        source["verify"] = verify
+
+
+def _reject_conflicting_stage_action(body: dict[str, Any], stage_name: str) -> None:
+    """Reject a stage body whose script action conflicts with another action slot.
+
+    Args:
+        body: The translated step body (the ``script_before``/``script``/
+            ``script_after`` output keys; ``prompt``/``skills``/``command`` as
+            carried).
+        stage_name: The stage id (used in the error messages — for
+            loop-expanded copies this is ``NAME-i``).
+
+    Raises:
+        StructuralError: When the body carries ``script`` together with
+            ``prompt``/``skills`` (the script action has no prompt surface),
+            or together with ``command`` — the stage action is one, the agent
+            exec target or the script. A ``command`` key authored verbatim in
+            a stage body rides the unknown-key passthrough (it is not
+            pipeline vocabulary); the workflow agent-instruction path is
+            rejected at the 4a override pass with its own message.
+    """
+    if "script" in body and ("prompt" in body or "skills" in body):
+        raise StructuralError(f"script is mutually exclusive with prompt/skills in stage {stage_name}")
+
+    if "script" in body and "command" in body:
+        raise StructuralError(f"script is mutually exclusive with command in stage {stage_name}")
+
+
+# The authored name of each translated script-directive output key — the
+# structural error names what the author wrote, not the translation target.
+_SCRIPT_DIRECTIVE_AUTHORED_KEYS = {
+    "script_before": "before_script",
+    "script": "script",
+    "script_after": "after_script",
+}
+
+
+def _normalize_script_directives(body: dict[str, Any], stage_name: str) -> None:
+    """Validate the translated script directive values and join list payloads in place.
+
+    Args:
+        body: The REBUILT body dict (authoring keys already translated to
+            ``script_before``/``script``/``script_after``) — mutated in place
+            by the assignment; a list payload is replaced with its
+            newline-joined string.
+        stage_name: The stage id (used in the structural error message — for
+            loop-expanded copies this is ``NAME-i``).
+
+    Raises:
+        StructuralError: When a script directive value is neither a ``str``
+            (carried verbatim) nor a non-empty list of non-empty strings
+            (joined with newlines — shell-identical to authoring the same
+            text as a block scalar). The message names the AUTHORED key.
+    """
+    for output_key, authored_key in _SCRIPT_DIRECTIVE_AUTHORED_KEYS.items():
+        if output_key not in body:
+            continue
+
+        value = body[output_key]
+
+        if isinstance(value, list):
+            if not value or not all(isinstance(line, str) and line for line in value):
+                raise StructuralError(
+                    f"{authored_key} must be a string or a non-empty list of non-empty strings in stage {stage_name}",
+                )
+
+            body[output_key] = "\n".join(value)
+        elif not isinstance(value, str):
+            raise StructuralError(
+                f"{authored_key} must be a string or a non-empty list of non-empty strings in stage {stage_name}",
+            )
+
+
+def _canonical_fields(  # noqa: PLR0913, PLR0917 — the six companion parameters are the step-5 assembly contract
     body: dict[str, Any],
     stage_name: str,
     notes: dict[str, str] | None = None,
     memory_fields: dict[str, Any] | None = None,
+    assistants_fields: list[FlowAssistant] | None = None,
+    verify_fields: FlowVerify | None = None,
 ) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value; never mutates ``body``.
 
@@ -351,7 +526,9 @@ def _canonical_fields(
             (or the single ``["auto"]`` default), ``communication`` →
             ``interactive``, ``trigger: manual`` → ``auto_run: false``,
             ``timeout`` → ``script_timeout``, ``before_script``/``script``/
-            ``after_script`` → ``script_before``/``script``/``script_after`` —
+            ``after_script`` → ``script_before``/``script``/``script_after``
+            (a list payload joined with newlines into one multi-line
+            string) —
             and never reach the output as unknown keys; the sentinel is read
             (not popped) and dropped. In a body carrying ``script`` no
             ``agents`` key is assembled at all (afm rejects the combination).
@@ -369,6 +546,20 @@ def _canonical_fields(
             ``None``/empty when the stage carries none. Read-only input —
             assigned into the assembled fields by ``_assemble_memory_keys``,
             never threaded into ``body``.
+        assistants_fields: The resolved attachment entries for this stage
+            (already built by ``_collaboration_emission`` — the same list for
+            every loop-expanded copy of one base stage), or ``None``/empty
+            when the stage carries none. Read-only input — assigned into the
+            assembled fields by ``_assemble_assistants`` before the
+            canonical-order loop (the loop deep-copies it like every other
+            field), never threaded into ``body``.
+        verify_fields: The compiled stage gate for this stage (already built
+            by ``_gates_emission`` — the same ``FlowVerify`` for every
+            loop-expanded copy of one base stage), or ``None`` when the stage
+            carries none. Read-only input — assigned into the assembled
+            fields by ``_assemble_verify`` before the canonical-order loop
+            (the loop deep-copies it like every other field), never threaded
+            into ``body``.
 
     Returns:
         A new dict in canonical key order with deep-copied values — known keys
@@ -377,7 +568,9 @@ def _canonical_fields(
         approve directive (``auto``/``dialog``) with ``planner`` in the raw
         roles; ``auto_run`` (always ``False``) only for an effective
         ``trigger: manual``; ``buttons``/memory keys only from their function
-        arguments.
+        arguments; ``assistants`` only from the ``assistants_fields``
+        argument; ``verify`` only from the ``verify_fields`` argument (the
+        canonical LAST slot).
 
     Raises:
         StructuralError: If ``body`` carries the legacy ``agents`` key — the
@@ -391,12 +584,20 @@ def _canonical_fields(
             instruction; ``buttons`` is output-only. Or if ``body`` carries an
             authoring ``reflect``/``memory_use`` key — the memory stage keys are
             authored ONLY through the workflow memory instructions;
-            both are output-only. Or if ``body`` carries a
+            both are output-only. Or if ``body`` carries an authoring
+            ``assistants`` key — attachments are authored ONLY through the
+            workflow stage attachments; ``assistants`` is output-only. Or if
+            ``body`` carries an authoring ``gates`` key or a raw ``verify`` key
+            — stage gates are authored ONLY through the workflow stage gates;
+            ``verify`` is a compiled-only key. Or if ``body`` carries a
             ``trigger`` value outside the
             closed set ``on_success``/``manual`` (a ``None`` value counts as
             absent). Or if
             ``body`` carries ``script`` together with ``prompt`` and/or ``skills``
-            — they are mutually exclusive. Or if ``body`` carries a present
+            — they are mutually exclusive. Or if a script directive value
+            (``before_script``/``script``/``after_script``) is neither a
+            ``str`` nor a non-empty list of non-empty strings. Or if ``body``
+            carries a present
             non-string ``timeout`` value, or a ``timeout`` without ``script``
             in the same body (``script_timeout`` scopes to the script action).
     """
@@ -437,12 +638,18 @@ def _canonical_fields(
         if key not in (_APPROVE_SENTINEL, "trigger", "timeout")
     }
 
-    # ``script`` is mutually exclusive with ``prompt`` and ``skills``;
-    # ``before_script``/``after_script`` are compatible (checked against the
+    # ``script`` is mutually exclusive with ``prompt``/``skills`` and with
+    # ``command`` — the stage action is one. ``before_script``/
+    # ``after_script`` are compatible with everything (checked against the
     # translated ``script`` key, so it fires whether ``script`` was authored
     # directly or — it cannot be — derived).
-    if "script" in body and ("prompt" in body or "skills" in body):
-        raise StructuralError(f"script is mutually exclusive with prompt/skills in stage {stage_name}")
+    _reject_conflicting_stage_action(body, stage_name)
+
+    # The script directive payloads — a list value is the script's lines,
+    # joined with newlines into one multi-line string; any other non-str
+    # value is a structural error naming the authored key (see
+    # ``_normalize_script_directives``).
+    _normalize_script_directives(body, stage_name)
 
     # The stage timeout directive — validated and translated by the same pass
     # as script exclusivity (non-string → requires-script → assign; see
@@ -489,6 +696,22 @@ def _canonical_fields(
     # loop so both keys land in their canonical slots after ``script_timeout``.
     _assemble_memory_keys(source, memory_fields)
 
+    # Resolved attachment entries (step 4.10). The attachment list travels as
+    # a function argument — never threaded through the body (the authoring
+    # prohibition above would trip on a body ``assistants`` key) — and is
+    # assigned by ``_assemble_assistants`` BEFORE the canonical-order loop so
+    # it lands in its canonical slot after ``memory_use``. The
+    # canonical-order loop below deep-copies the value like every other field.
+    _assemble_assistants(source, assistants_fields)
+
+    # Compiled stage gate (step 4.11). The gate travels as a function
+    # argument — never threaded through the body (the authoring prohibition
+    # above would trip on a body ``gates``/``verify`` key) — and is assigned
+    # by ``_assemble_verify`` BEFORE the canonical-order loop so it lands in
+    # its canonical LAST slot after ``assistants``. The canonical-order loop
+    # below deep-copies the value like every other field.
+    _assemble_verify(source, verify_fields)
+
     # An approve directive that drives the roles effect (``auto``/``dialog``) +
     # ``planner`` in the raw roles ⇒ emit ``auto_approve: true`` (canonical slot
     # right after ``interactive``). The two approve effects are independent:
@@ -523,19 +746,23 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
     Returns:
         The effective per-stage override map keyed by stage name. Extend-seeded
         entries carry only ``agent``/``loop``/``approve`` (``manual``,
-        ``notes``, ``reflect``, and ``memory`` stay ``None``); stages-block
-        entries carry their full ``WorkflowStage``; merged entries combine them
-        per-field (a stages-block value wins whenever its field is not
-        ``None``), always carrying the stages-block ``manual``, ``notes``,
-        ``reflect``, and ``memory``.
+        ``notes``, ``reflect``, ``memory``, ``assistants``, and ``gates`` stay
+        ``None``); stages-block entries carry their full ``WorkflowStage``;
+        merged entries combine them per-field (a stages-block value wins
+        whenever its field is not ``None``), always carrying the stages-block
+        ``manual``, ``notes``, ``reflect``, ``memory``, ``assistants``, and
+        ``gates`` — without the explicit ``assistants``/``gates`` pass a stage
+        with BOTH an extend-entry and a stages-block entry would silently lose
+        its attachments or its gate.
     """
     effective: dict[str, WorkflowStage] = {}
 
     for name, ext in workflow.extend.items():
         # Extend-seeded default: only the inline fields an extend-entry can
-        # carry. ``manual``/``notes``/``reflect``/``memory`` stay ``None`` (the
-        # constructor defaults) — all four are stages-block-only
-        # (``parse_workflow`` rejects them in an extend-entry).
+        # carry. ``manual``/``notes``/``reflect``/``memory``/``assistants``/
+        # ``gates`` stay ``None`` (the constructor defaults) — all six are
+        # stages-block-only (``parse_workflow`` rejects them in an
+        # extend-entry).
         effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop, approve=ext.approve)
 
     for name, stg in workflow.stages.items():
@@ -545,9 +772,10 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             effective[name] = stg
             continue
         # Per-field overlay: stages-block wins whenever its field is not None.
-        # ``manual``, ``notes``, ``reflect``, and ``memory`` are passed
-        # explicitly — the extend seed carries none of them, and the
-        # constructor default (None) would silently drop the instruction.
+        # ``manual``, ``notes``, ``reflect``, ``memory``, ``assistants``, and
+        # ``gates`` are passed explicitly — the extend seed carries none of
+        # them, and the constructor default (None) would silently drop the
+        # instruction, the attachments, or the gate.
         effective[name] = WorkflowStage(
             agent=stg.agent if stg.agent is not None else base.agent,
             prompt=stg.prompt,
@@ -558,6 +786,8 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             notes=stg.notes,
             reflect=stg.reflect,
             memory=stg.memory,
+            assistants=stg.assistants,
+            gates=stg.gates,
         )
 
     return effective
@@ -686,6 +916,565 @@ def _memory_emission(
     return _MemoryEmission(block=block, keys_by_id=keys_by_id)
 
 
+def _check_repeat_correspondence(header: PipelineHeader, workflow: WorkflowDocument | None) -> None:
+    """Step 4.0 — cross-check the workflow repeat block against the header capability flag.
+
+    Args:
+        header: The parsed pipeline header (source of the ``repeatable``
+            capability flag).
+        workflow: The declarative workflow instructions, or ``None`` when no
+            workflow is applied (never an error — no block, no conflict).
+
+    Raises:
+        StructuralError: When the workflow document carries a repeat block
+            and the parsed header's ``repeatable`` flag is ``False``. The
+            workflow parser never sees the pipeline; this cell owns the
+            cross-reference check, and it fires BEFORE every reconstruction
+            error (extend refs, stage names, skip guards) so the conflict
+            surfaces first.
+    """
+    if workflow is not None and workflow.repeat is not None and not header.repeatable:
+        raise StructuralError(
+            "workflow repeat block requires a repeatable pipeline; author repeatable: true in the pipeline header"
+        )
+
+
+def _repeat_emission(header: PipelineHeader, workflow: WorkflowDocument | None) -> FlowRepeat | None:
+    """Step 6 — build the compiled repeat directive from the capability flag and the workflow block.
+
+    Args:
+        header: The parsed pipeline header (source of the ``repeatable``
+            capability flag).
+        workflow: The declarative workflow instructions, or ``None`` when no
+            workflow is applied.
+
+    Returns:
+        ``None`` when the header's ``repeatable`` flag is ``False`` (the key
+        is omitted from the output entirely — byte-identical compilation);
+        otherwise ALWAYS a ``FlowRepeat`` — built from the authored keys of
+        the workflow's ``WorkflowRepeat`` block when the workflow carries
+        one (authored keys only, no materialized defaults; an authored
+        ``0`` compiles as ``0``), else an instance carrying no key (the
+        scalar form — an absent workflow document and a workflow-free
+        compilation both land here).
+    """
+    if not header.repeatable:
+        return None
+
+    if workflow is not None and workflow.repeat is not None:
+        authored: WorkflowRepeat = workflow.repeat
+
+        return FlowRepeat(max_cycles=authored.max_cycles, keep_runs=authored.keep_runs)
+
+    return FlowRepeat()
+
+
+def _is_assistant_declaration(entry: WorkflowAssistant) -> bool:
+    """Return ``True`` when ``entry`` is a declaration (any of the five authoring fields is present).
+
+    Args:
+        entry: One attachment entry (or catalog entry) of the workflow. The
+            discriminator is PRESENCE, not truthiness — ``prompt: ""``,
+            ``skills: []``, and ``env: {}`` are authored values that make
+            the entry a declaration; a reference carries none of the five
+            fields (``gate``/``when`` are attachment parameters, never
+            content).
+
+    Returns:
+        ``True`` when any of ``prompt``, ``skills``, ``agent``, ``delegate``,
+        ``env`` is not ``None`` — the five-field declaration rule shared by
+        every consuming cell.
+    """
+    return (
+        entry.prompt is not None
+        or entry.skills is not None
+        or entry.agent is not None
+        or entry.delegate is not None
+        or entry.env is not None
+    )
+
+
+def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, tuple[WorkflowAssistant, str]]:
+    """Build the assistant namespace with each declaration's authoring site.
+
+    Args:
+        workflow: The declarative workflow instructions. The catalog comes
+            first (authored order), then every inline stage declaration in
+            authored stage order. The parser (and the overlay merge) already
+            guarantee no duplicate names, so a later declaration can never
+            shadow a catalog entry of the same name.
+
+    Returns:
+        The name → (declaration, site) map every attachment reference
+        resolves against — the site is ``workflow.assistants.<name>`` for a
+        catalog entry and ``workflow.stages.<stage>.assistants.<name>`` for
+        an inline declaration (the content check names it).
+    """
+    namespace: dict[str, tuple[WorkflowAssistant, str]] = {
+        name: (entry, f"workflow.assistants.{name}") for name, entry in workflow.assistants.items()
+    }
+
+    for stage_name, stage in workflow.stages.items():
+        for entry in (stage.assistants or {}).values():
+            if _is_assistant_declaration(entry):
+                namespace[entry.name] = (entry, f"workflow.stages.{stage_name}.assistants.{entry.name}")
+
+    return namespace
+
+
+def _team_members(workflow: WorkflowDocument) -> list[FlowTeamMember]:
+    """Build the team list — one member per catalog entry in authored order.
+
+    Args:
+        workflow: The declarative workflow instructions (source of the
+            catalog). Only catalog entries become team members — an inline
+            stage declaration attaches to its stage(s) without joining the
+            run-level team.
+
+    Returns:
+        The ``FlowTeamMember`` list in catalog order — ``instruction`` is the
+        authored prompt (the empty string when none), ``skills`` the authored
+        list (empty when none); an empty catalog yields an empty list.
+    """
+    return [
+        FlowTeamMember(
+            id=name,
+            title=name,
+            profile=f"{_PROFILE_PREFIX}{name}",
+            instruction=(entry.prompt if entry.prompt is not None else ""),
+            skills=(entry.skills if entry.skills is not None else []),
+        )
+        for name, entry in workflow.assistants.items()
+    ]
+
+
+def _translate_body_agents(body: dict[str, Any]) -> list[str]:
+    """Return the translated agents of ``body`` — authored roles, else the default.
+
+    Args:
+        body: One working step body (the same body ``_canonical_fields``
+            translates later). Raw ``roles`` — not yet translated.
+
+    Returns:
+        ``[translate_role(role) for role in roles]`` when the body carries a
+        usable ``roles`` list, else ``list(_DEFAULT_AGENTS)`` — the same value
+        the stage assembly emits as ``agents``.
+
+    Raises:
+        StructuralError: When the verbatim ``roles`` list carries a non-``str``
+            element — the same guard ``_inject_defaults`` applies, mirrored
+            here because the attachment checks run BEFORE that translation
+            pass (a raw ``TypeError`` from the alias lookup must never escape
+            ``compile_flow``).
+    """
+    if _has_usable_roles(body):
+        for role in body["roles"]:
+            if not isinstance(role, str):
+                raise StructuralError(f"non-str value in stage roles list: {role!r}")
+
+        return [translate_role(role) for role in body["roles"]]
+
+    return list(_DEFAULT_AGENTS)
+
+
+def _reject_attachment_body(stage_name: str, assistant_name: str, body: dict[str, Any]) -> None:
+    """Reject an attachment on a body that cannot host one (checks 3 and 4 of step 4.10).
+
+    Args:
+        stage_name: The BASE stage id (the authoring site —
+            ``workflow.stages.NAME``), used in the error messages.
+        assistant_name: The attached assistant's name, used in the error
+            messages.
+        body: One produced copy's working body (each loop-expanded copy is
+            checked).
+
+    Raises:
+        StructuralError: When ``body`` carries ``script`` (a script stage has
+            no prompt surface to attach to), or when the body's translated
+            agents are exactly ``["planning"]`` — a planning-only stage
+            delegates its thinking and accepts no assistants. The comparison
+            is TRANSLATED, so an authored ``roles: [planning]`` equals
+            ``roles: [planner]``.
+    """
+    if "script" in body:
+        raise StructuralError(
+            f"assistant is forbidden on a script stage in workflow.stages.{stage_name}: {assistant_name}"
+        )
+
+    if _translate_body_agents(body) == ["planning"]:
+        raise StructuralError(
+            f"assistant is forbidden on a planning-only stage in workflow.stages.{stage_name}: {assistant_name}"
+        )
+
+
+def _assistants_by_id(
+    effective: dict[str, WorkflowStage],
+    expanded: list[PhaseStep | StageStep],
+    expanded_ids: dict[str, list[str]],
+    namespace: dict[str, WorkflowAssistant],
+    catalog: dict[str, WorkflowAssistant],
+) -> dict[str, list[FlowAssistant]]:
+    """Step 4.10 attachment walk — resolve every attachment and map it per final id.
+
+    Args:
+        effective: The resolved per-stage override map (from
+            ``_effective_overrides``), keyed by stage name — the source of
+            each stage's effective attachment map (extend-seeded entries
+            carry none; merged entries carry the stages-block map).
+        expanded: The loop-expanded working step sequence — the source of each
+            produced id's body for the script/planning checks. Skipped stages
+            are already removed, so their attachments are never checked.
+        expanded_ids: The base-name → produced-ids map from ``_expand_loops``
+            (every final id appears in exactly one produced-ids list).
+        namespace: The assistant namespace (from ``_assistant_namespace``,
+            unwrapped to its entries at this boundary) — the resolution
+            source of every reference.
+        catalog: The workflow's assistant catalog (``workflow.assistants``) —
+            the only source of team members, hence the only declarations
+            whose ``skills`` reach the engine.
+
+    Returns:
+        The final-id → attachment-entries map. Entries are built once per base
+        stage and mapped onto every produced id — loop-expanded copies share
+        the SAME list, uniform across copies. A WARNING is logged (once per
+        assistant name) for every emitted inline declaration whose authored
+        ``skills`` have no engine channel — the stage entry carries no
+        ``skills`` key (the engine rejects it) and the team draws from the
+        catalog alone, so the warning replaces a silent drop.
+
+    Raises:
+        StructuralError: On any of the four attachment checks, in contract
+            order per entry (authored key order): an unknown reference, the
+            same name twice in one stage's effective attachment map (a
+            programmatic contribution — an authored map cannot repeat a
+            key), an attachment on a script-stage body, an attachment on a
+            planning-only body (each copy's body is checked).
+    """
+    bodies = {step.name: step.body for step in expanded}
+    assistants_by_id: dict[str, list[FlowAssistant]] = {}
+    skills_warned: set[str] = set()
+
+    for base_name, produced_ids in expanded_ids.items():
+        stage = effective.get(base_name)
+        attachments = stage.assistants if stage is not None else None
+        if not attachments:
+            continue
+
+        entries: list[FlowAssistant] = []
+        seen: set[str] = set()
+
+        for entry in attachments.values():
+            # Check 1 — a reference must name a namespace member; a
+            # declaration is its own source.
+            source = entry if _is_assistant_declaration(entry) else namespace.get(entry.name)
+            if source is None:
+                raise StructuralError(f"unknown assistant reference in workflow.stages.{base_name}: {entry.name}")
+
+            # Check 2 — the same name twice in one stage's effective
+            # attachment map (a programmatic contribution — an authored map
+            # cannot repeat a key; the guard stays as defense).
+            if entry.name in seen:
+                raise StructuralError(f"duplicate assistant in workflow.stages.{base_name}: {entry.name}")
+            seen.add(entry.name)
+
+            # Checks 3+4 — every produced copy's body must accept the
+            # attachment.
+            for produced_id in produced_ids:
+                _reject_attachment_body(base_name, entry.name, bodies[produced_id])
+
+            # A reference takes the declaration's ``prompt`` while keeping its
+            # OWN ``gate``/``when``; a declaration is its own source for every
+            # field. A CATALOG declaration's ``skills`` reach the engine
+            # through its ``team`` member entry (the engine strict-parses
+            # stage entries and rejects a ``skills`` key there); an inline
+            # declaration has no team member, so its authored ``skills`` have
+            # no channel — warn instead of dropping them silently.
+            if source.skills is not None and entry.name not in catalog and entry.name not in skills_warned:
+                skills_warned.add(entry.name)
+                logger.warning(
+                    "compile_flow: skills of an inline assistant declaration cannot "
+                    "reach the engine; declare the assistant in the catalog to deliver them",
+                    extra={"stage": base_name, "assistant": entry.name},
+                )
+
+            entries.append(
+                FlowAssistant(
+                    profile=f"{_PROFILE_PREFIX}{entry.name}",
+                    title=entry.name,
+                    instruction=(source.prompt if source.prompt is not None else ""),
+                    mode=_GATE_MODE[entry.gate],
+                    trigger=_WHEN_TRIGGER[entry.when],
+                )
+            )
+
+        for produced_id in produced_ids:
+            assistants_by_id[produced_id] = entries
+
+    return assistants_by_id
+
+
+@dataclass(kw_only=True)
+class _CollaborationEmission:
+    """The step-4.10 result — the collaboration block, the team list, and the per-id attachments.
+
+    Args:
+        block: The compiled collaboration block — constructed on EVERY
+            compilation (``mode: assistants`` always; ``max_depth`` the
+            authored delegation depth or ``None``).
+        team: The compiled team list — one ``FlowTeamMember`` per catalog
+            entry in authored order; empty when the workflow carries no
+            catalog (the serializer then omits the key).
+        assistants_by_id: The final-id → attachment-entries map consumed per
+            step by ``_canonical_fields`` — the same list for every
+            loop-expanded copy of one base stage.
+    """
+
+    block: FlowCollaboration
+    team: list[FlowTeamMember]
+    assistants_by_id: dict[str, list[FlowAssistant]]
+
+
+def _collaboration_emission(
+    workflow: WorkflowDocument | None,
+    effective: dict[str, WorkflowStage],
+    expanded: list[PhaseStep | StageStep],
+    expanded_ids: dict[str, list[str]],
+) -> _CollaborationEmission:
+    """Step 4.10 — compute the collaboration block, the team list, and the per-id attachments.
+
+    Args:
+        workflow: The declarative workflow instructions, or ``None`` when no
+            workflow is applied — the block still emits (``mode: assistants``,
+            no ``max_depth``), the team is empty, and no attachments resolve,
+            so a workflow-less compile differs from the pre-collaboration
+            output only by the two-line block.
+        effective: The resolved per-stage override map (from
+            ``_effective_overrides``), keyed by stage name. Read-only input —
+            the source of each stage's effective attachment map.
+        expanded: The loop-expanded working step sequence. Read-only input —
+            the source of each produced id's body.
+        expanded_ids: The base-name → produced-ids map from ``_expand_loops``.
+            Read-only input.
+
+    Returns:
+        The ``_CollaborationEmission``. The block is unconditional (every
+        compiled flow carries it); the team list and the attachment entries
+        derive from the workflow's catalog and attachments. The emission is
+        byte-stable — the only diagnostic is the WARNING logged for an
+        emitted inline declaration whose authored ``skills`` have no engine
+        channel (never an output-side key).
+
+    Raises:
+        StructuralError: When a namespace member resolves neither ``prompt``
+            nor ``skills`` — the content check over the (entry, site) pairs
+            of ``_assistant_namespace`` (an override-style entry naming an
+            assistant no tool delivered; a reference is never a member).
+    """
+    if workflow is None:
+        return _CollaborationEmission(
+            block=FlowCollaboration(mode="assistants", max_depth=None),
+            team=[],
+            assistants_by_id={},
+        )
+
+    namespace = _assistant_namespace(workflow)
+
+    # The content check — every namespace member must resolve a prompt or a
+    # skills list after the overlay merge; an override-style entry naming an
+    # assistant no tool delivered stops compilation with a readable error
+    # naming it and its authoring site. A reference (``gate``/``when`` only)
+    # is never a namespace member and is never checked.
+    for name, (entry, site) in namespace.items():
+        if entry.prompt is None and entry.skills is None:
+            raise StructuralError(f"assistant {name} at {site} resolves neither prompt nor skills")
+
+    declarations = {name: entry for name, (entry, _site) in namespace.items()}
+
+    return _CollaborationEmission(
+        block=FlowCollaboration(
+            mode="assistants",
+            max_depth=(workflow.delegation.depth if workflow.delegation is not None else None),
+        ),
+        team=_team_members(workflow),
+        assistants_by_id=_assistants_by_id(effective, expanded, expanded_ids, declarations, workflow.assistants),
+    )
+
+
+def _reject_gate_body(stage_name: str, body: dict[str, Any]) -> None:
+    """Reject a gate on a body that cannot host one (the step-4.11 body checks).
+
+    Args:
+        stage_name: The BASE stage id (the authoring site —
+            ``workflow.stages.NAME``), used in the error messages.
+        body: The ORIGINAL produced copy's working body (the copies share
+            shape, so the first produced id's body decides for all of them).
+
+    Raises:
+        StructuralError: When ``body`` carries ``script`` (a script stage
+            has no prompt surface to gate), or when the body's translated
+            agents are exactly ``["planning"]`` — a planning-only stage
+            delegates its thinking and cannot host a completion gate. The
+            comparison is TRANSLATED, so an authored ``roles: [planning]``
+            equals ``roles: [planner]``.
+    """
+    if "script" in body:
+        raise StructuralError(f"gates are forbidden on a script stage in workflow.stages.{stage_name}")
+
+    if _translate_body_agents(body) == ["planning"]:
+        raise StructuralError(f"gates are forbidden on a planning-only stage in workflow.stages.{stage_name}")
+
+
+def _verify_step_from_authored(stage_name: str, index: int, step: WorkflowGateStep) -> FlowVerifyStep:
+    """Build one emitted verify step from an authored check step (step 4.11).
+
+    Args:
+        stage_name: The BASE stage id (the authoring site —
+            ``workflow.stages.NAME``), used in the error message.
+        index: The step's position in the stage's effective gates list,
+            used in the error message.
+        step: One authored ``WorkflowGateStep`` of a stage's effective gates
+            list. Exactly one of ``script``/``agent`` is not ``None`` and
+            ``prompt`` is ``None`` on a shell step (both parse guarantees,
+            re-checked here).
+
+    Returns:
+        The ``FlowVerifyStep`` mirror: a shell step carries ``run`` with the
+        timeout materialized to ``"1h"`` when not authored (a goga-side
+        product default, not an engine contract); an AI step carries
+        ``command`` composed from the in-container wrapper path — directly,
+        no host-side resolution, no agent-name existence check — and
+        materializes NO timeout default. ``name`` and ``prompt`` carry
+        verbatim; an authored ``timeout`` carries verbatim either way.
+
+    Raises:
+        StructuralError: When ``step`` carries both or neither of
+            ``script``/``agent``, or carries ``prompt`` alongside ``script``
+            (the engine accepts ``prompt`` on AI steps only). Authored files
+            hit the parser's own checks first; a programmatic workflow (a
+            tool contribution rides the overlay merge without a parse) can
+            reach the compiler with a degenerate step, and the guard names
+            the authoring site with the parser's message instead of
+            composing a wrapper path over a ``None`` agent or emitting a
+            ``run``+``prompt`` step the engine rejects at load.
+    """
+    if (step.script is None) == (step.agent is None):
+        raise StructuralError(
+            f"gates step must carry exactly one of script/agent in workflow.stages.{stage_name}.gates[{index}]",
+        )
+
+    if step.prompt is not None and step.script is not None:
+        # The engine accepts ``prompt`` on AI steps only — the parser binds
+        # it to an agent step at authoring time; the guard mirrors that
+        # binding for a programmatic workflow (same defensive surface).
+        raise StructuralError(
+            f"prompt is forbidden on a script gate step in workflow.stages.{stage_name}.gates[{index}]",
+        )
+
+    if step.script is not None:
+        return FlowVerifyStep(
+            name=step.name,
+            run=step.script,
+            timeout=(step.timeout if step.timeout is not None else "1h"),
+            prompt=step.prompt,
+        )
+
+    return FlowVerifyStep(
+        name=step.name,
+        command=_WRAPPER_PATH_TEMPLATE.format(agent=step.agent),
+        timeout=step.timeout,
+        prompt=step.prompt,
+    )
+
+
+def _verify_from_steps(steps: list[FlowVerifyStep], settings: WorkflowGates | None) -> FlowVerify:
+    """Build the stage gate from its compiled steps and the workflow settings block.
+
+    Args:
+        steps: The compiled verify steps of one gated stage, in authored order.
+        settings: The workflow-level gates settings block, or ``None`` when
+            the workflow authored none (``gates is not None`` ⇔ at least one
+            authored key — the parser normalizes emptiness to ``None``).
+
+    Returns:
+        The ``FlowVerify``: with settings authored, the container form — the
+        authored keys only, translated into the engine vocabulary
+        (``patience`` → ``review_patience``, ``max_iterations`` →
+        ``max_failures``, ``fresh_correction`` unchanged); without settings,
+        an instance carrying no setting IS the list emission form.
+    """
+    if settings is None:
+        return FlowVerify(steps=steps)
+
+    return FlowVerify(
+        steps=steps,
+        max_failures=settings.max_iterations,
+        review_patience=settings.patience,
+        fresh_correction=settings.fresh_correction,
+    )
+
+
+def _gates_emission(
+    workflow: WorkflowDocument,
+    effective: dict[str, WorkflowStage],
+    expanded: list[PhaseStep | StageStep],
+    expanded_ids: dict[str, list[str]],
+) -> dict[str, FlowVerify]:
+    """Step 4.11 — translate every gated stage's check steps into per-id stage gates.
+
+    Args:
+        workflow: The declarative workflow instructions (the workflow-less
+            compile never reaches this helper — its ``verify_by_id`` is the
+            empty map by construction). The settings source is
+            ``workflow.gates``.
+        effective: The resolved per-stage override map (from
+            ``_effective_overrides``), keyed by stage name. Read-only input —
+            the source of each stage's effective gates list.
+        expanded: The loop-expanded working step sequence — the source of each
+            produced id's body for the script/planning checks. Skipped stages
+            are already removed, so their gates are never checked.
+        expanded_ids: The base-name → produced-ids map from ``_expand_loops``
+            (every final id appears in exactly one produced-ids list).
+            Read-only input.
+
+    Returns:
+        The final-id → gate map. One ``FlowVerify`` is built per gated base
+        stage (the same object shared across its loop-expanded copies —
+        ``_canonical_fields`` deep-copies it per stage at assembly) and
+        mapped onto every produced id of that base name; ungated stages map
+        to nothing. The settings ride on every gated stage iff the
+        workflow-level block authored any key.
+
+    Raises:
+        StructuralError: When a gated stage's body carries ``script``, when
+        its translated agents are exactly ``["planning"]``, or when a check
+        step carries both or neither of ``script``/``agent`` (see
+        ``_verify_step_from_authored``) — each check runs once per stage
+        name on the first produced copy's body (the copies share shape),
+        after skip removal and loop expansion.
+    """
+    settings = workflow.gates
+    bodies = {step.name: step.body for step in expanded}
+    verify_by_id: dict[str, FlowVerify] = {}
+
+    for base_name, produced_ids in expanded_ids.items():
+        stage = effective.get(base_name)
+        gates = stage.gates if stage is not None else None
+        if not gates:
+            continue
+
+        # The first produced copy's body decides for the whole group — the
+        # copies share shape (deep copies of one override-applied body).
+        _reject_gate_body(base_name, bodies[produced_ids[0]])
+
+        steps = [_verify_step_from_authored(base_name, index, authored) for index, authored in enumerate(gates)]
+        verify = _verify_from_steps(steps, settings)
+
+        for produced_id in produced_ids:
+            verify_by_id[produced_id] = verify
+
+    return verify_by_id
+
+
 def _merge_skills(
     pipeline_skills: list[str] | None,
     workflow_skills: list[str] | None,
@@ -721,6 +1510,26 @@ def _merge_skills(
     return merged if merged else None
 
 
+def _compose_agent_command(body: dict[str, Any], name: str, agent: str) -> None:
+    """Compose one stage's agent override into the working body's ``command`` slot.
+
+    Args:
+        body: The working step body (mutated in place on success).
+        name: The stage name — the authoring site, used in the error message.
+        agent: The effective agent id.
+
+    Raises:
+        StructuralError: When the body authors ``script`` — the stage's
+            action is the script, and the composed ``command`` would ride the
+            flow-file beside it with no defined engine precedence (same
+            exclusivity family as ``_reject_conflicting_stage_action``).
+    """
+    if "script" in body:
+        raise StructuralError(f"agent is forbidden on a script stage in workflow.{name}: {agent}")
+
+    body["command"] = _WRAPPER_PATH_TEMPLATE.format(agent=agent)
+
+
 def _apply_per_stage_overrides(
     steps: list[PhaseStep | StageStep],
     effective: dict[str, WorkflowStage],
@@ -739,8 +1548,12 @@ def _apply_per_stage_overrides(
             ``True`` forces manual, ``False`` cancels it, ``None`` leaves it.
 
     Raises:
-        StructuralError: When a ``manual: false`` entry targets a stage whose
-            working body carries no ``trigger: manual`` (nothing to cancel).
+        StructuralError: When an ``agent`` instruction targets a stage whose
+            body authors ``script`` (the stage's action is the script — the
+            composed ``command`` would ride the flow-file beside it with no
+            defined engine precedence), or when a ``manual: false`` entry
+            targets a stage whose working body carries no ``trigger: manual``
+            (nothing to cancel).
     """
     steps_by_name = {step.name: step for step in steps}
 
@@ -752,7 +1565,10 @@ def _apply_per_stage_overrides(
             # silent, intentional skip. No warning.
             continue
         if stage.agent is not None:
-            step.body["command"] = _WRAPPER_PATH_TEMPLATE.format(agent=stage.agent)
+            # An agent instruction composes the body's exec target; a script
+            # body's action IS its script — the two are mutually exclusive
+            # (see ``_compose_agent_command``).
+            _compose_agent_command(step.body, name, stage.agent)
         if stage.prompt is not None:
             step.body["description"] = stage.prompt
 
@@ -1264,7 +2080,13 @@ def _reconstruct_body(
     fmt: BodyFormat,
     body: PhasesBody | StagesBody,
     workflow: WorkflowDocument,
-) -> tuple[list[PhaseStep | StageStep], dict[str, dict[str, str] | None], _MemoryEmission]:
+) -> tuple[
+    list[PhaseStep | StageStep],
+    dict[str, dict[str, str] | None],
+    _MemoryEmission,
+    _CollaborationEmission,
+    dict[str, FlowVerify],
+]:
     """Apply the workflow reconstruction branch, returning a NEW step sequence.
 
     Args:
@@ -1275,9 +2097,12 @@ def _reconstruct_body(
 
     Returns:
         The reconstructed step sequence (PHASES or STAGES steps), the
-        final-id → effective-notes map, and the ``_MemoryEmission`` (the
-        compiled memory block plus the final-id → memory-keys map). Both maps
-        travel as separate values — never threaded into the step bodies — and
+        final-id → effective-notes map, the ``_MemoryEmission`` (the compiled
+        memory block plus the final-id → memory-keys map), the
+        ``_CollaborationEmission`` (the compiled collaboration block, the team
+        list, and the final-id → attachment-entries map), and the final-id →
+        stage-gate map of step 4.11. The four companion values travel as
+        separate return values — never threaded into the step bodies — and
         are consumed per step by ``_canonical_fields`` (loop-expanded copies
         resolve through their base name, keeping the keys uniform across
         copies).
@@ -1285,8 +2110,11 @@ def _reconstruct_body(
     Raises:
         StructuralError: When a ``workflow.extend.<name>.before/.after`` ref
             matches no step name (4a1), when a ``workflow.stages`` name matches
-            no step name (4pre), or when every step is skipped (post-4skip
-            empty-body guard).
+            no step name (4pre), when every step is skipped (post-4skip
+            empty-body guard), on any attachment check of step 4.10
+            (unknown reference, duplicate name in one stage list, attachment
+            on a script or planning-only stage), or on any gates check of
+            step 4.11 (a gate on a script or planning-only stage).
     """
     steps: list[PhaseStep | StageStep] = [copy.deepcopy(step) for step in body.steps]
     _strict_validate_extend_refs(steps, workflow)
@@ -1302,10 +2130,14 @@ def _reconstruct_body(
     if fmt is BodyFormat.STAGES:
         _rewrite_external_depends_on(expanded, expanded_ids)
 
+    # The gates companion runs LAST (4.11, after the attachments of 4.10) so
+    # attachment errors fire before gates errors.
     return (
         expanded,
         _effective_notes_by_id(effective, expanded_ids),
         _memory_emission(workflow, effective, expanded_ids),
+        _collaboration_emission(workflow, effective, expanded, expanded_ids),
+        _gates_emission(workflow, effective, expanded, expanded_ids),
     )
 
 
@@ -1343,25 +2175,54 @@ def compile_flow(
 
     Returns:
         A ``(PipelineDocument, FlowDocument)`` documents tuple. The
-        ``PipelineDocument`` carries the parsed header (with ``header.roles``),
-        format, and the ORIGINAL body (always unprefixed, never the
-        reconstructed one); the ``FlowDocument`` carries the name, the
-        optionally project-name-prefixed description, optional top-level
-        prompt, optional top-level ``root_dir``, the optional compiled
+        ``PipelineDocument`` carries the parsed header (with ``header.roles``
+        and ``header.repeatable``), format, and the ORIGINAL body (always
+        unprefixed, never the reconstructed one); the ``FlowDocument``
+        carries the name, the optionally project-name-prefixed description,
+        optional top-level prompt, optional top-level ``root_dir``, the
+        optional compiled ``repeat`` directive (``None`` when the pipeline is
+        not repeatable — the key is omitted entirely; a repeatable pipeline
+        ALWAYS compiles one — the authored keys of the workflow's repeat
+        block, else the scalar form; emitted between ``description`` and
+        ``memory``), the optional compiled
         ``memory`` block (``None`` when memory does not participate; emitted
-        between ``description`` and ``stages``), and compiled stages (the
-        input ``roles`` field translated to the output ``agents`` field;
-        ``depends_on`` position-derived for PHASES, pass-through for STAGES).
+        between ``repeat`` and the collaboration block), the compiled
+        ``collaboration`` block (constructed on EVERY compilation — ``mode:
+        assistants`` always, ``max_depth`` from the workflow's delegation
+        block), the compiled ``team`` list (one member per catalog entry in
+        authored order; empty when the workflow carries no catalog), and
+        compiled stages (the input ``roles`` field translated to the output
+        ``agents`` field; ``depends_on`` position-derived for PHASES,
+        pass-through for STAGES; attachments assembled into the canonical
+        ``assistants`` slot after ``memory_use``; stage gates compiled into
+        the ``FlowVerify`` gate and assembled into the canonical ``verify``
+        slot after ``assistants`` — a stage without a gate carries no
+        ``verify`` key, so gate-free workflows compile byte-identically).
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
-            ``parse_dsl``), on an empty body, on a legacy ``agents`` key in a
-            stage body, on an authoring ``interactive``/``auto_run`` key in a
-            stage body (the authoring-side fields are ``communication``/
-            ``trigger``), on an authoring ``reflect``/``memory_use`` key in a
-            stage body (the memory stage keys are authored through the workflow
-            memory instructions), or on a ``trigger`` value outside
-            ``on_success``/``manual``.
+            ``parse_dsl``), on an empty body, on a workflow repeat block over
+            a non-repeatable pipeline header (the step-4.0 cross-check —
+            fired BEFORE every reconstruction error), on a legacy ``agents``
+            key in a stage body, on a script directive value
+            (``before_script``/``script``/``after_script``) that is neither a
+            ``str`` nor a non-empty list of non-empty strings, on an
+            authoring ``interactive``/``auto_run``
+            key in a stage body (the authoring-side fields are
+            ``communication``/``trigger``), on an authoring
+            ``reflect``/``memory_use`` key in a stage body (the memory stage
+            keys are authored through the workflow memory instructions), on
+            an authoring ``assistants`` key in a stage body (attachments are
+            authored through the workflow stage attachments), on an
+            authoring ``gates`` key or a raw ``verify`` key in a stage body
+            (stage gates are authored through the workflow stage gates;
+            ``verify`` is a compiled-only key), on a
+            ``trigger`` value outside ``on_success``/``manual``, on any
+            attachment check of step 4.10 (an unknown assistant reference,
+            the same assistant name twice in one stage's effective
+            attachment map, an attachment
+            on a script or planning-only stage), or on any gates check of
+            step 4.11 (a gate on a script or planning-only stage).
         FileNotFoundError: If ``pipeline_path`` does not exist or ``flow_path``'s
             parent is missing (propagated).
         PermissionError: If ``pipeline_path`` is unreadable (propagated).
@@ -1374,21 +2235,39 @@ def compile_flow(
     if len(body.steps) == 0:
         raise StructuralError("empty body")
 
+    # Step 4.0 — the repeat correspondence check. Runs immediately after the
+    # empty-body guard and BEFORE the ``workflow is not None`` reconstruction
+    # branch, so the cross-check error precedes every reconstruction error
+    # (extend refs, stage names, skip guards) when both would fire.
+    _check_repeat_correspondence(header, workflow)
+
     # The step sequence consumed for FlowStage assembly. When a workflow is
     # applied, this is a reconstructed (deep-copied + overridden + expanded)
-    # sequence plus the two companion maps: the per-final-id effective-notes
-    # map (the source of each stage's ``buttons`` field) and the memory
-    # emission of step 4.9 (the compiled memory block plus the per-final-id
-    # memory keys — both resolved by base name / final id so loop-expanded
-    # copies share them); the ORIGINAL `body` is preserved for
-    # PipelineDocument below. Workflow-less compiles carry an empty notes map
-    # and an empty emission, so every lookup below is ``None``/falsy and no
-    # ``buttons``/``reflect``/``memory_use`` key is assembled.
+    # sequence plus the four companion maps: the per-final-id effective-notes
+    # map (the source of each stage's ``buttons`` field), the memory emission
+    # of step 4.9 (the compiled memory block plus the per-final-id memory
+    # keys), the collaboration emission of step 4.10 (the compiled
+    # collaboration block, the team list, and the per-final-id attachment
+    # entries), and the gates emission of step 4.11 (the per-final-id stage
+    # gates — all resolved by base name / final id so loop-expanded copies
+    # share them); the ORIGINAL `body` is preserved for PipelineDocument
+    # below. Workflow-less compiles carry an empty notes map, an empty memory
+    # emission, the default collaboration emission (block only), and an empty
+    # gates map, so every lookup below is ``None``/falsy and no ``buttons``/
+    # ``reflect``/``memory_use``/``assistants``/``verify`` key is assembled.
     if workflow is not None:
-        reconstructed, notes_by_id, memory_emission = _reconstruct_body(fmt, body, workflow)
+        (
+            reconstructed,
+            notes_by_id,
+            memory_emission,
+            collaboration_emission,
+            verify_by_id,
+        ) = _reconstruct_body(fmt, body, workflow)
     else:
         reconstructed, notes_by_id = list(body.steps), {}
         memory_emission = _MemoryEmission(block=None, keys_by_id={})
+        collaboration_emission = _collaboration_emission(None, {}, [], {})
+        verify_by_id = {}
 
     stages: list[FlowStage] = []
 
@@ -1400,6 +2279,8 @@ def compile_flow(
                 step.name,
                 notes=notes_by_id.get(step.name),
                 memory_fields=memory_emission.keys_by_id.get(step.name),
+                assistants_fields=collaboration_emission.assistants_by_id.get(step.name),
+                verify_fields=verify_by_id.get(step.name),
             )
             stages.append(
                 FlowStage(
@@ -1416,6 +2297,8 @@ def compile_flow(
                 step.name,
                 notes=notes_by_id.get(step.name),
                 memory_fields=memory_emission.keys_by_id.get(step.name),
+                assistants_fields=collaboration_emission.assistants_by_id.get(step.name),
+                verify_fields=verify_by_id.get(step.name),
             )
             stages.append(
                 FlowStage(
@@ -1442,7 +2325,10 @@ def compile_flow(
         root_dir=root_dir,
         name=header.name,
         description=description,
+        repeat=_repeat_emission(header, workflow),
         memory=memory_emission.block,
+        collaboration=collaboration_emission.block,
+        team=collaboration_emission.team,
         stages=stages,
     )
     pipeline_doc = PipelineDocument(header=header, format=fmt, body=body)

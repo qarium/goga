@@ -42,10 +42,10 @@ Imports:
     From: goga/ast/rules/ast
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
 
 Annotations: |
-  When developing and testing: follow the practice `conventions`.
+  When developing and testing: follow the practice `convention`.
 
 ---
 

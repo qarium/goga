@@ -22,9 +22,15 @@ import inspect
 
 from goga.pipeline import apply_skip_stages
 from goga.pipeline.workflow import (
+    WorkflowAssistant,
+    WorkflowBuild,
+    WorkflowDelegation,
     WorkflowDocument,
     WorkflowExtendStage,
+    WorkflowGates,
+    WorkflowGateStep,
     WorkflowMemory,
+    WorkflowRepeat,
     WorkflowStage,
 )
 
@@ -73,9 +79,239 @@ class TestApplySkipStagesContract:
         assert result is not None
         assert result.memory is None
 
+    def test_apply_skip_stages_and_overlay_preserve_profile_and_build(self) -> None:
+        """The rebuild carries ``profile`` and the SAME ``build`` object verbatim.
+
+        ``memory`` preservation landed earlier; ``profile`` (activation) and
+        ``build`` (build instructions) must survive the rebuild the same way —
+        a rebuild that dropped them would change activation or lose build
+        instructions for skip-driven runs. Skip still wins per name; a None
+        workflow with non-empty skip builds the skip-only document (profile
+        None, build None).
+        """
+        build = WorkflowBuild(agent="codex", env={"A": "1"})
+        workflow = WorkflowDocument(
+            stages={"build": WorkflowStage(agent="claude"), "test": WorkflowStage()},
+            profile="mixa",
+            build=build,
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.profile == "mixa"
+        assert result.build is build
+        # Skip still wins per name — the replacement carries skip=True.
+        assert result.stages["build"].skip is True
+        # The skip-only document over a None workflow carries no profile/build.
+        skip_only = apply_skip_stages(None, ["review"])
+
+        assert skip_only is not None
+        assert skip_only.profile is None
+        assert skip_only.build is None
+
+    def test_apply_skip_stages_carries_collaboration_verbatim(self) -> None:
+        """The rebuild carries the assistants catalog and the delegation block verbatim.
+
+        The SAME catalog dict and delegation object (not rebuilds) ride into
+        the returned document, and a surviving stage keeps its attachment
+        list — the memory/profile/build carry precedent extended to the
+        collaboration fields. A skipped stage's replacement entry carries the
+        PRE-SKIP entry's ``assistants`` list (the authored-``skip: true``
+        parity): the compiler removes the stage before the attachment walk so
+        its own attachments are unreachable by design, but its inline
+        declarations stay in the document-wide assistant namespace. A None
+        workflow with non-empty skip synthesizes the default empty catalog
+        and no delegation block.
+        """
+        catalog = {"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")}
+        delegation = WorkflowDelegation(depth=2, max_tasks=7)
+        attachments = {"reviewer": WorkflowAssistant(name="reviewer", gate=True, when="finish")}
+        workflow = WorkflowDocument(
+            assistants=catalog,
+            delegation=delegation,
+            stages={"build": WorkflowStage(), "verify": WorkflowStage(assistants=attachments)},
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.assistants is catalog
+        assert result.delegation is delegation
+        # The surviving stage keeps its attachment map (the same object).
+        assert result.stages["verify"].assistants is attachments
+        # The skipped stage's wholesale replacement carries skip=True and no
+        # attachments of its own (the entry had none to carry).
+        assert result.stages["build"].skip is True
+        assert result.stages["build"].assistants is None
+        # The skip-only document over a None workflow starts collaboration-free.
+        skip_only = apply_skip_stages(None, ["build"])
+
+        assert skip_only is not None
+        assert skip_only.assistants == {}
+        assert skip_only.delegation is None
+
+    def test_apply_skip_stages_carries_repeat_verbatim(self) -> None:
+        """The rebuild carries the input's repeat block verbatim (the same object).
+
+        The SAME ``WorkflowRepeat`` object rides into the returned document —
+        a rebuild that dropped it would silently recompile an authored cycle
+        bound (``repeat: {max_cycles: N}``) as the scalar ``true`` default
+        for skip-driven runs. An empty ``skip_stages`` returns the input
+        unchanged (the existing no-op rule).
+        """
+        repeat = WorkflowRepeat(max_cycles=3)
+        workflow = WorkflowDocument(repeat=repeat)
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.repeat is repeat
+        # The no-op rule is unchanged — empty skip is identity.
+        assert apply_skip_stages(workflow, []) is workflow
+
+    def test_apply_skip_stages_carries_gates_verbatim(self) -> None:
+        """The rebuild carries the input's gates settings block verbatim (the same object).
+
+        The SAME ``WorkflowGates`` object (not a rebuild) rides into the
+        returned document — a rebuild that dropped it would silently strip
+        retry tuning (``max_iterations``/``patience``) from every remaining
+        gated stage for skip-driven runs. The skipped stage's replacement
+        carries NO gates (the ``WorkflowStage`` model-field default): the
+        compiler removes the skipped stage before the gates walk, so its
+        checks drop silently downstream. A None workflow with non-empty skip
+        synthesizes no gates block.
+        """
+        gates = WorkflowGates(max_iterations=4)
+        step = WorkflowGateStep(name="Unit tests", script="pytest -q")
+        keep = [WorkflowGateStep(name="Lint", script="ruff check .")]
+        workflow = WorkflowDocument(
+            gates=gates,
+            stages={"a": WorkflowStage(prompt="x", gates=keep), "gone": WorkflowStage(gates=[step])},
+        )
+
+        result = apply_skip_stages(workflow, ["gone"])
+
+        assert result is not None
+        assert result.gates is gates
+        # The replacement stage carries no gates (the dataclass default).
+        assert result.stages["gone"].skip is True
+        assert result.stages["gone"].gates is None
+        # A surviving gated stage keeps its check-step list (the same list).
+        assert result.stages["a"].gates is keep
+        # The skip-only document over a None workflow carries no gates block.
+        skip_only = apply_skip_stages(None, ["build"])
+
+        assert skip_only is not None
+        assert skip_only.gates is None
+
+    def test_apply_skip_stages_carries_skipped_stage_declarations(self) -> None:
+        """A skipped stage's replacement carries its attachments — declarations stay resolvable.
+
+        The compiler removes the skipped stage before the attachment walk
+        (its own attachments are never checked or emitted), but the
+        document-wide assistant namespace reads every stage entry — a
+        surviving stage's reference to a name declared on the skipped stage
+        must keep resolving, exactly as with an authored ``skip: true``.
+        """
+        declarations = {"helper": WorkflowAssistant(name="helper", prompt="Do things.")}
+        workflow = WorkflowDocument(
+            stages={
+                "build": WorkflowStage(assistants=declarations),
+                "review": WorkflowStage(assistants={"helper": WorkflowAssistant(name="helper", when="start")}),
+            },
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result.stages["build"].skip is True
+        assert result.stages["build"].assistants is declarations
+        # The input document is unchanged.
+        assert workflow.stages["build"].skip is False
+
 
 class TestApplySkipStagesLogic:
     """Logic tests — the verbatim behavior from the design Test Stack Trace."""
+
+    def test_apply_skip_stages_carries_repeat_and_assistants_map(self) -> None:
+        """The skip rebuild carries the repeat block and the map-form attachments verbatim.
+
+        The SAME ``WorkflowRepeat`` object and the SAME attachments map ride
+        into the returned document — a rebuild that dropped either would
+        silently recompile an authored cycle bound as the scalar default or
+        strand a skipped stage's inline declarations out of the
+        document-wide assistant namespace.
+        """
+        attachments = {"security": WorkflowAssistant(name="security", prompt="Audit.", when="start")}
+        workflow = WorkflowDocument(
+            stages={"scan": WorkflowStage(assistants=attachments)},
+            repeat=WorkflowRepeat(max_cycles=3),
+        )
+
+        result = apply_skip_stages(workflow, ["scan"])
+
+        assert result is not None
+        assert result.repeat is workflow.repeat
+        assert result.stages["scan"].skip is True
+        # The replacement carries the pre-skip entry's attachments map (the same object).
+        assert result.stages["scan"].assistants is attachments
+        assert result.stages["scan"].assistants["security"].prompt == "Audit."
+
+    def test_apply_skip_stages_carries_repeat(self) -> None:
+        """The authored repeat block survives the skip rebuild as the same object.
+
+        A dropped field would silently recompile an authored
+        ``repeat: {max_cycles: N}`` as the scalar ``true`` on every ``--skip``
+        run; the carry is verbatim (opaque, never rebuilt). A None workflow
+        with non-empty skip keeps the skip-only document repeat-free, and an
+        empty skip list is the input unchanged.
+        """
+        workflow = WorkflowDocument(
+            stages={"build": WorkflowStage()},
+            repeat=WorkflowRepeat(max_cycles=3),
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.repeat is workflow.repeat
+        assert result.stages["build"].skip is True
+        # The None-workflow skip-only document carries repeat=None.
+        skip_only = apply_skip_stages(None, ["build"])
+
+        assert skip_only is not None
+        assert skip_only.repeat is None
+        # Empty skip_stages is the input unchanged.
+        assert apply_skip_stages(workflow, []) is workflow
+
+    def test_settings_block_survives_skip_rebuild(self) -> None:
+        """The gates settings block rides the skip rebuild verbatim; the replacement carries no gates.
+
+        The SAME ``WorkflowGates`` object (same identity, carried opaque —
+        never interpreted, validated, or rebuilt) survives, so skip-driven
+        runs keep the retry tuning for the remaining gated stages. The
+        skipped stage's wholesale replacement carries ``gates=None`` (the
+        ``WorkflowStage`` model-field default — no code needed): the compiler
+        removes the skipped stage before the gates walk, so its checks drop
+        silently downstream. The input document is never mutated.
+        """
+        step = WorkflowGateStep(name="Unit tests", script="pytest -q")
+        workflow = WorkflowDocument(
+            gates=WorkflowGates(max_iterations=4),
+            stages={"a": WorkflowStage(prompt="x"), "gone": WorkflowStage(gates=[step])},
+        )
+
+        merged = apply_skip_stages(workflow, ["gone"])
+
+        assert merged is not None
+        # Verbatim carriage — the same object, not a rebuild.
+        assert merged.gates is workflow.gates
+        assert merged.gates.max_iterations == 4
+        # The replacement stage carries no gates.
+        assert merged.stages["gone"].skip is True
+        assert merged.stages["gone"].gates is None
+        # The input keeps its authored gate on the skipped stage (no mutation).
+        assert workflow.stages["gone"].gates == [step]
 
     def test_apply_skip_stages_empty_is_noop(self) -> None:
         """An empty skip_stages list returns the input unchanged (identity)."""
@@ -126,6 +362,8 @@ class TestApplySkipStagesLogic:
         assert set(result.stages.keys()) == {"review"}
         assert result.stages["review"].skip is True
         assert result.extend == {}
+        # The skip-only document carries no gates settings block.
+        assert result.gates is None
 
     def test_apply_skip_stages_preserves_prompt_and_extend(self) -> None:
         """A non-None workflow preserves prompt, existing stages, and extend."""

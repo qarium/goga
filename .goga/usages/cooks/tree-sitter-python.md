@@ -44,6 +44,14 @@ root = tree.root_node
 - `identifier` — identifier
 - `string` — string literal (for from __future__ import annotations)
 
+### Imports
+- `import_statement` — `import a.b` / `import a.b as c` (field: name; children: dotted_name or aliased_import)
+- `import_from_statement` — `from m import x, y as z` / `from .m import *` (fields: module_name, name; module children: dotted_name or relative_import; name children: dotted_name, aliased_import, wildcard_import)
+- `relative_import` — relative module (children: import_prefix — the dots, then dotted_name)
+- `aliased_import` — `name as alias` (fields: name — dotted_name, alias — identifier)
+- `wildcard_import` — `*`
+- `dotted_name` — qualified name (children: identifier separated by `.`)
+
 ### Properties and methods
 - `decorator` — decorator (for @property)
 - `function_definition` inside a class body — method

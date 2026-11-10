@@ -1,22 +1,24 @@
 from __future__ import annotations
 
-from goga.docker._flags import translate_params
+from goga.docker import translate_params
+from goga.docker._flags import translate_params as _module_translate_params
 
 
 class TestContract:
-    """Contract-surface lock: internal module accessibility + facade non-export."""
+    """Contract-surface lock: facade export of the shared param→flag rule."""
 
     def test_translate_params_is_callable(self) -> None:
         assert callable(translate_params)
 
-    def test_translate_params_is_internal_not_in_facade_all(self) -> None:
-        # The helper is internal infrastructure: shared by DockerBuilder.build
-        # and DockerRunner.run, but NOT re-exported through the goga.docker
-        # facade. Neither the symbol nor its module may appear in __all__.
+    def test_translate_params_is_exported_through_facade_all(self) -> None:
+        # The shared param→flag rule is contract surface: consumed internally
+        # by DockerBuilder.build / DockerRunner.run and re-exported through
+        # the goga.docker facade so a host launcher composes the identical
+        # launch line (the build command's dry-run print) without launching.
         import goga.docker
 
-        assert "translate_params" not in goga.docker.__all__
-        assert "_flags" not in goga.docker.__all__
+        assert "translate_params" in goga.docker.__all__
+        assert translate_params is _module_translate_params
 
 
 class TestTranslateParams:

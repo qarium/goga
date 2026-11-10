@@ -1,21 +1,50 @@
+profile: default
+
 prompt: |
-  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in Russian language.
+  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in {{ language }} language.
   Any content written to the project files is in English.
 
+{% macro stage_config(stage_data) %}
+{% if stage_data["agent"] %}
+    agent: {{ stage_data["agent"] }}
+{% endif %}
+{% if stage_data["env"] %}
+    env:
+{% for k, v in stage_data["env"].items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
 stages:
+  discovery-scope:
+{{ stage_config(stages["discovery-scope"]) }}
   code-review:
+{{ stage_config(stages["code-review"]) }}
     approve: dialog
   contracts-review:
+{{ stage_config(stages["contracts-review"]) }}
     approve: dialog
   documentation-review:
+{{ stage_config(stages["documentation-review"]) }}
     approve: dialog
   testing:
+{{ stage_config(stages["testing"]) }}
     approve: dialog
     prompt: |
       Run and fix tests after review.
   
       Requirements:
       - Create venv outside the project, in /opt/goga
+    gates:
+      - name: lint
+        script: ruff format --check goga/ tests/
+      - name: pytest
+        script: pytest -v --tb=short
+  commit-changes:
+{{ stage_config(stages["commit-changes"]) }}
+  update-docs:
+{{ stage_config(stages["update-docs"]) }}
 
 extend:
   update-docs:

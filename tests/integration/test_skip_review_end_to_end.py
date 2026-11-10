@@ -119,7 +119,12 @@ class TestConfigYamlFlowsToRalphex:
     """
 
     def test_config_yaml_review_flows_to_ralphex_flags(
-        self, tmp_path: Path, monkeypatch, write_goga_config, mock_vendored_sources
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        write_goga_config,
+        mock_vendored_sources,
+        relocated_wrapper_base: Path,
     ) -> None:
         monkeypatch.chdir(tmp_path)
         write_goga_config(image="goga:latest", review={"skip": False, "agent": "codex", "roles": ["quality"]})
@@ -156,12 +161,14 @@ class TestConfigYamlFlowsToRalphex:
         assert "{{agent:implementation}}" not in review_second
         assert "uses 1 agents" in review_second
 
-        # The final pass config carries the review executor wrapper: the
-        # validator only checks existence against the mocked resolve, while the
-        # orchestrator's own resolve (real, string-only) produces the
-        # conventional /home/goga/bin/ path that lands in the file.
+        # The final pass config carries the review executor's generated
+        # closure; the closure itself execs the codex wrapper the validator
+        # only existence-checks, resolved through the facade's conventional
+        # /home/goga/bin/ path.
         config_text = (tmp_path / ".ralphex" / "config").read_text()
-        assert "claude_command = /home/goga/bin/codex-as-claude.sh" in config_text
+        assert f"claude_command = {relocated_wrapper_base / 'review.sh'}" in config_text
+        review_closure = (relocated_wrapper_base / "review.sh").read_text()
+        assert 'exec /home/goga/bin/codex-as-claude.sh "$@"' in review_closure
         assert "move_plan_on_completion = false" in config_text
 
 

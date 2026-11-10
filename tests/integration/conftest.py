@@ -165,9 +165,11 @@ def in_container_pipeline_run_context(
     only afm mocked) opt into this context: a minimal authored configuration
     (``language`` plus an empty ``pipeline`` section — the section the host
     structural guard guarantees) lands in the isolated process CWD, the
-    package environment pins empty (the delivery is the passthrough), and the
-    fixed home-path constant redirects into the tmp tree so no test writes
-    the real home.
+    package environment pins empty (the delivery is the passthrough), the
+    fixed home-path constant redirects into the tmp tree, and the fixed
+    skins-base constant of the afm skin materialization redirects the same
+    way — so no test writes the real home, and the run path holds on hosts
+    without a writable ``/home/goga`` (the CI user's home is elsewhere).
 
     Returns:
         The project root (the isolated CWD) carrying the written configuration.
@@ -179,6 +181,10 @@ def in_container_pipeline_run_context(
 
     afm_config_module = sys.modules["goga.pipeline.afm_config"]
     monkeypatch.setattr(afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
+
+    afm_skin_module = sys.modules["goga.pipeline.afm_skin"]
+    monkeypatch.setattr(afm_skin_module, "_SKINS_TARGET_BASE", tmp_path / ".afm-home" / "skins")
+
     return tmp_path
 
 
@@ -205,3 +211,31 @@ def make_project_config() -> Callable[..., ProjectConfig]:
         )
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def relocated_wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Relocate the per-role closure wrapper base into the isolated test tree.
+
+    The end-to-end build suites that reach a pass generate the role closures
+    via ``write_role_env_wrappers``, whose shipped base is the
+    container-local ``/tmp/goga-build-env`` (one per-run subdirectory per
+    build process); without the pin every such test would write there for
+    real. The module constant is the documented test seam (the same pin
+    ``tests/build/conftest.py`` applies zone-wide).
+
+    Args:
+        tmp_path: The isolated test directory the base relocates into.
+        monkeypatch: The pytest patcher restoring the original constant.
+
+    Returns:
+        The relocated per-run wrapper directory —
+        ``<tmp_path>/goga-build-env/run-<pid>``.
+    """
+    from goga.build import role_env_wrappers
+
+    base = tmp_path / "goga-build-env"
+
+    monkeypatch.setattr(role_env_wrappers, "_WRAPPER_BASE", base)
+
+    return role_env_wrappers._run_base()

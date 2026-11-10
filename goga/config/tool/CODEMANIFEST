@@ -1,8 +1,12 @@
+Imports:
+  - Types:
+      - parse_env_yaml
+    Usages:
+      - env-variables
+    From: goga/config/yaml
+
 Usages:
   convention: .goga/usages/conventions.md
-  yaml: |
-    Use yaml.safe_load() to parse the tool config file.
-    Requires the PyYAML library.
 
 Annotations: |
   The `convention` practice is used for:
@@ -18,7 +22,12 @@ Annotations: |
   passthrough load. The write side buffers verbatim filenames under
   the same path standard; this loader reads them back with no
   interpretation — the content belongs to the tool that owns it.
-  Use the `yaml` practice for the raw parse. Use relative imports.
+  Parse a present tool config file through `parse_env_yaml` — the
+  environment-aware loader of the configuration family (per
+  `env-variables`). The read side stays a raw passthrough:
+  !ENV NAME scalars resolve to plain strings at load time, and the
+  content belongs to the tool that owns it — no models, no structural
+  expectations, no validation. Use relative imports.
 
 ---
 
@@ -39,7 +48,8 @@ Annotations: |
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
-    Use the `yaml` practice for the raw parse.
+    Parse through `parse_env_yaml` (per `env-variables`)
+    — no local tag handling.
 
     Algorithm:
     1. Compose the path <root>/.goga/tools/<tool>/<filename> with
@@ -48,17 +58,27 @@ Annotations: |
        . or .. — a non-flat name segment — is a clean error before any read
     3. An absent file returns None — absence is the normal state of a
        tool config
-    4. A present file parses via the `yaml` practice and returns the
-       raw value as-is
+    4. A present file parses via `parse_env_yaml` — the
+       environment-aware loader (!ENV NAME scalars
+       resolve to plain strings at load time, unset resolves to ""); the
+       raw value returns as-is — yaml errors, including constructor
+       errors of malformed tag use, propagate unchanged through the
+       library's error machinery
 
     Requirements:
     - Path standardization only — the same standard as the write side
     - No content models, no structural expectations, no validation
     - No merging with any configuration layer, no caching
+    - Environment references resolve at load time — a tool config file
+      may carry !ENV NAME scalars under the same rule as the
+      project configuration; the resolved strings flow into the raw value
+      the consuming tool interprets
 
     Constraints:
     - Do not interpret the content — interpreting is the consuming
       tool's responsibility
+    - Do not resolve !ENV references in this cell — loading goes
+      through `parse_env_yaml`; no local tag handling exists
 
 ---
 

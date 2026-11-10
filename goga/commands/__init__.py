@@ -1,7 +1,9 @@
 from .build import build
+from .codegraph import codegraph
 from .config import config
 from .connect import connect
 from .contract import contract
+from .drift import drift
 from .history import history
 from .hooks import hooks
 from .init import init
@@ -16,9 +18,11 @@ from .usages import usages
 
 __all__ = [
     "build",
+    "codegraph",
     "config",
     "connect",
     "contract",
+    "drift",
     "history",
     "hooks",
     "init",

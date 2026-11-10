@@ -1,4 +1,5 @@
-"""The pipeline checkpoint surface: one hard amendment delivery and two soft run notifications."""
+"""The pipeline checkpoint surface: one hard amendment delivery, two soft run
+notifications, and the bridged mid-run lifecycle emissions."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from ...hooks import (
     wrap_context,
 )
 from .amendments import WorkflowAmendment
-from .contexts import CompositionStage, RunCompleted, RunCreated
+from .contexts import CompositionStage, RunCompleted, RunCreated, RunEvent, StageEvent
 from .identity import PipelineIdentity, WorkflowDecision, WorkIdentity
 from .overlay import ToolContribution, WorkflowOverlay, merge_workflow_overlay
 
@@ -31,7 +32,8 @@ class PipelineHooks:
           construction
         - One ``HookRegistry`` per run carries every checkpoint of a
           command — the assembly runs once per run whatever the number of
-          checkpoints
+          checkpoints; a bridged emission builds its registry once per
+          event process
         - Every context is built from the values the caller passes — no
           repository reads happen at a checkpoint
     """
@@ -88,7 +90,8 @@ class PipelineHooks:
                process — a value of an out-of-contract type — fails the
                hook that wrote it under the same hard error
             5. A tool whose buffered document is empty — no prompt, no
-               stages, no extend, no memory — is a content no-op: a
+               stages, no extend, no memory, no assistants, no delegation,
+               no repeat, and no gates block — is a content no-op: a
                warning naming the tool, the contribution discarded, the
                walk continues
             6. Merge the committed contributions onto ``workflow`` via
@@ -145,7 +148,16 @@ class PipelineHooks:
                     # out of the delivery.
                     document = amendment._contribution
                     if document is not None:
-                        for fact in ("prompt", "stages", "extend", "memory"):
+                        for fact in (
+                            "prompt",
+                            "stages",
+                            "extend",
+                            "memory",
+                            "assistants",
+                            "delegation",
+                            "repeat",
+                            "gates",
+                        ):
                             getattr(document, fact)
                 except Exception as reason:
                     # Hard: stop at the first failure. The message copies the
@@ -159,7 +171,16 @@ class PipelineHooks:
 
             document = amendment._contribution
 
-            if document.prompt is None and not document.stages and not document.extend and document.memory is None:
+            if (
+                document.prompt is None
+                and not document.stages
+                and not document.extend
+                and document.memory is None
+                and not document.assistants
+                and document.delegation is None
+                and document.repeat is None
+                and document.gates is None
+            ):
                 logger.warning(
                     "tool contributed an empty document; discarded",
                     extra={"tool": tool, "action": "pipeline.amend_workflow"},
@@ -252,5 +273,59 @@ class PipelineHooks:
             self._ensure_registry(),
             "pipeline",
             "run_completed",
+            context_for=lambda _tool: context,
+        )
+
+    def emit_run_event(self, action: str, context: RunEvent) -> None:
+        """Emit a bridged run-level lifecycle event — fire-and-forget; a failing hook only warns.
+
+        Unlike the composed notifications this surface builds no context:
+        the caller (the afm bridge) parsed the payload already, and the
+        same read-only context instance is delivered to every subscribed
+        tool — one delivery view per subscription, all wrapping the passed
+        ``context``.
+
+        Args:
+            action: The bridged action name within the pipeline domain —
+                a declared soft record such as ``run_resumed``.
+            context: The run-level event context, built by the caller.
+
+        Raises:
+            ValueError: The action is not declared in the catalog — a
+                clean error of the emitting side.
+        """
+        registry = self._ensure_registry()
+
+        emit_hook_event(
+            registry,
+            "pipeline",
+            action,
+            context_for=lambda _tool: context,
+        )
+
+    def emit_stage_event(self, action: str, context: StageEvent) -> None:
+        """Emit a bridged stage-level lifecycle event — fire-and-forget; a failing hook only warns.
+
+        Unlike the composed notifications this surface builds no context:
+        the caller (the afm bridge) parsed the payload already, and the
+        same read-only context instance is delivered to every subscribed
+        tool — one delivery view per subscription, all wrapping the passed
+        ``context``.
+
+        Args:
+            action: The bridged action name within the pipeline domain —
+                a declared soft record such as ``stage_execution_started``.
+            context: The stage-level event context, built by the caller.
+
+        Raises:
+            ValueError: The action is not declared in the catalog — a
+                clean error of the emitting side.
+        """
+        registry = self._ensure_registry()
+
+        emit_hook_event(
+            registry,
+            "pipeline",
+            action,
             context_for=lambda _tool: context,
         )

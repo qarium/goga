@@ -541,3 +541,78 @@ class TestParseDslRolesBlock:
         header, _fmt, _body = parse_dsl(text)
 
         assert header.roles is None
+
+
+class TestParseDslRepeatableFlag:
+    """Contract and logic tests for the optional header-level ``repeatable`` flag.
+
+    The flag declares the pipeline's repeat capability. ``parse_dsl`` extracts
+    it after the ``roles`` block: a present value must be strictly bool
+    (an explicit ``null``, an int, or a string raise one clean structural
+    error); an absent key equals ``False``. The flag is carried into
+    ``PipelineHeader`` and never enters the compiled flow-file directly —
+    the compiled ``repeat`` directive is derived from it by ``compile_flow``.
+    """
+
+    def test_parse_dsl_extracts_repeatable_true(self) -> None:
+        """An explicit ``repeatable: true`` parses to ``header.repeatable is True``."""
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            "repeatable: true\n"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  title: Propose\n"
+        )
+
+        header, _fmt, _body = parse_dsl(text)
+
+        assert header.repeatable is True
+
+    def test_parse_dsl_repeatable_absent_equals_false(self) -> None:
+        """A header without the flag parses to ``header.repeatable is False``."""
+        text = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n"
+
+        header, _fmt, _body = parse_dsl(text)
+
+        assert header.repeatable is False
+
+    def test_parse_dsl_repeatable_explicit_false_equals_false(self) -> None:
+        """An explicit ``repeatable: false`` parses to ``header.repeatable is False``."""
+        text = "name: X\ndescription: Y\nrepeatable: false\n---\n\n- name: a\n  title: A\n"
+
+        header, _fmt, _body = parse_dsl(text)
+
+        assert header.repeatable is False
+
+    def test_parse_dsl_repeatable_after_roles(self) -> None:
+        """The flag parses alongside a ``roles`` block (checked last, after roles)."""
+        text = "name: X\ndescription: Y\nroles:\n  planner: P\nrepeatable: true\n---\n\n- name: a\n  title: A\n"
+
+        header, _fmt, _body = parse_dsl(text)
+
+        assert header.roles is not None
+        assert header.roles.planner == "P"
+        assert header.repeatable is True
+
+    @pytest.mark.parametrize(
+        ("flag_line", "case"),
+        [
+            ("repeatable: 1\n", "int one"),
+            ('repeatable: "yes"\n', "quoted string"),
+            ("repeatable: null\n", "explicit null"),
+        ],
+    )
+    def test_parse_dsl_repeatable_non_bool(self, flag_line: str, case: str) -> None:
+        """A present non-bool value raises one clean structural error.
+
+        ``1`` equals ``True`` in Python but is an ``int``, not a ``bool``; the
+        quoted ``"yes"`` is a string (a BARE ``yes`` parses as bool ``True``
+        under PyYAML's YAML 1.1 and must not be used as a negative case); an
+        explicit ``null`` is PRESENT and non-bool — the same error.
+        """
+        text = f"name: X\ndescription: Y\n{flag_line}---\n\n- name: a\n  title: A\n"
+
+        with pytest.raises(StructuralError, match=r"non-bool value in header\.repeatable"):
+            parse_dsl(text)

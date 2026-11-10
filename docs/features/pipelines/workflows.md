@@ -2,14 +2,26 @@
 
 A **workflow-file** is an optional YAML document that layers project-specific
 behavior on top of a compiled pipeline at run time. A workflow can inject a
-top-level prompt, override the agent or prompt of specific stages, expand
+top-level prompt, override the agent or prompt of specific stages, attach
+**per-stage environment variables** via `env`, expand
 a stage into N chained copies via `loop`, **skip (delete) a stage**,
 declare per-stage **auto-approval** via `approve`, force or cancel a stage's
 **manual launch mode** via `manual`, attach **note buttons** to a stage via
-`notes`, **declaratively add new stages** to the pipeline via `extend`, and
+`notes`, **declaratively add new stages** to the pipeline via `extend`,
 configure **project-memory participation** via the top-level `memory` block
 and the per-stage `reflect` / `memory` instructions (see
-[Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)).
+[Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)),
+author **collaboration with helper agents** via the top-level `assistants`
+catalog, the `delegation` block, and the per-stage `assistants` instruction
+(see [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation)),
+tune **repeating run cycles** via the top-level `repeat` block
+(see [Run cycles (`repeat`)](#run-cycles-repeat)),
+declare **stage-completion quality gates** via the top-level `gates` block
+and the per-stage `gates` check-step list
+(see [Quality gates (`gates`)](#quality-gates-gates)),
+and adapt the whole file per contributor through **profile-driven rendering**
+(see [Profiles](#profiles)) plus a `build:` block that configures nested
+`goga build` runs.
 
 Stage names in `workflow.stages` are matched strictly: a name that does not
 match any pipeline step or extend-stage is a compile error. Workflows that
@@ -27,7 +39,9 @@ traversal via `..` or an absolute prefix is rejected.
 
 ## Document shape
 
-A workflow-file is a YAML mapping with up to four top-level keys:
+A workflow-file is a YAML mapping with up to ten top-level keys (the whole
+file is first rendered as a Jinja2 template with the active profile's
+content as context — see [Profiles](#profiles)):
 
 ```yaml
 prompt: |
@@ -46,6 +60,26 @@ stages:
     reflect:                  # optional memory-reflection instruction (reflect method only)
       file: shared.md
     memory: true              # optional memory participation (alignment method only; never together with reflect)
+    assistants:               # optional stage assistant attachments (a name-keyed map)
+      reviewer:
+        when: finish
+    gates:                    # optional quality-gate check steps (a list)
+      - name: tests
+        script: pytest -q
+
+assistants:                   # optional catalog of run-level assistants (a name-keyed map)
+  reviewer:
+    prompt: Review the stage changes.
+
+delegation:                   # optional delegation-bounds block
+  depth: 3
+  max_tasks: 50
+
+repeat:                       # optional run-cycle tuning block (repeatable pipelines only)
+  max_cycles: 3
+
+gates:                        # optional quality-gate settings block (see Quality gates)
+  max_iterations: 2
 
 memory:                       # optional workflow-memory configuration block
   method: reflect             # reflect | alignment (the instruction vocabulary selector)
@@ -65,22 +99,31 @@ extend:
 | `stages` | map   | no*      | Per-stage override instructions keyed by stage name.       |
 | `extend` | map   | no*      | New stages to add to the pipeline, keyed by new stage name. |
 | `memory` | map   | no*      | Workflow-memory configuration (see [Project memory](#project-memory-memory-reflect)). |
+| `profile` | string | no    | Default profile name activated when no `--profile`/`GOGA_PROFILE` channel provided one. Must be a literal (a templated default does not participate in activation). A `profile:`-only workflow is invalid — activation is not content. |
+| `build` | map   | no*      | Configuration layered onto the `build` section for nested `goga build` runs (see the [build documentation](../build/configuration.md)). A `build:`-only workflow is valid. |
+| `assistants` | map | no*   | Catalog of run-level assistants keyed by assistant name (see [Collaboration](#collaboration-assistants-delegation)). An `assistants:`-only workflow is valid. |
+| `delegation` | map | no*   | Delegation bounds — `depth` and `max_tasks` (see [Collaboration](#collaboration-assistants-delegation)). A `delegation:`-only workflow is valid. |
+| `repeat` | map | no*   | Run-cycle tuning for a repeatable pipeline — `max_cycles` / `keep_runs` (see [Run cycles](#run-cycles-repeat)). A `repeat:`-only workflow is valid. |
+| `gates` | map | no*   | Quality-gate retry tuning — `patience` / `max_iterations` / `fresh_correction` (see [Quality gates](#quality-gates-gates)). A `gates:`-only workflow is valid (and inert without gated stages). |
 
 \* At least one of `prompt`, a non-empty `stages` block, a non-empty
-`extend` block, or a `memory` block must be present; an empty workflow is
-rejected with a structural error.
+`extend` block, a `memory` block, a `build` block, an `assistants`
+block, a `delegation` block, a `repeat` block, or a `gates` block must
+be present; an empty workflow is rejected with a structural error.
+`profile` does not count — a `profile:`-only workflow is invalid.
 
 Unknown top-level keys are rejected with
-`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory`.
+`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat, gates`.
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to ten
+Each entry under `stages` is keyed by stage name and accepts up to thirteen
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
 |---------|----------|---------|----------------------------------------------------------------------------------------------------------|
-| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `cursor`, `opencode`, `qwen`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
+| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `cursor`, `opencode`, `qwen`). Selects which agent runs this stage; forbidden on a script stage — a structural error at compile time (`agent is forbidden on a script stage in workflow.<NAME>`), the same exclusivity family as `gates` and `assistants` on a script stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
+| `env`   | map of str→str | — | Per-stage environment variables, exported verbatim by a generated sh closure wrapping the stage's execution target — the entry's own `agent`, else the extend-entry agent of the same name, else the global pipeline agent. On an agent stage the closure replaces the stage's `command`; on a script stage the authored script becomes the closure's payload (the compiled `script:` field is patched to the wrapper, which re-executes the script inside the exported environment). Every `loop`-expanded copy gets its own closure carrying the same values; keys must be legal environment variable names and values are shell-quoted in the closure. An empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` (`env is forbidden in workflow.extend.<NAME>`). |
 | `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt-context-not-command). |
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
@@ -90,12 +133,14 @@ fields:
 | `notes` | map of str→str | — | Note buttons — a map of "note name → prompt text" attached verbatim to the stage. Single-line texts serialize as plain scalars, multi-line texts as block literals. An empty map equals absence (no buttons emitted). Allowed ONLY in `stages` — it is a structural error under `extend` (an extend-stage receives its buttons through the `stages` block by name). Every `loop`-expanded copy carries the same buttons; `skip` wins over `notes`. How the buttons surface during the run is owned by the pipeline runtime — the compiler only assembles them. See [Note buttons (`notes`)](#note-buttons-notes). |
 | `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` naming which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `memory` | bool | — | Memory-participation instruction (alignment method): `true` marks the stage as participating in project memory. An explicit `false` equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
+| `assistants` | map | — | Stage assistant attachments keyed by assistant name — each entry a reference (`gate`/`when`, with `when` required) or a full inline declaration; an empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation). |
+| `gates` | list | — | Quality-gate check steps the stage must pass before it counts as done — a list of `{name, script xor agent, timeout?, prompt?, env?}` mappings; an empty list equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` and in any stage body. See [Quality gates (`gates`)](#quality-gates-gates). |
 
 Rules:
 
-- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory` are valid. An
+- Only `agent`, `env`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory`, `assistants`, `gates` are valid. An
   unknown key is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, prompt, loop, skills, skip, approve, manual, notes, reflect, memory`.
+  agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory, assistants, gates`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
@@ -168,9 +213,11 @@ exists in the image — absence is surfaced at run time, not at validation
 time.
 
 When a stage does **not** specify an `agent` in the workflow, the pipeline
-uses its global default agent — typically `claude`. Setting `agent`
-per-stage overrides that default for the named stage only; other stages
-keep the global default.
+falls back to the extend-entry agent of the same stage name (the inline
+default an `extend` entry may carry), and then to the pipeline's global
+default agent — typically `claude`. Setting `agent` per-stage overrides
+both fallbacks for the named stage only; other stages keep the global
+default.
 
 ### Workflow `prompt` — context, not command
 
@@ -429,6 +476,468 @@ Behavior rules:
   container — goga authors and compiles the instructions. If your image
   predates the mechanism, refresh it with `--update`.
 
+### Collaboration (`assistants`, `delegation`)
+
+A workflow can attach **helper agents** to its stages and add **run-level
+team agents** through the runner's collaboration mechanism: a top-level
+`assistants` catalog declares the named assistants, a top-level
+`delegation` block bounds helper delegation, and the per-stage
+`assistants` instruction attaches assistants to stages.
+
+Workflow collaboration requires afm 2.0+ (the shipped image carries it); an
+older image predating the mechanism must be refreshed with `--update`.
+
+```yaml
+assistants:                     # the catalog — run-level assistants (a name-keyed map)
+  reviewer:
+    agent: claude               # optional; defaults to the global pipeline agent
+    delegate: true              # optional; may create child tasks
+    skills: [code-audit]        # the assistant's own skills
+    prompt: |
+      Review the stage changes and report concrete findings.
+
+delegation:                     # optional delegation bounds
+  depth: 3                      # max delegation depth (>= 0); 0 forbids helpers
+  max_tasks: 50                 # whole-run helper task budget (>= 1)
+
+stages:
+  build:
+    assistants:
+      reviewer:                 # 1) reference — the declaration comes from the catalog
+        when: finish
+  accept:
+    assistants:
+      reviewer:                 # 2) reference with the gate override
+        gate: true
+        when: finish
+      security:                 # 3) full inline declaration
+        prompt: Audit the diff.
+        when: checkpoints
+```
+
+The top-level `assistants:` catalog is a name-keyed map: each key IS the
+assistant name — it must match `[A-Za-z0-9._-]`, `assistant` is reserved
+(its dashboard handle is), and it is unique across the catalog and every
+inline declaration. Each entry value accepts these keys:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `prompt` | string | — | The assistant's instruction. Not required at parse time — see the effective-content rule below. |
+| `skills` | list of strings | — | The assistant's own skills. Not required at parse time — see the effective-content rule below. |
+| `agent` | string | global agent | A CLI agent name, resolved implicitly at delivery — no wrapper path is authored. |
+| `delegate` | bool | not authored | Whether the assistant may create child tasks. Tri-state at parse time: unset inherits from a tool-delivered base in the [override merge](#assistant-overrides) and materializes `false` at delivery; an explicit `false` opts out. |
+| `env` | map of str→str | — | The assistant's environment variables, delivered through a generated closure that wraps the assistant's launch command (the same mechanism as per-stage `env`). An authored empty map (`env: {}`) is an explicit override that clears the field — not an absence. |
+
+An entry may carry **none** of the five content fields — an override-style
+entry whose effective content resolves through the [assistant
+overrides](#assistant-overrides) at compilation. The requirement is on the
+**effective** entry: after the tool contributions merge, every assistant in
+the namespace must resolve a `prompt` or a `skills` list, or compilation
+stops with `assistant <name> at <site> resolves neither prompt nor skills`
+naming the authoring site (`workflow.assistants.<name>` or
+`workflow.stages.<stage>.assistants.<name>`). The check covers the whole
+namespace — an entry no stage references, or one declared on a `skip: true`
+stage, is still authored content and still checked.
+
+`name`, `gate`, and `when` never appear in a catalog entry value — the map
+key is the name itself, and `gate`/`when` are attachment parameters
+(authoring either in the catalog is a structural error).
+
+The top-level `delegation:` block accepts:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `depth` | int `>= 0` | not authored | Maximum delegation depth; `0` forbids helper creation entirely. Travels into the compiled flow as the collaboration depth. Verified engine behavior (afm v2.0.9): at `depth: 0` the engine also declines run-level team-agent creation (`delegation_depth_exceeded` warnings) — team agents start at `depth >= 1`. |
+| `max_tasks` | int `>= 1` | `50` | Whole-run helper task budget — every helper, run agent, and child task counts against it. Written into the engine configuration only when the block is authored. |
+
+Both keys are optional; an empty block is valid and materializes
+`max_tasks: 50`. A workflow consisting of the `delegation:` block alone —
+or of the `assistants:` catalog alone — is valid.
+
+The per-stage `assistants` instruction is a name-keyed map — each key names
+the assistant (identifying the catalog entry for a reference, or the
+declaration itself for an inline entry), and each value carries the
+attachment parameters. Two entry forms:
+
+1. **A reference** — a value carrying only `gate`/`when`: the agent,
+   prompt, skills, delegate permission, and env come from the catalog
+   entry; only `gate` and `when` are the attachment's own.
+2. **A full inline declaration** — a value carrying any further key
+   (`prompt`, `skills`, `agent`, `delegate`, `env`, plus `gate`/`when`).
+   Independent of the catalog; no content field is required at parse time
+   (the effective-content rule above applies after the merge). Note:
+   `skills` authored here has no effect — the engine
+   accepts skills only on run-level team entries, and only catalog
+   entries become team members (see the behavior rules below).
+
+| Attachment key | Type | Default | Description |
+|----------------|------|---------|-------------|
+| `when` | `start` \| `checkpoints` \| `finish` \| `message` | **required** | When the assistant engages. `message` is the resting engagement: the engine sends no initial request — the helper waits for messages and stays attached after each answer (one turn per message). |
+| `gate` | bool | `false` | `true` — the assistant's verdict must pass (or be waived by a human) before the stage may finish; `false` is advisory. |
+
+`when` is required on every attachment — the entry key already names the
+assistant, so its engagement timing is authored explicitly. An unknown
+attachment key is a structural error (`valid keys: prompt, skills, agent,
+delegate, env, gate, when`).
+
+Behavior rules:
+
+- **Names form one namespace.** The catalog and every inline declaration
+  share a single namespace across the workflow-file; a repeated
+  declaration name is a structural error (`duplicate assistant name:
+  <NAME>`), and the name `assistant` is rejected (`assistant name is
+  reserved`).
+- **References resolve at compile time.** A reference naming no catalog
+  entry and no inline declaration of the effective document is a compile
+  error (`unknown assistant reference in workflow.stages.<NAME>`). The
+  same assistant attached twice to one stage is a compile error —
+  reachable only through a programmatic (tool) contribution, since an
+  authored map cannot repeat a key — as is an
+  attachment on a stage whose body carries `script` or whose agents value
+  is exactly `["planning"]` — helpers attach to execution stages only.
+- **Attachments live only under `stages.<name>`.** Authoring `assistants`
+  inside an `extend`-entry is a structural error — the attachments of a
+  new stage are authored in the `stages` block under its name. Authoring
+  an `assistants` key in a stage *body* is likewise a structural error.
+- **Defaults are materialized, never invented.** `gate` and `max_tasks`
+  always carry their materialized values into the compiled output; `when`
+  has no default — it is authored on every attachment, and the compiled
+  engagement value is always written explicitly. `delegate` materializes
+  `false` only at delivery: while authoring it stays tri-state, so an
+  unset value can inherit from a tool-delivered base in the
+  [assistant overrides](#assistant-overrides) — an authored `false` opts
+  out and never inherits. The engine's own defaults (a `one_shot` trigger,
+  a 20-task budget) are never relied upon.
+- **Skills deliver through the catalog.** The engine accepts `skills` only
+  on run-level team entries, and the team is built from the `assistants:`
+  catalog alone — so `skills` authored on a catalog entry reaches the
+  engine, while `skills` authored on a full inline declaration has no
+  channel: the compiler logs a warning naming the stage and the assistant
+  and drops the value. Declare the assistant in the catalog (and attach it
+  by reference) to deliver its skills.
+- **Every `loop`-expanded copy carries its stage's attachments; a skipped
+  stage attaches nothing.**
+- **No profile concept is user-visible.** The engine requires each helper
+  to reference a profile; goga generates and maintains that plumbing
+  (`goga-<name>` bindings and their launch commands) from the compiled
+  flow on every launch. There is nothing to author or manage, and a
+  user-authored profile with the same `goga-`-prefixed id deliberately
+  replaces goga's plumbing.
+- **Authored configuration applies on every launch.** The engine
+  configuration is rewritten per run and the helper plumbing (including
+  env closures) is regenerated with it — the workflow-file is the durable
+  source, so the same authoring takes effect on consecutive runs.
+- If the environment disables collaboration, declared helpers are skipped
+  with engine warnings and the run proceeds.
+
+### Assistant overrides
+
+An authored entry — catalog or inline — whose name matches an assistant a
+tool delivered **overrides it field by field**: every field the author set
+wins whole (`prompt`, `skills`, `agent`, `delegate`, `env`; presence
+decides, never truthiness — `skills: []` and `env: {}` are authored values
+that clear the field), and every field the author left unset flows from the
+tool's delivery. `gate`/`when` are always the authored ones. The authored
+entry keeps its position — a catalog entry stays a catalog entry (and a
+team member), an inline declaration stays on its stage.
+
+This is the authoring surface over the tool contributions: a tool that
+delivers an assistant through its `pipeline.amend_workflow` contribution
+(see [Hooks](hooks.md)) can be retuned per project without forgoing the
+delivery — author a same-named entry and set only the fields you want to
+change.
+
+```yaml
+# the tool delivers "reviewer" with its own prompt, skills, and env;
+# the workflow-file overrides the agent and clears the env, the rest flows
+assistants:
+  reviewer:
+    agent: codex
+    env: {}
+```
+
+An override naming an assistant **no tool delivered** carries no base to
+flow from — its unset fields stay unset, and the effective-content rule
+above stops compilation (`assistant <name> at <site> resolves neither
+prompt nor skills`) naming the authoring site. Give the entry a `prompt`
+or a `skills` list, or drop the entry.
+
+## Run cycles (`repeat`)
+
+A workflow can put a **repeatable** pipeline into a running cycle: the
+pipeline-file header declares the capability (`repeatable: true` — see
+[Pipeline File — Header](pipeline-file.md#header)), and the workflow-file
+authors the tuning through the top-level `repeat` block. The engine (afm
+2.0.9+; the shipped image carries it) then runs the complete stage
+sequence in cycles until a stop condition.
+
+```yaml
+repeat:
+  max_cycles: 3      # at most 3 complete passes
+  keep_runs: 5       # keep the 5 most recent cycle run-directories
+```
+
+The block carries the engine's vocabulary verbatim — goga materializes no
+defaults, and both keys are optional:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `max_cycles` | int `>= 0` | — | At most N complete passes. `0` is an authored value carried verbatim; its cycle meaning belongs to the engine. |
+| `keep_runs` | int `>= 0` | — | How many recent cycle run-directories to keep (the engine default is `2`). |
+
+Rules:
+
+- **The block belongs to a repeatable pipeline.** A `repeat:` block in the
+  workflow of a pipeline whose header does not declare `repeatable: true`
+  is a compile-time structural error (`workflow repeat block requires a
+  repeatable pipeline; author repeatable: true in the pipeline header`).
+- **A repeatable pipeline always compiles a `repeat` key.** Authored keys
+  ride verbatim (`max_cycles: 0` compiles as `0`); with no block, no
+  workflow-file, or `--no-workflow`, the compiled output carries the
+  scalar `repeat: true` (unlimited cycles, engine defaults). The compiled
+  key sits immediately after `description`. A non-repeatable pipeline
+  compiles no `repeat` key at all.
+- **Structural validation at parse time.** A non-mapping value — including
+  the scalar `repeat: true`, which belongs to the compiled flow-file, not
+  to the authoring surface — raises `non-mapping repeat block in
+  workflow`; an unknown key raises `unknown key in workflow.repeat:
+  <KEY>; valid keys: max_cycles, keep_runs`; a non-int value raises
+  `non-int value in workflow.repeat.<KEY>`; a negative value raises
+  `<KEY> must be >= 0 in workflow.repeat`. A boolean is not an integer
+  for these checks.
+- **An empty block (`repeat: {}`) equals absence** — the document carries
+  no repeat instruction. A workflow consisting of the block alone is
+  valid. The workflow-level way to pin a repeatable pipeline to a single
+  pass is `repeat: {max_cycles: 1}`.
+- **goga owns no cycle logic.** Cycle counting, stop-on-failed-cycle (a
+  cycle that ends with a failed stage stops the repeat — no next cycle),
+  run-directory pruning, and the `flow_repeated` events the engine emits
+  between cycles all belong to afm — the run stays a single `afm run`
+  invocation.
+
+## Quality gates (`gates`)
+
+A workflow can attach **quality gates** to its stages: a per-stage list of
+**check steps** the stage must pass before it counts as done, plus an
+optional top-level settings block tuning the correction retries. Gates
+compile one-directionally into the engine's stage-completion gate — the
+`verify` field of the flow-file (afm 2.0+; the shipped image carries it).
+goga never runs the checks: the engine executes the compiled gate and owns
+every retry semantic.
+
+```yaml
+gates:                          # optional workflow-level settings block
+  max_iterations: 2             # bound of failed correction attempts
+  fresh_correction: true        # whether a correction session starts fresh
+
+stages:
+  implementation:
+    gates:                      # the check steps of this stage, in authored order
+      - name: Unit tests        # the dashboard label; required on every step
+        script: pytest -q       # a shell check step (script xor agent)
+        timeout: 30m            # optional; carried verbatim
+        env:                    # optional; environment variables of the step
+          FOO: bar
+      - name: Code review       # an AI-review step
+        agent: codex
+        prompt: |               # the review instruction — agent steps only
+          Review the diff for correctness.
+        env:                    # valid on agent steps too
+          REVIEW_STRICTNESS: strict
+```
+
+The top-level `gates:` block accepts these keys — authored keys only; goga
+materializes no settings defaults, and the engine defaults apply for
+unauthored keys:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `patience` | int `>= 0` | — | Tolerance for an unchanged correction stalemate. Compiles to `review_patience`. |
+| `max_iterations` | int `>= 0` | — | Bound of failed correction attempts. Compiles to `max_failures`. |
+| `fresh_correction` | bool | — | Whether a correction session starts fresh. Compiles verbatim. |
+
+The workflow vocabulary maps one-directionally onto the engine's stage
+`verify` vocabulary:
+
+| Workflow (`gates`) | Engine (`verify`) | Notes |
+|--------------------|------------------|-------|
+| `patience` | `review_patience` | Setting keys translate; absent keys stay absent. |
+| `max_iterations` | `max_failures` | An authored `0` is a value, not an omission. |
+| `fresh_correction` | `fresh_correction` | Unchanged. |
+| step `script` | step `run` | A shell check step — gated on the exit status. |
+| step `agent` | step `command` | The agent name composed into the wrapper path `/home/goga/bin/<agent>-as-claude.sh` (the same template as the per-stage `agent` override; no agent-name existence check). |
+| step `name` / `prompt` / `timeout` | same names | Carried verbatim. |
+| step `env` | — (no emitted key) | Never reaches the flow-file — see [Gate step env](#gate-step-env) below. |
+
+Each check step is a mapping with up to six keys:
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `name` | string | yes | The step's dashboard label — required on every step. |
+| `script` | non-empty string, or a non-empty list of non-empty strings | xor `agent` | A shell check step. A list is the script's lines, joined with newlines into one multi-line script — identical in shell semantics to writing the same lines as a block scalar. |
+| `agent` | non-empty string | xor `script` | An AI-review step — the same agent-name vocabulary as the per-stage `agent` override. A single string, never a list. |
+| `timeout` | string | no | Carried verbatim; the duration grammar is engine-owned. |
+| `prompt` | string | no | The review instruction of an AI step — forbidden on a `script` step (`prompt is forbidden on a script gate step in workflow.stages.<NAME>.gates[<i>]`). |
+| `env` | map of string → string | no | Environment variables of the step — valid on both step kinds; an empty map equals absence. |
+
+A shell step without an authored `timeout` carries the materialized default
+`1h`; an AI step materializes no timeout default. The `1h` is a goga-side
+product default, not an engine contract.
+
+A multi-command check authors as the script's lines — a list, joined with
+newlines into one multi-line script at parse time:
+
+```yaml
+stages:
+  build:
+    gates:
+      - name: checks
+        script:
+          - pytest ./
+          - ruff check .
+```
+
+Rules:
+
+- **Exactly one of `script`/`agent` per step.** Both or neither is a
+  structural error (`gates step must carry exactly one of script/agent in
+  workflow.stages.<NAME>.gates[<i>]`); a missing `name` raises `gates step
+  without name in workflow.stages.<NAME>.gates[<i>]`. A scalar `script`/`agent`
+  defect raises `script must be a non-empty string in
+  workflow.stages.<NAME>.gates[<i>]` (and the `agent` counterpart); a list-form
+  `script` that is empty or carries a non-string/empty element raises `script
+  must be a non-empty list of non-empty strings in
+  workflow.stages.<NAME>.gates[<i>]`.
+- **Empty equals absence.** An empty settings block (`gates: {}`) and an
+  empty step list (`gates: []`) are treated as absent keys.
+- **The settings block alone is inert.** A workflow consisting of the
+  `gates:` block alone is valid — but the settings travel only with stages
+  that declare check steps: without a gated stage nothing is emitted, no
+  error is raised.
+- **The settings ride on every gated stage when authored.** When the
+  settings block authored at least one key, every gated stage's `verify`
+  carries the steps plus the authored settings (the container form); with
+  no settings block authored, a gated stage carries the steps alone (the
+  list form).
+- **Gates attach to execution stages only.** A gate on a stage whose body
+  carries `script` raises `gates are forbidden on a script stage in
+  workflow.stages.<NAME>`; a gate on a planning-only stage raises `gates
+  are forbidden on a planning-only stage in workflow.stages.<NAME>` — the
+  engine rejects both.
+- **Gates are authored ONLY in the `stages` block.** A `gates` key in an
+  `extend`-entry is a structural error (`gates is forbidden in
+  workflow.extend.<NAME>`) — the checks of a new stage are authored in the
+  `stages` block under its name, like any other stage. Authoring `gates`
+  or a raw `verify` key in any stage body (a pipeline-file stage or an
+  `extend` body) is likewise a structural error — `verify` is a
+  compiled-only key.
+- **Structural validation at parse time.** A non-mapping settings value
+  raises `non-mapping gates block in workflow`; an unknown settings key
+  raises `unknown key in workflow.gates: <KEY>; valid keys: patience,
+  max_iterations, fresh_correction`; a non-int or negative value raises
+  `non-int value in workflow.gates.<KEY>` / `<KEY> must be >= 0 in
+  workflow.gates`; a non-list stage value raises `non-list gates in
+  workflow.stages.<NAME>`. A boolean is not an integer for these checks.
+- **Every `loop`-expanded copy carries the same gate; a skipped stage
+  attaches nothing** — skip removal runs first, so the gates of a skipped
+  stage drop silently.
+- **Engine-owned semantics.** Step sequencing (in order, fail-fast),
+  full-list re-runs after a correction, the correction budget and
+  stalemate rules, verdict parsing, and human waiver all belong to the
+  engine — the run stays a single `afm run` invocation. Older engines
+  reject a gated flow at load (a downgrade is never silent); a malformed
+  `timeout` or a whitespace-only `name` passes verbatim and surfaces at
+  engine load/preflight.
+
+### Gate step env
+
+Each check step may carry an `env` map — environment variables for that
+step's execution, valid on both step kinds (a shell `script` step and an
+AI `agent` step alike):
+
+```yaml
+stages:
+  implementation:
+    gates:
+      - name: Unit tests
+        script: pytest -q
+        env:
+          FOO: bar
+      - name: Code review
+        agent: codex
+        prompt: Review the diff.
+        env:
+          REVIEW_STRICTNESS: strict
+```
+
+The engine's verify-step schema has no `env` field, so the map never
+reaches the flow-file as an emitted key. Instead goga delivers it through
+the same mechanism as the per-stage `env` instruction (see the
+[`env` row](#stage-entries) of the stage-entries table):
+after compilation, one generated sh closure wrapper per env-declaring step
+exports the values verbatim and carries the payload (the authored script
+lines on a shell step, or the exec of the agent wrapper on an AI step), and
+the step's `run`/`command` line in the written flow-file is patched to
+point at the wrapper. Every other byte of the flow-file stays untouched; a
+workflow whose gates declare no step env compiles byte-identically.
+
+Keys must be legal environment variable names (POSIX shape) — anything
+else is a strict pre-run error naming the stage, the step, and the key,
+raised before any wrapper is written. Values layer above every global env
+layer.
+
+### Worked example
+
+A stages-format pipeline whose `implementation` stage is gated by two check steps
+(a shell step with an authored timeout, an AI-review step), with the
+settings block authoring a correction budget:
+
+```yaml
+gates:
+  max_iterations: 2
+  fresh_correction: true
+
+stages:
+  implementation:
+    gates:
+      - name: Unit tests
+        script: pytest -q
+        timeout: 30m
+      - name: Code review
+        agent: codex
+        prompt: |
+          Review the diff for correctness.
+```
+
+Compiled effect — the stage carries a `verify` block (after `agents`) in
+the container form, steps in authored order, then the authored settings in
+the fixed order `max_failures`, `review_patience`, `fresh_correction`
+(exactly as emitted, stage fields at two spaces):
+
+```yaml
+  verify:
+    steps:
+    - name: Unit tests
+      run: pytest -q
+      timeout: 30m
+    - name: Code review
+      command: /home/goga/bin/codex-as-claude.sh
+      prompt: |
+        Review the diff for correctness.
+    max_failures: 2
+    fresh_correction: true
+```
+
+Without the settings block the same gate compiles to the list form, with
+the shell default timeout materialized:
+
+```yaml
+  verify:
+  - name: Unit tests
+    run: pytest -q
+    timeout: 1h
+```
+
 ## Extending the pipeline with new stages
 
 The `stages` block only overrides stages that already exist in the target
@@ -467,7 +976,9 @@ Positioning (`before` / `after`), default overrides (`agent` / `loop` /
   compiles to `auto_run: false`), which is why the workflow `manual` key is
   forbidden in an `extend` entry (see
   [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger));
-  `skip` is likewise forbidden (a new stage has nothing to skip).
+  `skip` is likewise forbidden (a new stage has nothing to skip), and so is
+  `env` (`env is forbidden in workflow.extend.<NAME>` — per-stage env
+  instructions are declared only for existing stages, under `stages`).
 - The `title` field, when omitted, falls back to the entry key — so a stage
   declared under `extend: warmup:` without a `title` is still labeled
   `warmup` in the output.
@@ -528,7 +1039,7 @@ an absence — omit the key to express absence (symmetric with the per-stage
 
 ### Examples
 
-A STAGES pipeline `specify → review` with a new `warmup` stage that runs after
+A stages-format pipeline `specify → review` with a new `warmup` stage that runs after
 `specify`, and a new `extra` stage that runs before `review`:
 
 ```yaml
@@ -549,7 +1060,7 @@ Compiled effect (stages format): `warmup` depends on `specify`, and `review`
 gains `extra` as an additional dependency —
 `specify → warmup`, `extra → review`.
 
-The same idea for a PHASES pipeline `[a, b, c]` — insert `x` after `b`:
+The same idea for a phases-format pipeline `[a, b, c]` — insert `x` after `b`:
 
 ```yaml
 extend:
@@ -704,22 +1215,6 @@ For each `(stage_name, effective_stage)` pair in the map:
      canonical field assembly into the stage's launch mode. See
      [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger).
 
-### Skills merge
-
-A `stages`-block `skills` override is **merged** with the pipeline-file
-`skills` of the matched stage, not replaced:
-
-- Pipeline-file skills come first (their relative order is preserved), then
-  the workflow skills, with any value already seen dropped (deduplication is
-  by value, first-occurrence order).
-- A stage with no pipeline `skills` gets the workflow list as-is; a workflow
-  override of `[]` (or a stage with neither side carrying skills) leaves the
-  `skills` key absent rather than emitting an empty list.
-- An `extend` entry's own body `skills` are the new stage's pipeline-side
-  skills — when a `stages` entry also names that stage, the merge combines the
-  extend-body skills with the `stages` override. With no matching `stages`
-  entry the extend-body skills pass through verbatim.
-
 ### Step 5 — Expand loops
 
 For each step, determine `loop_count` from the effective override's `loop`
@@ -790,6 +1285,70 @@ authored `memory` block when present, else the materialized defaults
   participation compiles byte-identically to the same workflow compiled
   before the mechanism existed.
 
+### Skills merge
+
+A `stages`-block `skills` override is **merged** with the pipeline-file
+`skills` of the matched stage, not replaced:
+
+- Pipeline-file skills come first (their relative order is preserved), then
+  the workflow skills, with any value already seen dropped (deduplication is
+  by value, first-occurrence order).
+- A stage with no pipeline `skills` gets the workflow list as-is; a workflow
+  override of `[]` (or a stage with neither side carrying skills) leaves the
+  `skills` key absent rather than emitting an empty list.
+- An `extend` entry's own body `skills` are the new stage's pipeline-side
+  skills — when a `stages` entry also names that stage, the merge combines the
+  extend-body skills with the `stages` override. With no matching `stages`
+  entry the extend-body skills pass through verbatim.
+
+## Profiles
+
+Before parsing, the whole workflow-file is rendered as a [Jinja2](https://jinja.palletsprojects.com/)
+template (`trim_blocks`, `lstrip_blocks`, `keep_trailing_newline`; standard
+`Undefined`) with the active profile's content as its context — a plain file
+renders to itself, and templates without activation render with an empty
+context. Rendering never bypasses validation: the rendered text passes the
+standard structural validation unchanged.
+
+A profile is a small YAML mapping stored in one of two places, with the
+project source winning on name conflicts:
+
+| Source   | Directory               | Notes                                                     |
+|---------|--------------------------|-----------------------------------------------------------|
+| project | `<cwd>/.goga/profiles/<name>.yml` | Checked into the repository; wins on name conflict. |
+| home    | `~/.goga/profiles/<name>.yml`     | Personal; the whole bundle rides into the container base64-encoded via the `GOGA_HOME_PROFILES` engine variable. |
+
+Activation precedence: the `--profile` CLI flag beats the `GOGA_PROFILE`
+environment variable, which beats the workflow's own top-level `profile:`
+default. The default is peeked from the RAW text — a templated default
+(one that materializes only through rendering) does not participate in
+activation. Profile names follow the grammar
+`[A-Za-z0-9][A-Za-z0-9._-]*` (with `.` and `..` forbidden).
+
+Strictness: a missing or malformed profile is a clean error naming the
+profile; a malformed `*.yml` file in `~/.goga/profiles/` is a clean
+host-side error before any docker activity; a damaged `GOGA_HOME_PROFILES`
+payload is a clean in-container error before any events or launch.
+
+```yaml
+# .goga/profiles/nightly.yml
+worker:
+  agent: codex
+  model: sonnet
+```
+
+```yaml
+# .goga/workflows/deploy.yml — rendered with the profile as context
+{% if worker and worker.agent %}
+stages:
+  build:
+    agent: {{ worker.agent }}
+{% endif %}
+```
+
+The build command consumes the same profiles (see
+[build](../build/cli.md)).
+
 ## Invocation modes
 
 A pipeline run picks up a workflow in one of three mutually exclusive modes.
@@ -820,13 +1379,16 @@ is exactly the composition a run with the same flags executes. See
 ### Log line
 
 When a workflow will actually be applied (explicit `--workflow`, or an
-auto-match file that exists), the launcher prints a single line to stdout:
+auto-match file that exists), the in-container goga process prints a single
+line before the launch output — extended with the resolved profile when one
+activated:
 
 ```text
 Pipeline running with workflow "<name>"
+Pipeline running with workflow "<name>" and profile "<profile>"
 ```
 
-When no workflow applies, the launcher prints no workflow line.
+When no workflow applies, no workflow line is printed.
 
 ## Example
 

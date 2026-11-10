@@ -11,7 +11,7 @@ build(plan: str, config: ProjectConfig, cli_options: dict) -> int
 main() -> int
 ```
 
-`build` is the full cycle — manifest pre-check, settings resolution with the pre-side-effect validations, the `build/validate_build` hooks gate, the tasks pass, the review pass (skipped on `skip` or a failed tasks pass), plan relocation, and the completion notification; the exit code of the last executed pass is returned. `main` is the in-container console entry point. The `cli_options` dict carries the in-container CLI-surface values (tri-state `skip_review`, `base_ref`, the session knobs, `review_patience`, …).
+`build` is the full cycle — manifest pre-check, settings resolution with the pre-side-effect validations, the `build/validate_build` hooks gate, the tasks pass, the review pass (skipped on `skip` or a failed tasks pass), plan relocation, and the completion notification; the exit code of the last executed pass is returned. `main` is the in-container console entry point. The `cli_options` dict carries the in-container CLI-surface values (tri-state `skip_review`, `base_ref`, the session knobs, `review_patience`, `workflow`, `profile`, …).
 
 ## Run settings
 
@@ -30,14 +30,16 @@ ReviewPassSettings(PassSettings, roles, base_ref, strategy, finalize, additional
 
 ```python
 sync_ralphex_defaults(config: BuildConfig, settings: RunSettings) -> None
-write_ralphex_config(settings: RunSettings, wrapper_path: str) -> None
+write_ralphex_config(settings: RunSettings, wrapper_path: str,
+                     additional_wrapper_path: str | None = None) -> None
 run_build_pass(plan: str, settings: RunSettings, options: dict[str, str | int | bool],
                wrapper_path: str, dry_run: bool,
-               env: dict[str, str] | None = None) -> int
+               additional_wrapper_path: str | None = None) -> int
+write_role_env_wrappers(settings: RunSettings, cli_entries: dict[str, str]) -> dict[str, Path]
 move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> RelocationOutcome
 ```
 
-`sync_ralphex_defaults` rewrites `.ralphex/prompts/` and `.ralphex/agents/` from the configured or vendored defaults (filtering the vendored review prompts to the selected `roles` — a custom `prompts_dir` is copied unfiltered — and materializing the finalize step when `review.finalize` is set). `write_ralphex_config` writes the engine config for one pass — the executor wrapper of the current pass plus the external-review surface derived from the review part (strategy `medium` disables the external review; `full`/`short` with an additional agent set it to that agent's wrapper). `run_build_pass` launches one ralphex pass (tasks or review) — `dry_run=True` prints the assembled command; the env layer reaches the subprocess only, never options or logs. `move_completed_plan` relocates a successfully completed plan into `<plan_dir>/completed/` and returns the `RelocationOutcome` that feeds the completion event.
+`sync_ralphex_defaults` rewrites `.ralphex/prompts/` and `.ralphex/agents/` from the configured or vendored defaults (filtering the vendored review prompts to the selected `roles` — a custom `prompts_dir` is copied unfiltered — and materializing the finalize step when `review.finalize` is set). `write_ralphex_config` writes the engine config for one pass — the executor wrapper of the current pass plus the external-review surface derived from the review part (strategy `medium` disables the external review; `full`/`short` with an additional agent set it to that agent's wrapper). `run_build_pass` launches one ralphex pass (tasks or review) — it owns the pass-config write (both wrapper paths, the last write before the launch) and carries no env layer: `dry_run=True` prints the assembled command, the subprocess inherits the container environment, and the role env layers travel through the closures `write_role_env_wrappers` generates (also exported, with `resolve_build_workflow` and `merge_workflow_build`, from the `goga.build` facade). `move_completed_plan` relocates a successfully completed plan into `<plan_dir>/completed/` and returns the `RelocationOutcome` that feeds the completion event.
 
 ## Hooks
 

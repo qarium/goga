@@ -1,9 +1,10 @@
 # Pipeline File
 
 A **pipeline-file** is the base YAML document that defines a pipeline. It
-carries a header — `name`, `description`, and an optional `roles` block
+carries a header — `name`, `description`, an optional `roles` block
 that replaces the shipped default prompts of the authorable roles (see
-[Roles](#roles)) — and a body that lists the ordered stages of the
+[Roles](#roles)), and an optional `repeatable` capability flag (see
+[Header](#header)) — and a body that lists the ordered stages of the
 pipeline.
 
 Pipeline-files live at:
@@ -26,9 +27,10 @@ Every pipeline-file is a two-segment YAML document separated by a `---` line:
 <body>
 ```
 
-- The **header** is a YAML mapping with `name`, `description`, and an
-  optional `roles` block (see [Roles](#roles)).
-- The **body** is either a YAML **list** (phases format) or a YAML **dict**
+- The **header** is a YAML mapping with `name`, `description`, an
+  optional `roles` block (see [Roles](#roles)), and an optional
+  `repeatable` flag (see below).
+- The **body** is either a YAML **list** (phases format) or a YAML **mapping**
   (stages format).
 
 A file without the `---` separator is rejected at parse time with a
@@ -49,9 +51,15 @@ roles:         # optional block — see "Roles"
 | `name`        | string | yes      | Pipeline identifier, must be non-empty                 |
 | `description` | string | yes      | Short human-readable purpose                           |
 | `roles`       | map   | no       | Inline overrides for the three role prompts. See [Roles](#roles). |
+| `repeatable`  | bool   | no       | Declares the pipeline may run in cycles. A repeatable pipeline always compiles a `repeat` key: a workflow `repeat` block supplies the authored bounds, else the scalar `repeat: true`. See [Workflows — Run cycles](workflows.md#run-cycles-repeat). |
 
 A header missing `name` or `description` is rejected with a structural
-error.
+error. The `repeatable` flag is strictly boolean — `repeatable: 1`,
+`"yes"`, or `null` raise `non-bool value in header.repeatable`. The flag
+never enters the compiled flow-file directly: the compiler turns the
+capability plus any workflow `repeat` block into the output `repeat` key,
+and none of the shipped pipelines declares it (adopting cycles is a
+deliberate per-pipeline decision).
 
 ## Body formats
 
@@ -86,7 +94,7 @@ chain naturally via list position — the first copy inherits the original
 position, subsequent copies depend on their predecessor, and the next
 **original** step depends on the last expanded copy.
 
-### Stages format (dict)
+### Stages format (mapping)
 
 A YAML mapping keyed by step id. Each value carries `title` and an optional
 explicit `depends_on` plus any extra fields. `depends_on` is passed through
@@ -161,6 +169,12 @@ below have assigned semantics:
 > Authoring `reflect` or `memory_use` in a stage body is rejected with a
 > structural error.
 >
+> The quality gates likewise have no pipeline-file authoring key: they are
+> assembled by the compiler from the workflow `gates` instructions (see
+> [Workflows — Quality gates](workflows.md#quality-gates-gates)).
+> Authoring `gates` or `verify` in a stage body is rejected with a
+> structural error.
+>
 > The legacy `agents` key is forbidden in both the header and a stage
 > body — author `roles` instead.
 
@@ -172,8 +186,8 @@ below have assigned semantics:
 | `title`       | string           | — (required)                | Display label of the stage — what end users see in stage listings. A missing or non-string `title` is a structural error in both body formats. |
 | `trigger`     | string (`on_success` \| `manual`) | `on_success` | Launch mode of the stage. `manual` — the stage pauses when reached and runs only when launched manually; `on_success` (or an absent key) — the stage starts automatically once its dependencies succeed; any other value is a structural error. Authoring the compiler-output key `auto_run` directly is a structural error. Valid in both body formats and in workflow `extend` bodies; a workflow `stages` block can force or cancel it per-stage via `manual` (see [Workflows](workflows.md)). |
 | `depends_on`  | list of strings  | auto (phases) / none (stages) | Stage dependencies.                                                        |
-| `before_script` | string         | —                           | Shell script run at the start of any stage — agent or script — before its body. See [Script directives](#script-directives). |
-| `after_script`  | string         | —                           | Shell script run at the end of any stage — agent or script — after its body. See [Script directives](#script-directives). |
+| `before_script` | string or list of strings | —                | Shell script run at the start of any stage — agent or script — before its body. See [Script directives](#script-directives). |
+| `after_script`  | string or list of strings | —                | Shell script run at the end of any stage — agent or script — after its body. See [Script directives](#script-directives). |
 
 ### Agent-stage fields
 
@@ -188,7 +202,7 @@ below have assigned semantics:
 
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
-| `script`      | string           | —                           | Shell script run as the stage body itself. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
+| `script`      | string or list of strings | —                 | Shell script run as the stage body itself. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
 | `timeout`       | string         | —                           | Timeout for the stage's script action (a duration string, e.g. `30m`). Requires `script` in the same body; the value passes verbatim — a malformed duration fails the stage at run time. See [Script directives](#script-directives). |
 
 ### Body step `title` field
@@ -214,10 +228,31 @@ A multi-line value serializes as a YAML block-literal (e.g. `script: |`);
 a single-line value stays a plain scalar. The rule is uniform across all
 four slots.
 
+Each of the three script slots accepts either a single string or the
+script's lines — a list of strings. A list is joined with newlines into one
+multi-line script, identical in shell semantics to writing the same lines
+as a block scalar:
+
+```yaml
+build:
+  title: Build
+  script:
+    - pytest ./
+    - ruff check .
+```
+
+A list payload must be non-empty and every element a non-empty string —
+anything else is a structural error naming the stage and the directive.
+
 `script` is **mutually exclusive** with `prompt` and `skills`: a stage runs
 either an agent-driven prompt (`prompt`/`skills`) or a literal shell script
 (`script`), not both. Authoring `script` together with `prompt` and/or
-`skills` is a structural error. `before_script` and `after_script` are
+`skills` is a structural error. A `script` stage also cannot carry an
+authored `command` key — `command` is not pipeline vocabulary (a key
+authored verbatim rides the unknown-key passthrough), and the stage action
+is one: the agent exec target or the script. Pairing them
+is a structural error (`script is mutually exclusive with command in stage
+<NAME>`). `before_script` and `after_script` are
 compatible with both `script` and `prompt`/`skills` — they bracket the stage
 regardless of how its body is defined. An agent stage with bracketing
 scripts:

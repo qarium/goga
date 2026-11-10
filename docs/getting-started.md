@@ -13,7 +13,7 @@
 pipx install goga
 ```
 
-## Connect to agent
+## Connect to an agent
 
 Install skills into an agent:
 
@@ -72,7 +72,7 @@ Invited tools are configured at initialization time with `goga init -t <tool-nam
 
 Instead of the bare wizard, you can scaffold a project from a [copier](https://copier.readthedocs.io/) template first. Copier writes the template files plus a `.goga/scaffold.yml` state file, then the same questionnaire runs. Questions are skipped when the template already brought the corresponding artifact (`.goga/config.yml` or `.goga/usages/conventions.md`). During scaffolding, copier interactively asks every template question that has no programmatic answer (the project name is resolved from the git remote and supplied for you) — run it in a terminal, not a pipe/CI.
 
-On `--upgrade` the survey is skipped and defaults are used:
+Scaffold a fresh project from a template URL:
 
 ```bash
 # Latest commit on the template's default branch
@@ -82,7 +82,7 @@ goga init https://github.com/<you>/my-template.git
 goga init https://github.com/<you>/my-template.git#v1.0
 ```
 
-To migrate a previously scaffolded project to a newer template version later, copier re-applies the recorded template from the state file (no onboarding):
+To migrate a previously scaffolded project to a newer template version later — on `--upgrade` the survey is skipped and defaults are used — copier re-applies the recorded template from the state file (no onboarding):
 
 ```bash
 goga init --upgrade            # re-apply at the recorded ref
@@ -188,6 +188,10 @@ goga schema
 ```
 
 The hierarchy shows cells, their imports, and the connections between them — useful for verifying that the materialized architecture matches what you designed.
+
+To derive the same hierarchy from an existing codebase before any CODEMANIFEST exists, run [`goga codegraph`](features/codegraph/index.md) — it parses the sources with tree-sitter and prints the prospective cell tree as JSON.
+
+To check that the two views agree — every declared cell and type exists in the code and vice versa — run [`goga drift`](features/drift/index.md); it exits 0 when the views agree, 1 when it finds discrepancies (printing a JSON report to stdout), and 2 when the comparison could not run. Installed tools can adjust the report through the [drift checkpoints](features/drift/hooks.md) — the grading follows the settled post-amendment list.
 
 ## Next steps
 

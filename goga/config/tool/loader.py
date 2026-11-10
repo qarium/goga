@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+from ..yaml import parse_env_yaml
 
 
 def load_tool_config(tool: str, filename: str, root: Path | None = None) -> object | None:
@@ -18,8 +18,11 @@ def load_tool_config(tool: str, filename: str, root: Path | None = None) -> obje
            any read.
         3. An absent file returns ``None`` — absence is the normal state of a
            tool config.
-        4. A present file parses via the ``yaml`` practice and returns the raw
-           value as-is.
+        4. A present file parses via ``parse_env_yaml`` — the environment-aware
+           loader (``!ENV NAME`` scalars resolve to plain strings at load time,
+           unset resolves to ``""``); the raw value returns as-is — yaml errors,
+           including constructor errors of malformed tag use, propagate
+           unchanged through the library's error machinery.
 
     Requirements:
         - Path standardization only — the same standard as the write side.
@@ -62,4 +65,4 @@ def load_tool_config(tool: str, filename: str, root: Path | None = None) -> obje
     if not path.exists():
         return None
 
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    return parse_env_yaml(path.read_text(encoding="utf-8"))

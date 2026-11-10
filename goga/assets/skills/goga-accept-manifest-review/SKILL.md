@@ -50,18 +50,23 @@ Process each Cell listed in the Acceptance Scope Report:
 
 **Question: Does the code satisfy the CODEMANIFEST requirements, baseline practices, and language conventions?**
 
-1. Run the contract comparison: `goga contract <cell-path>`.
+1. Run the drift comparison: `goga drift <cell-path>`.
+   - Exit 0 — the declared and code-derived views agree.
+   - Exit 1 — discrepancies found (JSON report on stdout): every entry becomes a finding — `schema_only` → Analysis 1 (missing implementation, CRITICAL), `codegraph_only` → Sub-step 3 classification. Resolve every entry before the contract comparison.
+   - Exit 2 — comparison could not run: record CRITICAL, resolve the cause before continuing.
 
-2. For each Entity, compare:
+2. Once the drift comparison exits 0, run the contract comparison: `goga contract <cell-path>`.
+
+3. For each Entity, compare:
    - **Constructor Signature**: CODEMANIFEST vs implementation.
    - **Methods**: CODEMANIFEST vs implementation — per method.
    - **Properties**: CODEMANIFEST vs implementation — per property.
-3. For each Routine:
+4. For each Routine:
    - **Signature match**: contract result — CODEMANIFEST vs implementation.
    - **Facade export**: is the Routine exported through the Facade.
-4. Check Facade exposure — every Entity must be present in the Facade.
-5. Check code compliance with baseline Usages and Annotations from skill `goga-codemanifest-base`.
-6. Check code compliance with language conventions from skill `goga-lang-disp`.
+5. Check Facade exposure — every Entity must be present in the Facade.
+6. Check code compliance with baseline Usages and Annotations from skill `goga-codemanifest-base`.
+7. Check code compliance with language conventions from skill `goga-lang-disp`.
 
 Additional checks:
 - **Location**: the file at `<cell-path>/<location>` must exist.
@@ -151,6 +156,7 @@ For each approved action:
 
 STOP if:
 - CRITICAL violations exist in any Cell.
+- The drift comparison could not run (exit 2).
 - Implementation contradicts manifest and manifest is correct.
 - CODEMANIFEST linter errors are present.
 - Facade exposure violations are detected.
@@ -166,6 +172,9 @@ Fill in every section. Empty sections are prohibited.
 
 ## Linter Results
 [Table: Cell | Linter Status | Errors (if any)]
+
+## Drift Results
+[Table: Cell | Exit Code | Entries (kind, types) | Triage]
 
 ## Analysis 1 — Code vs Requirements
 [Table: Cell | Signature Match | Method Coverage | Property Coverage | Facade | Status]

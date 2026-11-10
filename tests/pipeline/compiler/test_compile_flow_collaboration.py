@@ -1,0 +1,984 @@
+"""Contract and logic tests for the ``compile_flow`` collaboration emission (step 4.10).
+
+Covers the collaboration half of the compiler: the always-emitted top-level
+``collaboration`` block, the ``team`` list, and the per-stage ``assistants``
+entries —
+
+- the block is constructed on EVERY compilation (mode ``assistants``;
+  ``max_depth`` from the delegation block, omitted when absent);
+- the team list carries one member per catalog entry in authored order, and
+  is empty (key omitted) when the workflow carries no catalog;
+- attachments resolve against the assistant namespace (catalog plus inline
+  declarations of every stage): a REFERENCE takes the declaration's
+  ``prompt`` while keeping its OWN ``gate``/``when`` (the entry carries no
+  ``skills`` — the engine rejects the key on stage entries);
+- the attachment checks fire in contract order — unknown reference,
+  attachment on a script stage, attachment on a planning-only stage (the
+  translated-agents comparison — an authored ``roles: [planning]`` equals
+  ``[planner]``); the duplicate-name guard stays as defense for
+  programmatic contributions (an authored map cannot repeat a key);
+- the content check — every namespace member must resolve a ``prompt`` or a
+  ``skills`` list after the overlay merge (an override-style entry naming an
+  undelivered assistant raises ``StructuralError`` naming it and its site;
+  a merged override entry carries the delivered content and compiles);
+- loop-expanded copies share one attachment list (uniform across copies);
+- an authored ``assistants`` key in a stage body is a structural error;
+- an extend-seeded stage with a stages-block entry keeps its attachments
+  (the C2.4 regression guard);
+- skipped stages are removed before the attachment walk (no checks, no ids);
+- a collaboration-free workflow compiles byte-identically to the pre-change
+  output except for the inserted two-line block.
+"""
+
+from __future__ import annotations
+
+import inspect
+import logging
+import re
+from pathlib import Path
+
+import pytest
+from goga.pipeline.compiler import (
+    FlowAssistant,
+    FlowCollaboration,
+    FlowDocument,
+    PipelineDocument,
+    StructuralError,
+    compile_flow,
+)
+from goga.pipeline.compiler.compile_flow import (
+    _CANONICAL_KEY_ORDER,
+    _canonical_fields,
+)
+from goga.pipeline.hooks import ToolContribution, merge_workflow_overlay
+from goga.pipeline.workflow import (
+    WorkflowAssistant,
+    WorkflowDocument,
+    WorkflowStage,
+    parse_workflow,
+)
+
+# Base STAGES-format pipeline-file for the compiler tests — two stages.
+_BASE_STAGES = (
+    "name: demo\n"
+    "description: Demo pipeline\n"
+    "---\n"
+    "build:\n"
+    "  title: Build\n"
+    "  prompt: Make\n"
+    "review:\n"
+    "  title: Review\n"
+    "  prompt: Check\n"
+)
+
+
+def _compile(
+    tmp_path: Path,
+    pipeline_text: str,
+    workflow_text: str | None = None,
+) -> tuple[PipelineDocument, FlowDocument, str]:
+    """Write the pipeline (and optional workflow), compile, return documents + text.
+
+    Mirrors the ``_compile`` helper of ``test_compile_flow_memory.py`` so the
+    collaboration tests can assert on the assembled ``FlowDocument`` and the
+    written flow-file text.
+    """
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(pipeline_text)
+    flow_path = tmp_path / "flow.yml"
+
+    workflow = None
+
+    if workflow_text is not None:
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(workflow_text)
+        workflow = parse_workflow(workflow_path.read_text())
+
+    pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+    return pipeline_doc, flow_doc, flow_path.read_text()
+
+
+class TestCompileFlowCollaborationContract:
+    """Contract tests — the collaboration surface declared by the compiler CODEMANIFEST."""
+
+    def test_compile_flow_accepts_assistant_blocks(self, tmp_path: Path) -> None:
+        """A workflow carrying the catalog, delegation, and attachments compiles cleanly."""
+        _pipeline_doc, flow_doc, _text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "    skills: [code-audit]\n"
+            "delegation:\n"
+            "  depth: 2\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
+        )
+
+        assert flow_doc.collaboration == FlowCollaboration(mode="assistants", max_depth=2)
+
+    def test_collaboration_block_on_every_compile(self, tmp_path: Path) -> None:
+        """The workflow-less compile still carries the collaboration block."""
+        _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES)
+
+        assert flow_doc.collaboration == FlowCollaboration(mode="assistants", max_depth=None)
+        assert "collaboration:\n  mode: assistants\n" in text
+
+    def test_authored_assistants_key_in_stage_body_rejected(self, tmp_path: Path) -> None:
+        """An authored ``assistants`` key in a stage body raises the pinned prohibition."""
+        pipeline_text = (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "  assistants:\n"
+            "  - profile: goga-reviewer\n"
+        )
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistants key is forbidden in stage body; use assistants in workflow.stages"),
+        ):
+            _compile(tmp_path, pipeline_text)
+
+    def test_canonical_key_order_ends_with_assistants(self) -> None:
+        """``assistants`` follows ``memory_use``; the verify gate slot closes the canonical order."""
+        assert _CANONICAL_KEY_ORDER[-4:] == ["reflect", "memory_use", "assistants", "verify"]
+        assert _CANONICAL_KEY_ORDER.index("assistants") == _CANONICAL_KEY_ORDER.index("memory_use") + 1
+
+    def test_canonical_fields_accepts_assistants_fields(self) -> None:
+        """``_canonical_fields`` takes the step-5 companion parameters (``assistants_fields`` among them)."""
+        parameters = list(inspect.signature(_canonical_fields).parameters)
+
+        assert parameters == ["body", "stage_name", "notes", "memory_fields", "assistants_fields", "verify_fields"]
+        assert inspect.signature(_canonical_fields).parameters["assistants_fields"].default is None
+        assert inspect.signature(_canonical_fields).parameters["verify_fields"].default is None
+
+    def test_collaboration_helpers_not_on_facade(self) -> None:
+        """``_collaboration_emission`` & co. are module-internal, not facade names."""
+        from goga.pipeline.compiler import __all__ as facade_all
+
+        assert "_collaboration_emission" not in facade_all
+        assert "_CollaborationEmission" not in facade_all
+        assert "_assistant_namespace" not in facade_all
+        assert "_assemble_assistants" not in facade_all
+
+    def test_content_check_raises_structural_error_through_public_surface(self, tmp_path: Path) -> None:
+        """A namespace member resolving neither prompt nor skills fails the public compile.
+
+        The compile-time content check surfaces as a ``StructuralError`` (a
+        ``ValueError`` subclass) through ``compile_flow`` — the override-style
+        catalog entry ``Ghost: {agent: a1}`` joins the namespace under the
+        five-field declaration rule but carries no prompt and no skills.
+        """
+        with pytest.raises(StructuralError) as excinfo:
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n"
+                "  Ghost:\n"
+                "    agent: a1\n"
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      Ghost:\n"
+                "        when: checkpoints\n",
+            )
+
+        assert isinstance(excinfo.value, ValueError)
+        assert "Ghost" in str(excinfo.value)
+
+    def test_workflow_document_default_catalog_is_empty(self) -> None:
+        """A default ``WorkflowDocument`` carries an empty catalog and no delegation."""
+        document = WorkflowDocument(prompt="p", stages={"build": WorkflowStage()})
+
+        assert document.assistants == {}
+        assert document.delegation is None
+
+
+class TestCollaborationBlockEmission:
+    """Step 4.10 block — emitted on every compilation, delegation-fed when authored."""
+
+    def test_compile_collaboration_block_always_emitted(self, tmp_path: Path) -> None:
+        """A workflow-less compile still writes the block — and nothing else changes."""
+        _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES)
+
+        assert flow_doc.collaboration == FlowCollaboration(mode="assistants", max_depth=None)
+        assert "collaboration:\n  mode: assistants\n" in text
+        assert "max_depth" not in text
+        assert "team:" not in text
+
+        # The remainder is byte-identical to the pre-change golden — remove
+        # the two inserted lines and compare.
+        stripped = text.replace("collaboration:\n  mode: assistants\n", "")
+        assert stripped == (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "stages:\n"
+            "- id: build\n"
+            "  name: Build\n"
+            "  prompt: Make\n"
+            "  agents: [auto]\n"
+            "- id: review\n"
+            "  name: Review\n"
+            "  prompt: Check\n"
+            "  agents: [auto]\n"
+        )
+
+    def test_compile_delegation_depth_zero_survives_to_max_depth_zero(self, tmp_path: Path) -> None:
+        """An authored ``depth: 0`` is a VALUE — the flow-file carries ``max_depth: 0``."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "delegation:\n  depth: 0\nstages:\n  build:\n    skip: false\n",
+        )
+
+        assert flow_doc.collaboration == FlowCollaboration(mode="assistants", max_depth=0)
+        assert "max_depth: 0" in text
+
+    def test_compile_collaboration_free_workflow_byte_identical_except_mode(self, tmp_path: Path) -> None:
+        """A workflow without collaboration surfaces gains exactly the two-line block."""
+        pipeline_text = (
+            "name: T\n"
+            "description: D\n"
+            "---\n"
+            "a:\n"
+            "  title: A\n"
+            "  communication: true\n"
+            "  roles:\n"
+            "    - planner\n"
+            "  prompt: p\n"
+            "b:\n"
+            "  title: B\n"
+            "  depends_on: [a]\n"
+            "  prompt: q\n"
+        )
+
+        workflow_text = "prompt: Use this.\nstages:\n  a:\n    agent: coder\n"
+        _pipeline_doc, flow_doc, text = _compile(tmp_path, pipeline_text, workflow_text)
+
+        assert flow_doc.collaboration == FlowCollaboration(mode="assistants", max_depth=None)
+        assert flow_doc.team == []
+        # The pre-change golden with exactly the collaboration block inserted
+        # after ``description`` (no memory block in this pair).
+        assert text == (
+            "prompt: |-\n"
+            "  Use this.\n"
+            "name: T\n"
+            "description: D\n"
+            "collaboration:\n"
+            "  mode: assistants\n"
+            "stages:\n"
+            "- id: a\n"
+            "  name: A\n"
+            "  interactive: true\n"
+            "  command: /home/goga/bin/coder-as-claude.sh\n"
+            "  prompt: p\n"
+            "  agents: [planning]\n"
+            "- id: b\n"
+            "  name: B\n"
+            "  prompt: q\n"
+            "  agents: [auto]\n"
+            "  depends_on:\n"
+            "  - a\n"
+        )
+
+
+class TestTeamAndAttachmentMaterialization:
+    """Steps 4.10 / 5 / 6 — the team list and the per-stage attachment entries."""
+
+    def test_compile_team_and_stage_attachments_full_materialization(self, tmp_path: Path) -> None:
+        """Catalog + delegation + gated attachment compile into team, block, and entries."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  prompt: Make\n",
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "    skills: [code-audit]\n"
+            "delegation:\n"
+            "  depth: 2\n"
+            "memory:\n"
+            "  path: shared.md\n"
+            "stages:\n"
+            "  build:\n"
+            "    reflect:\n"
+            "      file: build.md\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        gate: true\n"
+            "        when: finish\n",
+        )
+
+        assert "max_depth: 2" in text
+        assert (
+            "team:\n"
+            "- id: reviewer\n"
+            "  title: reviewer\n"
+            "  profile: goga-reviewer\n"
+            "  instruction: Review.\n"
+            "  skills:\n"
+            "  - code-audit\n" in text
+        )
+        # The attachment entry slots after the memory/reflect keys of the stage —
+        # no skills key on the entry (the engine rejects it there).
+        assert (
+            "  reflect:\n"
+            "    file: build.md\n"
+            "    mode: rw\n"
+            "  assistants:\n"
+            "  - profile: goga-reviewer\n"
+            "    title: reviewer\n"
+            "    instruction: Review.\n"
+            "    mode: required\n"
+            "    trigger: on_completion\n" in text
+        )
+        assert flow_doc.stages[0].fields["assistants"][0].trigger == "on_completion"
+
+    def test_compile_reference_takes_declaration_fields_keeps_own_gate_when(self, tmp_path: Path) -> None:
+        """A reference resolves against the catalog but keeps its own gate/when."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "    skills: [code-audit]\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        gate: true\n"
+            "        when: finish\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.instruction == "Review."
+        assert entry.mode == "required"
+        assert entry.trigger == "on_completion"
+        assert "trigger: on_completion" in text
+
+    def test_compile_reference_to_inline_declaration_of_another_stage(self, tmp_path: Path) -> None:
+        """A reference may name an inline declaration authored on another stage."""
+        _pipeline_doc, flow_doc, _text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      security:\n"
+            "        prompt: Guard.\n"
+            "        skills: [sec-audit]\n"
+            "        when: checkpoints\n"
+            "  review:\n"
+            "    assistants:\n"
+            "      security:\n"
+            "        when: checkpoints\n",
+        )
+
+        build_entry = flow_doc.stages[0].fields["assistants"][0]
+        review_entry = flow_doc.stages[1].fields["assistants"][0]
+
+        assert build_entry.profile == "goga-security"
+        assert build_entry.instruction == "Guard."
+        assert review_entry.profile == "goga-security"
+        assert review_entry.instruction == "Guard."
+        # The reference keeps its own gate/when defaults, not the declaration's.
+        assert review_entry.mode == "advisory"
+        assert review_entry.trigger == "checkpoints"
+        # An inline declaration never joins the team list.
+        assert flow_doc.team == []
+
+    def test_compile_attachments_uniform_across_loop_copies(self, tmp_path: Path) -> None:
+        """Loop-expanded copies share identical attachment entries — one profile per name."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    loop: 3\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
+        )
+
+        assert [stage.id for stage in flow_doc.stages] == ["build-1", "build-2", "build-3", "review"]
+        for stage in flow_doc.stages[:3]:
+            assert stage.fields["assistants"] == [
+                _expected_entry("reviewer", "Review."),
+            ]
+
+        stages_text = text.split("stages:")[1]
+        assert stages_text.count("profile: goga-reviewer") == 3
+        # Exactly one team member — the config side collapses the three refs.
+        assert text.count("- id: reviewer\n") == 1
+
+    def test_compile_extend_seeded_stage_keeps_stages_block_attachments(self, tmp_path: Path) -> None:
+        """C2.4 — a stage with BOTH an extend-entry and a stages-block entry keeps its attachments."""
+        _pipeline_doc, flow_doc, _text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "extend:\n"
+            "  extra:\n"
+            "    after: [build]\n"
+            "    title: Extra\n"
+            "    prompt: Added\n"
+            "stages:\n"
+            "  extra:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
+        )
+
+        assert [stage.id for stage in flow_doc.stages] == ["build", "review", "extra"]
+        assert "assistants" in flow_doc.stages[2].fields
+        assert flow_doc.stages[2].fields["assistants"][0].title == "reviewer"
+
+    def test_compile_when_start_maps_to_one_shot(self, tmp_path: Path) -> None:
+        """``when: start`` compiles to the engine's ``one_shot`` engagement."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: start\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.trigger == "one_shot"
+        assert "trigger: one_shot" in text
+
+    def test_compile_when_message_maps_to_on_message(self, tmp_path: Path) -> None:
+        """``when: message`` compiles to the engine's ``on_message`` resting engagement."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: message\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.trigger == "on_message"
+        assert "trigger: on_message" in text
+
+    def test_compile_when_message_combines_with_gate(self, tmp_path: Path) -> None:
+        """``gate: true`` with ``when: message`` compiles to required mode and on_message trigger."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        gate: true\n"
+            "        when: message\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.mode == "required"
+        assert entry.trigger == "on_message"
+        assert "mode: required" in text
+        assert "trigger: on_message" in text
+
+    def test_compile_skills_only_catalog_member_materializes_empty_instruction(self, tmp_path: Path) -> None:
+        """A skills-only catalog member compiles — team ``instruction: ''``, skills verbatim."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  auditor:\n"
+            "    skills: [code-audit]\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      auditor:\n"
+            "        when: checkpoints\n",
+        )
+
+        member = flow_doc.team[0]
+
+        assert member.id == "auditor"
+        assert member.instruction == ""
+        assert member.skills == ["code-audit"]
+        assert "  instruction: ''\n  skills:\n  - code-audit\n" in text
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.instruction == ""
+        assert entry.trigger == "checkpoints"
+
+    def test_compile_phases_format_emits_stage_attachments(self, tmp_path: Path) -> None:
+        """A PHASES-format pipeline carries the attachment entries like STAGES does."""
+        pipeline_text = (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "- name: build\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "- name: review\n"
+            "  title: Review\n"
+            "  prompt: Check\n"
+        )
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            pipeline_text,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  review:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
+        )
+
+        assert [stage.id for stage in flow_doc.stages] == ["build", "review"]
+        assert flow_doc.stages[1].fields["assistants"] == [
+            _expected_entry("reviewer", "Review."),
+        ]
+        assert "profile: goga-reviewer" in text
+
+
+class TestInlineSkillsWarning:
+    """Skills authored on an inline declaration have no engine channel — warn, never drop silently."""
+
+    def test_compile_inline_declaration_skills_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """An inline declaration's skills cannot reach the engine — one warning names stage and assistant."""
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            _pipeline_doc, flow_doc, text = _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      security:\n"
+                "        prompt: Guard.\n"
+                "        skills: [sec-audit]\n"
+                "        when: checkpoints\n",
+            )
+
+        warnings = [record for record in caplog.records if "inline assistant declaration" in record.getMessage()]
+
+        assert len(warnings) == 1
+        assert warnings[0].stage == "build"
+        assert warnings[0].assistant == "security"
+        # The entry still emits (five keys, no skills) — the warning is the
+        # only diagnostic, never an output-side key.
+        assert flow_doc.stages[0].fields["assistants"] == [_expected_entry("security", "Guard.")]
+        assert "skills" not in text.split("stages:")[1]
+
+    def test_compile_catalog_skills_never_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Catalog skills reach the engine through the team member — no warning."""
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            _pipeline_doc, flow_doc, _text = _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n"
+                "  reviewer:\n"
+                "    prompt: Review.\n"
+                "    skills: [code-audit]\n"
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      reviewer:\n"
+                "        when: checkpoints\n",
+            )
+
+        assert not [r for r in caplog.records if "inline assistant declaration" in r.getMessage()]
+        assert [member.id for member in flow_doc.team] == ["reviewer"]
+        assert flow_doc.team[0].skills == ["code-audit"]
+
+    def test_compile_inline_skills_warning_fires_once_across_stages(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A declaration referenced from another stage warns once — deduplicated per name."""
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            _pipeline_doc, _flow_doc, _text = _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      security:\n"
+                "        prompt: Guard.\n"
+                "        skills: [sec-audit]\n"
+                "        when: checkpoints\n"
+                "  review:\n"
+                "    assistants:\n"
+                "      security:\n"
+                "        when: checkpoints\n",
+            )
+
+        warnings = [record for record in caplog.records if "inline assistant declaration" in record.getMessage()]
+
+        assert len(warnings) == 1
+        assert warnings[0].assistant == "security"
+
+    def test_compile_inline_declaration_without_skills_never_warns(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """An inline declaration authoring no skills loses nothing — no warning."""
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            _pipeline_doc, _flow_doc, _text = _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      security:\n"
+                "        prompt: Guard.\n"
+                "        when: checkpoints\n",
+            )
+
+        assert not [r for r in caplog.records if "inline assistant declaration" in r.getMessage()]
+
+
+class TestAttachmentChecks:
+    """The four attachment checks of step 4.10 — contract order, pinned messages."""
+
+    def test_compile_unknown_reference_raises(self, tmp_path: Path) -> None:
+        """A reference naming no namespace member is rejected."""
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("unknown assistant reference in workflow.stages.build: ghost"),
+        ):
+            _compile(
+                tmp_path, _BASE_STAGES, "stages:\n  build:\n    assistants:\n      ghost:\n        when: checkpoints\n"
+            )
+
+    def test_compile_duplicate_same_stage_name_raises_programmatic(self, tmp_path: Path) -> None:
+        """Two attachment-map keys sharing one name (a programmatic document) are rejected.
+
+        An authored map cannot repeat a key, so the duplicate-name guard is
+        reachable only through a programmatically built ``WorkflowDocument`` —
+        e.g. a tool contribution merged by the overlay, which deduplicates
+        by map key, not by the entry's ``name``.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(_BASE_STAGES)
+        workflow = WorkflowDocument(
+            stages={
+                "build": WorkflowStage(
+                    assistants={
+                        "first": WorkflowAssistant(name="reviewer", prompt="Review.", when="finish"),
+                        "second": WorkflowAssistant(name="reviewer", prompt="Review again.", when="finish"),
+                    }
+                )
+            }
+        )
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("duplicate assistant in workflow.stages.build: reviewer"),
+        ):
+            compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
+
+    def test_compile_flow_map_form_output_equals_list_form_output(self, tmp_path: Path) -> None:
+        """The map-form authoring compiles byte-identically to the retired list form.
+
+        The golden below is the literal output the pre-map-form compiler
+        produced for the same workflow authored as
+        ``- name: reviewer ... assistants: [{name: reviewer, when: finish}]``
+        — the hard transition changes the authoring grammar only; the
+        engine-facing flow-file is unchanged.
+        """
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    agent: claude\n"
+            "    delegate: true\n"
+            "    skills: [code-audit]\n"
+            "    prompt: |\n"
+            "      Review the stage changes.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: finish\n",
+        )
+
+        assert text == (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "collaboration:\n"
+            "  mode: assistants\n"
+            "team:\n"
+            "- id: reviewer\n"
+            "  title: reviewer\n"
+            "  profile: goga-reviewer\n"
+            "  instruction: |\n"
+            "    Review the stage changes.\n"
+            "  skills:\n"
+            "  - code-audit\n"
+            "stages:\n"
+            "- id: build\n"
+            "  name: Build\n"
+            "  prompt: Make\n"
+            "  agents: [auto]\n"
+            "  assistants:\n"
+            "  - profile: goga-reviewer\n"
+            "    title: reviewer\n"
+            "    instruction: |\n"
+            "      Review the stage changes.\n"
+            "    mode: advisory\n"
+            "    trigger: on_completion\n"
+            "- id: review\n"
+            "  name: Review\n"
+            "  prompt: Check\n"
+            "  agents: [auto]\n"
+        )
+        assert flow_doc.stages[0].fields["assistants"] == [
+            FlowAssistant(
+                profile="goga-reviewer",
+                title="reviewer",
+                instruction="Review the stage changes.\n",
+                mode="advisory",
+                trigger="on_completion",
+            ),
+        ]
+        assert [member.id for member in flow_doc.team] == ["reviewer"]
+
+    def test_compile_script_and_planning_only_rejected(self, tmp_path: Path) -> None:
+        """Attachments are forbidden on script and planning-only stages."""
+        workflow_text = "stages:\n  build:\n    assistants:\n      r:\n        prompt: P\n        when: checkpoints\n"
+        pipeline_script = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  script: echo hi\n"
+        pipeline_planner = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  roles: [planner]\n"
+        pipeline_planning = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  roles: [planning]\n"
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant is forbidden on a script stage in workflow.stages.build: r"),
+        ):
+            _compile(tmp_path, pipeline_script, workflow_text)
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant is forbidden on a planning-only stage in workflow.stages.build: r"),
+        ):
+            _compile(tmp_path, pipeline_planner, workflow_text)
+
+        # An authored afm-side ``roles: [planning]`` equals the alias — the
+        # comparison is TRANSLATED.
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant is forbidden on a planning-only stage in workflow.stages.build: r"),
+        ):
+            _compile(tmp_path, pipeline_planning, workflow_text)
+
+    def test_compile_non_str_roles_with_attachment_raises_structural_error(self, tmp_path: Path) -> None:
+        """A verbatim non-str roles element raises the clean error even with an attachment.
+
+        The attachment checks run BEFORE the ``_inject_defaults`` translation
+        pass that guards ``roles`` — without the mirrored guard in the
+        attachment walk, a mapping element would surface as a raw
+        ``TypeError`` from the alias lookup instead of the pinned
+        ``StructuralError``.
+        """
+        pipeline_text = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  roles: [{}]\n"
+        workflow_text = "stages:\n  build:\n    assistants:\n      r:\n        prompt: P\n        when: checkpoints\n"
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("non-str value in stage roles list: {}"),
+        ):
+            _compile(tmp_path, pipeline_text, workflow_text)
+
+    def test_compile_skipped_stage_attachments_never_checked(self, tmp_path: Path) -> None:
+        """A skipped stage is removed before the walk — even a dangling reference is silent."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "stages:\n  review:\n    skip: true\n    assistants:\n      ghost:\n        when: checkpoints\n",
+        )
+
+        assert [stage.id for stage in flow_doc.stages] == ["build"]
+        assert "ghost" not in text
+        assert flow_doc.collaboration == FlowCollaboration(mode="assistants", max_depth=None)
+
+
+class TestEffectiveContentCheck:
+    """The step-4.10 content check — every namespace member must resolve prompt or skills."""
+
+    def test_compile_flow_override_entry_with_base_compiles(self, tmp_path: Path) -> None:
+        """A merged override entry carries the delivered content and compiles (SC4 end-to-end).
+
+        The authored catalog entry ``X: {agent: my-agent}`` over the tool's
+        whole ``X`` entry passes through ``merge_workflow_overlay`` before
+        compilation — the merged ``prompt``/``skills`` satisfy the content
+        check, the team member carries the tool's instruction, and the
+        stage reference resolves onto the same profile.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  prompt: Make\n"
+        )
+        authored = parse_workflow(
+            "assistants:\n"
+            "  X:\n"
+            "    agent: my-agent\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      X:\n"
+            "        when: checkpoints\n"
+        )
+        tool = parse_workflow(
+            "assistants:\n"
+            "  X:\n"
+            "    prompt: tool-prompt\n"
+            "    skills: [s1]\n"
+            "    agent: tool-agent\n"
+            "    delegate: true\n"
+            "    env:\n"
+            "      K: V\n"
+        )
+        overlay = merge_workflow_overlay(authored, [ToolContribution(tool="t", document=tool)])
+
+        _pipeline_doc, flow_doc = compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=overlay.workflow)
+
+        assert [member.id for member in flow_doc.team] == ["X"]
+        assert flow_doc.team[0].instruction == "tool-prompt"
+        assert flow_doc.team[0].skills == ["s1"]
+        assert [entry.profile for entry in flow_doc.stages[0].fields["assistants"]] == ["goga-X"]
+
+    def test_compile_flow_override_without_base_is_structural_error(self, tmp_path: Path) -> None:
+        """An override-style catalog entry with no delivery fails the content check (SC5).
+
+        Under the five-field declaration rule the ``agent``-only catalog
+        entry joins the namespace; with no tool delivery its ``prompt`` and
+        ``skills`` stay ``None`` — compilation stops with the readable
+        error naming the assistant and its site.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant Ghost at workflow.assistants.Ghost resolves neither prompt nor skills"),
+        ) as excinfo:
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n"
+                "  Ghost:\n"
+                "    agent: a1\n"
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      Ghost:\n"
+                "        when: checkpoints\n",
+            )
+
+        assert "Ghost" in str(excinfo.value)
+        assert "workflow.assistants.Ghost" in str(excinfo.value)
+
+    def test_compile_flow_inline_override_without_base_names_stage_site(self, tmp_path: Path) -> None:
+        """An override-style INLINE declaration names the stage site in the error (SC5).
+
+        The attachment ``Ghost: {when: start, agent: a1}`` counts as a
+        declaration under the five-field rule, joins the namespace as an
+        inline member, and fails the content check with the stage-attached
+        site — the inline authoring surface gets its own readable error.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape(
+                "assistant Ghost at workflow.stages.build.assistants.Ghost resolves neither prompt nor skills"
+            ),
+        ) as excinfo:
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n  build:\n    assistants:\n      Ghost:\n        when: start\n        agent: a1\n",
+            )
+
+        assert "Ghost" in str(excinfo.value)
+        assert "workflow.stages.build.assistants.Ghost" in str(excinfo.value)
+
+    def test_content_check_covers_unreferenced_catalog_entry(self, tmp_path: Path) -> None:
+        """The check runs over the whole namespace — an entry no stage references still fails.
+
+        The content check is a property of the namespace, not of the
+        attachments: a catalog override-style entry that no stage attaches
+        still joins the namespace (catalog entries always do) and still
+        stops compilation when it resolves neither prompt nor skills.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant Ghost at workflow.assistants.Ghost resolves neither prompt nor skills"),
+        ):
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n  Ghost:\n    agent: a1\n",
+            )
+
+    def test_content_check_covers_skipped_stage_declaration(self, tmp_path: Path) -> None:
+        """An override-style declaration on a ``skip: true`` stage still fails the check.
+
+        The namespace is built from the workflow document, not from the
+        post-skip working body (the attachment checks' domain): a skipped
+        stage's declaration is still authored content, so it joins the
+        namespace and its unresolved content stops compilation naming the
+        stage site — unlike a dangling REFERENCE on a skipped stage, which
+        stays silent.
+        """
+        with pytest.raises(
+            StructuralError,
+            match=re.escape(
+                "assistant Ghost at workflow.stages.review.assistants.Ghost resolves neither prompt nor skills"
+            ),
+        ):
+            _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n"
+                "  review:\n"
+                "    skip: true\n"
+                "    assistants:\n"
+                "      Ghost:\n"
+                "        when: checkpoints\n"
+                "        agent: a1\n",
+            )
+
+
+def _expected_entry(name: str, instruction: str) -> FlowAssistant:
+    """Build the expected attachment entry for a default gate/when reference."""
+    return FlowAssistant(
+        profile=f"goga-{name}",
+        title=name,
+        instruction=instruction,
+        mode="advisory",
+        trigger="checkpoints",
+    )

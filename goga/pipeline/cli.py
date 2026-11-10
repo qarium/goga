@@ -1,4 +1,4 @@
-"""In-container CLI for ``python -m goga.pipeline`` — dispatches to list, overview, card, or run."""
+"""In-container CLI for ``python -m goga.pipeline`` — dispatches to list, overview, card, run, or hook."""
 
 from __future__ import annotations
 
@@ -7,18 +7,18 @@ import sys
 from pathlib import Path
 
 import yaml
+from jinja2 import UndefinedError
 
 from .compiler import StructuralError
-from .describe_pipeline import describe_pipeline
 from .describe_pipelines import describe_pipelines
+from .hook_bridge import run_hook
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
-from .run_pipeline import run_pipeline
 from .workflow import WorkflowSyntaxError
 
 
 def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
-    """Build the ``list``/``run`` subcommand parser.
+    """Build the ``list``/``run``/``hook`` subcommand parser.
 
     Returns:
         The top-level parser and the ``run`` subparser (needed for the
@@ -61,6 +61,12 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         help="disable workflow application (run and card modes).",
     )
     run_parser.add_argument(
+        "--profile",
+        "-p",
+        default=None,
+        help="activate this contributor profile (run and card modes).",
+    )
+    run_parser.add_argument(
         "--skip",
         "-s",
         action="append",
@@ -80,6 +86,14 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         default=None,
         help="cap concurrently executing stages (threads to afm --max-parallel); omitted ⇒ afm runs unbounded.",
     )
+    run_parser.add_argument(
+        "--fail-on-error",
+        action="store_true",
+        default=False,
+        help="exit non-zero when a stage fails (threads to afm --exit-on-fail; run mode only).",
+    )
+
+    subparsers.add_parser("hook", help="afm-facing machinery: bridge one lifecycle event")
 
     return parser, run_parser
 
@@ -131,13 +145,16 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
     """Operation (c): the card — name/description fields, a `---` separator, stage bullets, `tools:` line.
 
     Args:
-        args: The parsed CLI arguments (``name``, ``workflow``, ``no_workflow``, ``skip``).
+        args: The parsed CLI arguments (``name``, ``workflow``, ``no_workflow``,
+            ``profile``, ``skip``).
         project_dir: Project-level pipelines directory.
         user_dir: User-level pipelines directory.
 
     Returns:
         ``0`` on success, ``1`` when the card composition raises a handled error.
     """
+    from .describe_pipeline import describe_pipeline  # noqa: PLC0415 — branch-local per the D1 fast-path discipline
+
     try:
         card = describe_pipeline(
             args.name,
@@ -145,6 +162,7 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
             user_dir,
             workflow=args.workflow,
             no_workflow=args.no_workflow,
+            profile=args.profile,
             skip=args.skip,
         )
     except (
@@ -155,6 +173,7 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
         OSError,
         UnicodeDecodeError,
         ValueError,
+        UndefinedError,
         ImportError,
     ) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -185,14 +204,17 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
     """Operation (d): the run — compile and launch via ``afm``, exit code propagated.
 
     Args:
-        args: The parsed CLI arguments (``name``, ``port``, ``workflow``, ``no_workflow``,
-            ``skip``, ``parallel``).
+        args: The parsed CLI arguments (``name``, ``port``, ``workflow``,
+            ``no_workflow``, ``profile``, ``skip``, ``parallel``,
+            ``fail_on_error``).
         project_dir: Project-level pipelines directory.
         user_dir: User-level pipelines directory.
 
     Returns:
         The :func:`run_pipeline` exit code, or ``1`` when it raises a handled failure.
     """
+    from .run_pipeline import run_pipeline  # noqa: PLC0415 — branch-local per the D1 fast-path discipline
+
     try:
         return run_pipeline(
             args.name,
@@ -201,8 +223,10 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
             args.port,
             workflow=args.workflow,
             no_workflow=args.no_workflow,
+            profile=args.profile,
             skip=args.skip,
             parallel=args.parallel,
+            fail_on_error=args.fail_on_error,
         )
     except WorkflowSyntaxError as exc:
         print(f"Error: pipeline '{args.name}' has a malformed workflow: {exc}", file=sys.stderr)
@@ -222,11 +246,20 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
     except UnicodeDecodeError as exc:
         print(f"Error: pipeline '{args.name}' is not valid UTF-8: {exc}", file=sys.stderr)
         return 1
+    except UndefinedError as exc:
+        # A nested template reference no resolved profile context defines —
+        # the render fails inside the loading chain and propagates unwrapped
+        # by contract; this boundary keeps it a clean message, never a
+        # traceback.
+        print(f"Error: pipeline '{args.name}' has a workflow rendering failure: {exc}", file=sys.stderr)
+        return 1
     except ValueError as exc:
-        # The hard pipeline.amend_workflow failure — the run stopped before
-        # any compile or launch. Caught after the specific ValueError
-        # subclasses above so they keep their tailored messages.
-        print(f"Error: pipeline '{args.name}' was not amended: {exc}", file=sys.stderr)
+        # The generic strict pre-run failure — the hard pipeline.amend_workflow
+        # stop, a profile that resolved nowhere, a workflow template syntax
+        # error, or a stage-env wrapper defect. The run stopped before any
+        # compile or launch; caught after the specific ValueError subclasses
+        # above so they keep their tailored messages.
+        print(f"Error: pipeline '{args.name}' could not be prepared: {exc}", file=sys.stderr)
         return 1
     except ImportError as exc:
         # The fatal registry-build error of the hooks platform (a broken tool
@@ -244,13 +277,17 @@ def pipeline_cli(argv: list[str]) -> int:
             (e.g. ``["list"]``, ``["list", "--info"]``,
             ``["run", "deploy", "--port", "50321"]``,
             ``["run", "deploy", "--port", "50321", "-w", "hardening",
-            "-s", "build", "-s", "test"]``, or
-            ``["run", "deploy", "--info", "--no-workflow", "-s", "build"]``).
+            "-p", "mixa", "-s", "build", "-s", "test"]``,
+            ``["run", "deploy", "--info", "--no-workflow", "-s", "build"]``,
+            or ``["hook"]`` — five operations across the three subcommands,
+            the afm-facing ``hook`` taking no arguments at all: its lifecycle
+            event arrives through the process environment and stdin).
 
     Returns:
         ``0`` on success; ``2`` on an argparse error (missing subcommand,
-        missing ``NAME``, a non-integer ``--port``, or a missing ``--port``
-        on a run without ``--info``); ``1`` when an info operation raises
+        missing ``NAME``, a non-integer ``--port``, a missing ``--port``
+        on a run without ``--info``, or any extra token on ``hook``);
+        ``1`` when an info operation raises
         :class:`StructuralError`, :class:`WorkflowSyntaxError`,
         :class:`RuntimeError`, :class:`yaml.YAMLError`,
         :class:`OSError`, :class:`UnicodeDecodeError`,
@@ -260,7 +297,8 @@ def pipeline_cli(argv: list[str]) -> int:
         caught here and reported as a clean stderr message rather than
         propagated as a traceback; ``1`` likewise
         when :func:`run_pipeline` raises one of its handled failures;
-        otherwise the ``exit_code`` propagated from :func:`run_pipeline`.
+        otherwise the ``exit_code`` propagated from :func:`run_pipeline`
+        or, for the ``hook`` subcommand, from :func:`run_hook`.
     """
     parser, run_parser = _build_parser()
 
@@ -272,6 +310,15 @@ def pipeline_cli(argv: list[str]) -> int:
     # exits 2 with the standard argparse usage+error rendering.
     if args.command == "run" and not args.info and args.port is None:
         run_parser.error("the following arguments are required: --port")
+
+    # The ``hook`` branch must bind on ``args.command`` before any read of
+    # ``args.info`` below — the ``hook`` subparser declares no ``--info``, so
+    # its Namespace carries no ``info`` attribute and a later-placed branch
+    # would raise AttributeError on every hook invocation. Pure delegation:
+    # ``run_hook`` self-renders bridge-internal failures and the code passes
+    # through untouched.
+    if args.command == "hook":
+        return run_hook()
 
     project_dir = Path.cwd() / ".goga" / "pipelines"
     user_dir = Path.home() / ".goga" / "pipelines"

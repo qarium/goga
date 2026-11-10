@@ -1,7 +1,6 @@
 from pathlib import Path, PurePath
 
-import yaml
-
+from ..yaml import parse_env_yaml
 from .config import (
     AdditionalReviewConfig,
     BuildConfig,
@@ -678,13 +677,14 @@ def _parse_additional_review(raw) -> AdditionalReviewConfig | None:
         raw: The raw ``additional`` value from the ``build.review`` mapping.
 
     Returns:
-        An ``AdditionalReviewConfig`` storing the block verbatim, or None when
-        absent/YAML-null.
+        An ``AdditionalReviewConfig`` storing the block verbatim (``env`` as a
+        fresh dict, ``{}`` when absent/YAML-null/empty), or None when the
+        block is absent or YAML-null.
 
     Raises:
         ValueError: When the block is present but not a mapping, or when
-            ``agent``/``patience``/``max_iterations`` is present with an
-            invalid type.
+            ``agent``/``patience``/``max_iterations``/``env`` is present with
+            an invalid type.
     """
     if raw is None:
         return None
@@ -695,8 +695,9 @@ def _parse_additional_review(raw) -> AdditionalReviewConfig | None:
     agent = _parse_optional_agent(raw.get("agent"), "build.review.additional")
     patience = _parse_optional_int(raw.get("patience"), "build.review.additional.patience")
     max_iterations = _parse_optional_int(raw.get("max_iterations"), "build.review.additional.max_iterations")
+    env = _parse_env_mapping(raw.get("env"), "build.review.additional.env")
 
-    return AdditionalReviewConfig(agent=agent, patience=patience, max_iterations=max_iterations)
+    return AdditionalReviewConfig(agent=agent, patience=patience, max_iterations=max_iterations, env=env)
 
 
 def _parse_build(build_data: dict) -> BuildConfig:
@@ -753,7 +754,7 @@ def load_project_config() -> ProjectConfig:
         FileNotFoundError: if .goga/config.yml does not exist or is empty.
         OSError: if .goga/config.yml exists but cannot be read (e.g. it is a
             directory, or the file is unreadable due to permissions). These are
-            raised by ``config_path.open()``.
+            raised by ``config_path.read_text()``.
         ValueError: if .goga/config.yml is not a YAML mapping or invalid field values.
         KeyError: if required sections are missing (language).
         yaml.YAMLError: if YAML parsing fails.
@@ -763,8 +764,7 @@ def load_project_config() -> ProjectConfig:
     if not config_path.exists():
         raise FileNotFoundError(".goga/config.yml not found in project root")
 
-    with config_path.open() as f:
-        data = yaml.safe_load(f)
+    data = parse_env_yaml(config_path.read_text())
 
     if data is None:
         raise FileNotFoundError(".goga/config.yml not found in project root")

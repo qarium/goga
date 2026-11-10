@@ -16,11 +16,21 @@ Imports:
       - resolve-wrapper-path
     From: goga/agents
   - Types:
+      - load_workflow
+      - LoadedWorkflow
+      - WorkflowBuild
+    Usages:
+      - load-workflow
+      - profiles
+    From: goga/pipeline/workflow
+  - Types:
       - ensure_in_docker
       - decode_extra_env
+      - decode_home_profiles
     Usages:
       - ensure-in-docker
       - extra-env-carriage
+      - home-profiles-carriage
     From: goga/docker
   - Types:
       - run_ralphex
@@ -34,6 +44,7 @@ Imports:
       - WorkIdentity
       - RelocationOutcome
       - GateVerdict
+      - AdditionalFacts
     Usages:
       - checkpoints
     From: goga/build/hooks
@@ -47,12 +58,12 @@ Imports:
     From: goga/history
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   ralphex: .goga/usages/cooks/ralphex.md
   agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - Working with the codebase
   - Organizing the REPL development cycle
   - Debugging and testing
@@ -87,10 +98,11 @@ Annotations: |
   configuration before the first state write, so a container-side amendment
   supplying build.agent satisfies it. The pass env layers compose per
   `extra-env-carriage`: the effective task env layer of the pass with the CLI
-  entries payload applied above it, engine-variable keys dropped — applied
-  through the env layer of the ralphex launch only.
+  entries payload applied above it, engine-variable keys dropped — delivered
+  through the generated per-role closure wrappers only; the ralphex launch
+  carries no env layer and its subprocess inherits the container environment.
 
-  Use the `conventions` practice for development and testing.
+  Use the `convention` practice for development and testing.
   Use the `ralphex` practice for the ralphex config-generation contract (the
   .ralphex/config key layout, the external-review surface, the finalize step
   files) written before launch.
@@ -107,6 +119,32 @@ Annotations: |
   Run git external commands via subprocess (the manifest pre-check and the
   branch resolution) — never at a checkpoint moment.
 
+  Workflow layering: build settings compose config < workflow build: <
+  CLI at the resolution point — the six-field workflow block overlays
+  the effective build configuration before the settings resolution;
+  env maps merge key-wise (a workflow key overrides the same-named
+  config key, the rest of the config env survives). Use `load-workflow`
+  for the loading chain and `profiles` for the activation rules.
+
+  Per-role closure wrappers: every build pass executor (tasks, review,
+  additional) runs through a generated closure wrapper — one uniform,
+  predictable mechanism; per-role, not per-agent (the same agent may
+  carry different env per role). Wrappers live in a container-local
+  temp directory, regenerated at each pass config write; task env
+  layers leave the ralphex launch env — the subprocess inherits the
+  container environment. Layers stay independent: the additional layer
+  never inherits review env, mirroring the review-never-inherits-root
+  rule.
+
+  GOGA_WORKFLOW is interpreted only by this cell (in-container builds):
+  written solely by the pipeline-run launcher, beaten by the -w CLI
+  flag. It is a deliberate, documented, narrow relaxation of the
+  "run options never travel through the environment" rule.
+
+  Launch feedback: one stderr line — Build running with workflow "<w>"
+  and profile "<p>" — printed only when a workflow is in effect AND an
+  effective profile resolved; every other run prints no line.
+
 ---
 
 "build(plan: str, config: ProjectConfig, cli_options: dict) -> exit_code:int":
@@ -119,66 +157,97 @@ Annotations: |
     `config`: loaded project configuration object
     `cli_options`: dictionary of CLI options (dry_run, skip_manifest_check,
                    skip_review, base_ref, review_patience, session_timeout,
-                   idle_timeout, wait, max_iterations)
+                   idle_timeout, wait, max_iterations, workflow, profile)
     `exit_code`: process exit code (0 = success, 1 = failure)
 
     Algorithm:
     0. (pre-check) When skip_manifest_check is not set: verify all project
        CODEMANIFEST files are committed to git; reject with exit code 1 when
        any are uncommitted. A pre-check failure fires no events
-    1. Resolve the run settings via `resolve_run_settings` — the two parts
-       with root inheritance, the tri-state skip, the strategy default medium
-    2. Validate the review configuration via `validate_review_config` when
+    1. Decode once: the CLI entries payload via `decode_extra_env` from
+       the dedicated engine variable (per `extra-env-carriage`); the home
+       bundle via `decode_home_profiles` from the GOGA_HOME_PROFILES
+       engine variable (per `home-profiles-carriage`); read GOGA_WORKFLOW
+       and GOGA_PROFILE once each — a damaged payload or bundle is one
+       clean error, nothing partially applied, no events, no pass launches
+    2. Resolve the workflow via `resolve_build_workflow` with
+       cli_options.workflow, the GOGA_WORKFLOW value, cli_options.profile,
+       the GOGA_PROFILE value, and the decoded bundle; no workflow in
+       effect → no workflow (activation is ignored entirely). A strict
+       failure OR a rendering failure (a jinja2 UndefinedError — an
+       undefined template reference under the resolved profile context)
+       is one clean logged error, exit 1, no events
+    3. Print the feedback line to stderr when a workflow is in effect AND
+       the loaded profile is not None — Build running with workflow "<w>"
+       and profile "<p>"; every other run prints no line
+    4. Layer the build settings when the loaded document carries a build
+       block: `merge_workflow_build` of the effective config.build with
+       the document build block — the layered BuildConfig feeds every
+       downstream step; a build invocation whose configuration has no
+       build section is one clean logged error naming the requirement
+       (exit 1, no events, nothing written) before any layering — with
+       or without a workflow in effect, reachable only via a direct
+       in-container invocation (the host launcher guards the section
+       host-side)
+    5. Resolve the run settings via `resolve_run_settings` — the two parts
+       with root inheritance, the tri-state skip, the strategy default
+       medium — over the layered configuration
+    6. Validate the review configuration via `validate_review_config` when
        the review pass will run; a validation failure fires no events
-    3. Guard the tasks agent on the effective configuration: when the
-       resolved tasks agent of the settings is None — one clean error naming
-       the missing agent requirement, exit code 1, no events fire, nothing
-       is written; a container-side amendment supplying build.agent
+    7. Guard the tasks agent on the layered effective configuration: when
+       the resolved tasks agent of the settings is None — one clean error
+       naming the missing agent requirement, exit code 1, no events fire,
+       nothing is written; a container-side amendment supplying build.agent
        satisfies the guard
-    4. Rewrite .ralphex/prompts/ and .ralphex/agents/ from the vendored
+    8. Rewrite .ralphex/prompts/ and .ralphex/agents/ from the vendored
        defaults via `sync_ralphex_defaults` — roles filtering, finalize
        materialization when the prompt is set
-    5. Decode the CLI entries payload once via `decode_extra_env` from the
-       dedicated engine variable (per `extra-env-carriage`); a damaged
-       payload is one clean error — nothing partially applied, no pass
-       launches
-    6. Resolve the checkpoint facts from this operation's own data: the
+    9. Resolve the checkpoint facts from this operation's own data: the
        `WorkIdentity` (branch via `resolve_current_branch_name` with the
        "unknown" fallback, slug/year via `resolve_topic_dir` when the branch
        hosts a topic), the `BuildMoment` (plan, work, dry_run), and both
-       `StageFacts` (env as names)
-    7. Run the validation gate via `BuildHooks` (its validate_build
+       `StageFacts` (env as names); the run-completion facts carry the
+       `AdditionalFacts` (the delivered mirror of the external-review
+       block: agent, patience, max_iterations)
+    10. Run the validation gate via `BuildHooks` (its validate_build
        checkpoint); when the
        returned `GateVerdict` is not approved: print one merged error listing
        every violation (tool, hook, reason) to sys.stderr and return exit
        code 1 — no pass launches, the plan is not relocated, no further
        events fire
-    8. Emit build_started with the same facts the gate saw
-    9. Tasks pass: compose the options via `compose_pass_options` (stage
-       tasks), resolve the root agent wrapper per the `resolve-wrapper-path`
-       practice, compose the tasks env layer — the effective build.env task
-       env layer with the decoded CLI entries applied above it,
-       engine-variable keys dropped (per `extra-env-carriage`) — emit
-       pass_started, launch via `run_build_pass` with the composed layer as
-       the env layer, emit pass_completed with the actual exit code
-    10. When the tasks pass succeeded and review is not skipped: review pass
-        under the review agent's wrapper (the additional agent's wrapper under
-        the short strategy), the review env layer — the effective
-        build.review.env task env layer with the same decoded CLI entries
-        applied above it, engine-variable keys dropped — and the
-        strategy-bound options; pass_started / launch / pass_completed
-        around it. A failed tasks pass never launches the review pass
-    11. Relocate the plan via `move_completed_plan` with outcome = success of
+    11. Emit build_started with the same facts the gate saw
+    12. Tasks pass: compose the options via `compose_pass_options` (stage
+       tasks), generate the per-role closure wrappers via
+       `write_role_env_wrappers` with the settings and the decoded CLI
+       entries, emit pass_started, launch via `run_build_pass` with the
+       tasks role wrapper path and the additional wrapper path — the pass
+       executor owns the pass-config write (`write_ralphex_config` with
+       both wrapper paths, the last write before the launch) — no env
+       layer argument (the wrapper carries the tasks env layer), emit
+       pass_completed with the actual exit code. A wrapper-generation
+       ValueError (an illegal env variable name in a composed layer) is
+       one clean error and exit code 1 — the completion notification
+       still fires on that path (exit code 1, no relocation), per the
+       every-return-path-of-a-started-run contract
+    13. When the tasks pass succeeded and review is not skipped: review
+        pass under the review role wrapper (the additional wrapper under
+        the short strategy) with the strategy-bound options and the same
+        wrapper generation — pass_started / launch / pass_completed
+        around it. A failed tasks pass never launches the review pass.
+        Under the medium strategy the additional layer stays inert (the
+        external review is disabled); under short the additional wrapper
+        is the pass executor
+    14. Relocate the plan via `move_completed_plan` with outcome = success of
         the final pass (dry-run and failure leave the plan in place); take the
         returned `RelocationOutcome`
-    12. Recompute the work's history statuses via `collect_topic_statuses`
+    15. Recompute the work's history statuses via `collect_topic_statuses`
         AFTER the relocation attempt (moved or not; branch-only form — an
         empty list)
-    13. Emit build_completed with the final exit code, the executed stage
+    16. Emit build_completed with the final exit code, the executed stage
         sequence, the relocation outcome, and the recomputed statuses
-    14. Return the exit code of the last executed pass
+    17. Return the exit code of the last executed pass
 
-    Apply `conventions` for docstring style and intra-package imports.
+    Apply `convention` for docstring style and intra-package imports.
     Apply `ralphex` for the config-generation contract.
     Apply `agent-wrappers` for the wrapper path semantics.
     Apply `resolve-wrapper-path` when calling `resolve_wrapper_path`.
@@ -192,32 +261,47 @@ Annotations: |
       subprocess call
     - The agent value guard runs before the first state write — the
       .ralphex/ rewrite never starts on a run the guard rejects
-    - The guard reads the effective configuration — an amendment supplying
-      build.agent satisfies it
-    - The CLI entries payload decodes once per run and feeds both pass
-      compositions; the payload wins over the task env layer on key conflict
-    - Engine-variable keys never enter a composed layer — dropped silently,
-      the inherited launch values stand
+    - The guard reads the layered effective configuration — an amendment
+      supplying build.agent satisfies it
+    - The CLI entries payload decodes once per run and feeds both wrapper
+      generations; the payload wins over the task env layer on key conflict
+      (applied through the wrappers)
+    - Engine-variable keys never enter a composed wrapper layer — dropped
+      silently, the inherited launch values stand
     - Every non-skipped run is exactly two passes; a skipped review yields
       exactly one tasks pass
     - The run's exit code is the last executed pass's; plan relocation
       happens only on success of the final pass
-    - The task env never reaches the review pass (secret-safe, never printed)
+    - The task env never reaches the review pass (secret-safe, never
+      printed) — layers stay independent in the wrappers
+    - Task env layers travel through the generated per-role wrappers — no
+      env layer argument on the pass launch; the ralphex subprocess
+      inherits the container environment
+    - The .ralphex/config command fields point at the generated per-role
+      wrappers — the agents receive the same effective environment
+      through the wrappers
+    - GOGA_WORKFLOW is never written by the build path — it is
+      interpreted only (written solely by the pipeline-run launcher)
+    - Workflow layering composes config < workflow build: < CLI at the
+      resolution point; an absent block field never overrides; env maps
+      merge key-wise
     - On dry-run: fire the identical event structure with the dry_run fact,
       print the commands of both passes without env layers, relocate nothing
-    - Pre-launch failures (steps 0-5) fire no events — the moment never
+    - Pre-launch failures (steps 0-7) fire no events — the moment never
       happened
-    - A blocked run (step 7) fires nothing after the gate
+    - A blocked run (step 10) fires nothing after the gate
     - Warnings and errors of the checkpoints name the tool, the action, and
       the reason (delivered by the zone per its practices)
 
     Constraints:
     - Do not assemble the ralphex command or invoke ralphex directly —
       delegate to `run_ralphex`
-    - Do not read the environment for the payload anywhere but the single
-      decode step
-    - Do not apply any layer to the process environment — layers travel only
-      through the env parameter of the ralphex launch
+    - Do not read the environment anywhere but the single decode step
+      (the CLI entries payload, the home bundle, GOGA_WORKFLOW,
+      GOGA_PROFILE)
+    - Do not apply any layer to the process environment — task env layers
+      travel only through the generated per-role wrappers; the ralphex
+      launch carries no env layer
     - Do not read git at a checkpoint moment — the facts resolve before
       delivery
     - Do not deliver or print env values — names only, in every fact
@@ -232,7 +316,7 @@ Annotations: |
     `exit_code`: process exit code (0 = success, 1 = failure)
 
     Apply the `ensure-in-docker` practice for the container guard.
-    Apply `conventions` for docstring style and intra-package imports.
+    Apply `convention` for docstring style and intra-package imports.
 
     Algorithm:
     0. Call `ensure_in_docker` as the very first statement (per the
@@ -241,8 +325,10 @@ Annotations: |
        carries the --skip-review / --no-skip-review pair resolving
        to skip_review: bool | None, --base-ref, --dry-run,
        --skip-manifest-check, --session-timeout, --idle-timeout, --wait,
-       --max-iterations, and --review-patience (addressing
-       build.review.additional.patience)
+       --max-iterations, --review-patience (addressing
+       build.review.additional.patience), -w/--workflow NAME, and
+       -p/--profile NAME (forwarded into cli_options; -p is free here —
+       build has no parallel option)
     2. Load the authored project configuration via `load_project_config` —
        a load failure is one clean error, exit 1; ralphex never launches
     3. Deliver the config amendment via the `ConfigHooks` checkpoint surface
@@ -263,14 +349,104 @@ Annotations: |
     - No configuration value appears in any output — the summary lines carry
       the tool, the path, set or forced only
 
+"resolve_build_workflow(workflow_cli: str | None, workflow_env: str | None, cli_profile: str | None = None, env_profile: str | None = None, home_profiles: dict[str, dict[str, Any]] | None = None) -> loaded: LoadedWorkflow | None":
+  location: resolve_build_workflow.py
+  annotations: |
+    Select and load the workflow that drives a build: the CLI flag
+    beats the environment value; no selection means no workflow — and
+    activation is ignored entirely.
+
+    `workflow_cli`: the -w/--workflow flag value, or None
+    `workflow_env`: the GOGA_WORKFLOW value, or None
+    `cli_profile`: the --profile flag value, or None
+    `env_profile`: the GOGA_PROFILE value, or None
+    `home_profiles`: the decoded home bundle, or None
+    `loaded`: the `LoadedWorkflow`, or None when no workflow is in
+              effect
+
+    Use `load-workflow` for the chain semantics and `profiles` for the
+    activation rules.
+
+    Algorithm:
+    1. `workflow_cli` beats `workflow_env`; empty strings count as
+       unset
+    2. When neither is set — return None (no workflow in effect;
+       activation is ignored entirely — nothing loads)
+    3. Compose <cwd>/.goga/workflows/<name>.yml; a name whose resolved
+       path escapes the workflows directory raises one strict
+       "invalid workflow name" error; a missing file raises one strict
+       error naming the workflow and the directory (an explicit
+       selection, not a silent miss)
+    4. Load via `load_workflow` with the activation channels and the
+       home bundle; return the result
+
+    Requirements:
+    - The CLI flag beats the environment value on both axes (workflow
+      and profile)
+
+    Constraints:
+    - Do not read the environment — both channel values arrive as
+      parameters
+    - Do not render or parse here — the loading chain owns both
+
+"merge_workflow_build(config: BuildConfig, build_block: WorkflowBuild) -> config: BuildConfig":
+  location: workflow_build.py
+  annotations: |
+    Overlay the six-field workflow build block onto the effective build
+    configuration: a NEW BuildConfig where absent block fields never
+    override, agent fields override when set, and env maps merge
+    key-wise.
+
+    `config`: the effective build configuration (the base layer)
+    `build_block`: the workflow build block model
+    `config`: the layered build configuration (a new value; inputs
+              unmutated)
+
+    Algorithm:
+    1. Agent fields: root agent = build_block.agent when set, otherwise
+       the config value; review agent and additional agent the same way
+    2. Env maps, key-wise with the block winning per key: tasks env =
+       config env overlaid with block env; review env = config review
+       env overlaid with block review env; additional env = config
+       additional env overlaid with block additional env (the rest of
+       each config env survives — the override-one-variable use case)
+    3. Every other field of BuildConfig and its nested models passes
+       through verbatim (session knobs, iteration caps, skip, roles,
+       base_ref, strategy, finalize, patience, prompts_dir, agents_dir,
+       proxy, hosts)
+
+    Requirements:
+    - Pure — new BuildConfig and new nested models; inputs unmutated
+    - An absent block field (None) never overrides the configuration
+    - `config` is always a non-None `BuildConfig` — the workflow block
+      layers ONLY onto an existing build section; a build invocation
+      with no build section in .goga/config.yml raises one strict
+      error naming the requirement (reachable only via a direct
+      in-container invocation — the host launcher guards the section
+      host-side) instead of the raw attribute failure
+    - When config.review is None and the block sets any review field:
+      construct a NEW `ReviewConfig` (the set fields, every other
+      field None / empty; a NEW `AdditionalReviewConfig` when
+      additional fields are set) so `resolve_run_settings` receives a
+      well-formed layered configuration
+
+    Constraints:
+    - Do not apply CLI values here — CLI applies at the settings
+      resolution, preserving config < workflow build: < CLI
+    - Do not resolve wrappers or validate agents here
+
 "resolve_run_settings(config: BuildConfig, cli_options: dict) -> settings: RunSettings":
   location: run_settings.py
   annotations: |
     Resolve the run settings of one build from the two-part configuration
     and the CLI options — root inheritance applied, tri-state skip resolved,
-    strategy defaulted.
+    strategy defaulted. The `config` parameter is the LAYERED effective
+    build configuration: when a workflow is in effect, the caller has
+    already overlaid its build block via `merge_workflow_build`; this
+    routine consumes the layered value and applies no layering itself.
 
-    `config`: build configuration (`BuildConfig`) in the two-part form;
+    `config`: the layered build configuration (`BuildConfig`) in the
+    two-part form;
     its review part may be None — step 0 covers it
     `cli_options`: CLI options dictionary; the keys read here are skip_review
     (bool | None), base_ref (str | None — empty/whitespace counts as unset),
@@ -304,7 +480,10 @@ Annotations: |
        the resolved review agent; patience resolves the cli_options
        review_patience when given, otherwise the `AdditionalReviewConfig`
        value verbatim; max_iterations from `AdditionalReviewConfig`
-       verbatim (None when the block is absent)
+       verbatim (None when the block is absent); env from
+       `AdditionalReviewConfig` verbatim (empty dict when the block is
+       absent) — the independent additional env layer, never inherited
+       from the review env
     6. base_ref: cli_options base_ref when not None (empty/whitespace →
        unset; padded → stripped), otherwise `ReviewConfig` base_ref
 
@@ -338,7 +517,7 @@ Annotations: |
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per
-      `conventions`
+      `convention`
     - Computed by `resolve_run_settings` — never loaded from YAML directly
   properties:
     "skip -> bool": |
@@ -353,7 +532,7 @@ Annotations: |
   annotations: |
     The resolved tasks-pass part of the run plan.
 
-    Apply the `conventions` practice for the data-model rules and
+    Apply the `convention` practice for the data-model rules and
     intra-package imports.
   properties:
     "agent -> str | None": |
@@ -388,7 +567,7 @@ Annotations: |
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per
-      `conventions`
+      `convention`
   properties:
     "roles -> list[str] | None": |
       The declared reviewer composition; None or empty list mean the full
@@ -465,6 +644,10 @@ Annotations: |
     - Runs before any side effect — before writing .ralphex/ and before the
       first checkpoint
     - The error message names the invalid value
+    - The two validation domains are the module constants of the location
+      file: ROLE_WHITELIST (quality, implementation, testing, simplification,
+      documentation) and STRATEGY_WHITELIST (full, medium, short) — public,
+      frozen, exactly the values the checks read
 
     Constraints:
     - Do not validate the tasks agent wrapper here — its absence surfaces at
@@ -512,15 +695,71 @@ Annotations: |
     Constraints:
     - Do not touch .ralphex/config — it is written by the config routine
 
-"write_ralphex_config(settings: RunSettings, wrapper_path: str) -> none: None":
+"write_role_env_wrappers(settings: RunSettings, cli_entries: dict[str, str]) -> wrapper_paths: dict[str, Path]":
+  location: role_env_wrappers.py
+  annotations: |
+    Generate the per-role closure wrappers every build pass executor
+    runs through: export the role's env layer with the decoded CLI
+    entries applied on top, then exec the role agent's resolved
+    wrapper.
+
+    `settings`: the resolved run plan — agents and env layers of the
+                three roles
+    `cli_entries`: the decoded CLI entries payload (decode_extra_env
+                   result)
+    `wrapper_paths`: role name → absolute wrapper path; the keys are
+                     tasks, review, additional
+
+    Apply `resolve-wrapper-path` when resolving each role agent.
+
+    Algorithm:
+    1. Create the per-run base directory /tmp/goga-build-env/run-<pid>/
+       when missing (container-local temp, never under /workspace; one
+       directory per build process so concurrent builds in one container
+       never share closure files) with owner-only access (0o700)
+    2. Per role (tasks, review, additional): resolve the role agent —
+       tasks agent, review agent, additional agent (the inherited
+       review agent when unset); a role agent that resolves to no
+       wrapper raises one strict error naming the role BEFORE any pass
+       launches
+    3. Compose the closure content: export the role's env layer
+       (tasks env, review env, additional env) with `cli_entries`
+       applied ON TOP — CLI wins per key, engine-variable keys dropped
+       silently — then exec the resolved wrapper path
+    4. Write the script file per role — executable by its owner only
+       (0o700; the env layers never sit in a world-readable file)
+    5. Return the role → path mapping
+
+    Requirements:
+    - Per-role, NOT per-agent: the same underlying agent can carry
+      different env per role
+    - Regenerated at each pass's .ralphex/config write — the caller
+      invokes this per pass; the writes are idempotent overwrites
+    - Layers stay independent — the additional wrapper never exports
+      review env and vice versa
+    - Concurrent builds in one container are isolated: each process
+      writes its own run directory, so one build's in-flight passes
+      never exec another build's closures
+
+    Constraints:
+    - Do not write anything under /workspace — container-local temp
+      only
+    - Do not print or log env values or wrapper contents (dry-run
+      prints command lines only, as today)
+    - Do not launch anything — the pass executor owns the launch
+
+"write_ralphex_config(settings: RunSettings, wrapper_path: str, additional_wrapper_path: str | None = None) -> none: None":
   location: ralphex_config.py
   annotations: |
     Generate .ralphex/config for one ralphex pass.
 
     `settings`: the resolved run plan (`RunSettings`) — the external surface
     and the finalize fact of the review pass
-    `wrapper_path`: executor wrapper path of the current pass (the
-    claude_command value)
+    `wrapper_path`: executor wrapper path of the current pass — the pass's
+    generated role wrapper (the claude_command value)
+    `additional_wrapper_path`: the additional role wrapper path; the
+    external-review surface sets custom_review_script to it when engaged,
+    None when no additional wrapper exists
 
     Algorithm:
     1. Set claude_command to `wrapper_path`
@@ -530,17 +769,17 @@ Annotations: |
     5. External surface (the review pass): under the medium strategy set
        codex_enabled to false — the external review is explicitly disabled
        (internal agents only); under full or short leave the ralphex
-       default (enabled), and when the resolved additional agent is set,
-       set external_review_tool to custom and custom_review_script to the
-       additional agent's wrapper path; when unset, leave the ralphex
-       default (codex)
+       default (enabled), and when the external review engages with an
+       additional wrapper, set external_review_tool to custom and
+       custom_review_script to `additional_wrapper_path`; when None, leave
+       the ralphex default (codex)
     6. When the finalize prompt is set: set finalize_enabled to true; unset
        leaves the ralphex default (false)
 
     Requirements:
     - In a two-pass run this routine is called twice — each pass passes its
-      own executor wrapper (task wrapper; review wrapper — the additional
-      wrapper under the short strategy)
+      own role wrapper (tasks wrapper; review wrapper — the additional
+      wrapper under the short strategy) and the additional wrapper path
     - Under the medium strategy the external review is explicitly disabled
       (codex_enabled false); full and short leave it enabled
 
@@ -549,7 +788,7 @@ Annotations: |
     - Do not derive the external surface from anything but the resolved
       settings
 
-"run_build_pass(plan: str, settings: RunSettings, options: dict[str, str | int | bool], wrapper_path: str, dry_run: bool, env: dict[str, str] | None = None) -> exit_code: int":
+"run_build_pass(plan: str, settings: RunSettings, options: dict[str, str | int | bool], wrapper_path: str, dry_run: bool, additional_wrapper_path: str | None = None) -> exit_code: int":
   location: build_pass.py
   annotations: |
     Execute one ralphex pass: write the pass config, delegate the launch.
@@ -559,18 +798,23 @@ Annotations: |
                 config routine
     `options`: the resolved ralphex options of the pass (composed by
                `compose_pass_options`; carries exactly one pass-mode flag)
-    `wrapper_path`: executor wrapper of the current pass
+    `wrapper_path`: executor wrapper of the current pass — its generated
+                    role wrapper carrying the pass env layer
     `dry_run`: when True, print instead of launching
-    `env`: optional environment layer forwarded verbatim to `run_ralphex` —
-           the tasks pass receives the root env, the review pass the review
-           env; values are never printed
+    `additional_wrapper_path`: the additional role wrapper path,
+                                forwarded to the config routine — the
+                                external-review surface under the full and
+                                short strategies
     `exit_code`: the exit code returned by ralphex
 
     Algorithm:
-    1. Write .ralphex/config via the config routine with `wrapper_path` and
-       the pass settings
-    2. Delegate the launch to `run_ralphex` with `plan`, `options`, `dry_run`,
-       and `env`
+    1. Write .ralphex/config via the config routine with `wrapper_path`,
+       `additional_wrapper_path`, and the pass settings — the LAST config
+       write before the launch, so the surviving on-disk config carries
+       the external-review surface ralphex actually reads
+    2. Delegate the launch to `run_ralphex` with `plan`, `options`, and
+       `dry_run` — no env layer; the ralphex subprocess inherits the
+       container environment (task env layers ride the role wrapper)
     3. Return the exit code of `run_ralphex`
 
     Constraints:
@@ -613,4 +857,6 @@ Description: |
   the stable two-pass cycle with the five hooks checkpoints: two-part
   settings resolution with root inheritance, the validation gate, the four
   notifications, the external-review surface, finalize materialization, and
-  plan relocation.
+  plan relocation. Workflow-driven build-settings layering (config <
+  workflow build: < CLI) and per-role closure wrappers delivering each
+  executor's environment.

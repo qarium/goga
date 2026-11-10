@@ -10,6 +10,7 @@ CLI wrapper for the build command. Parses click options, loads configuration, an
 goga build <plan> [--dry-run] [--skip-manifest-check]
                  [--session-timeout T] [--idle-timeout T] [--wait T]
                  [--max-iterations N] [--review-patience N] [--base-ref REF]
+                 [-w WORKFLOW] [-p PROFILE]
                  [--skip-review | --no-skip-review]
                  [-e KEY=VALUE ...]
                  [--proxy URL] [--add-host HOST:IP ...] [--clean] [--update | -u]
@@ -34,6 +35,8 @@ goga build <plan> [--dry-run] [--skip-manifest-check]
 | `--review-patience` | int | from config | External-review stop threshold; addresses `build.review.additional.patience` in `.goga/config.yml`; forwarded to the container only when set |
 | `--base-ref` | str | from config | Review diff base (branch name or commit hash). Addresses `build.review.base_ref` in `.goga/config.yml`; forwarded to the container only when set. Reaches ralphex as `--base-ref` on the review pass only |
 | `--skip-review` / `--no-skip-review` | bool pair | tri-state | Skip the review phase (`--skip-review`) or force the full cycle (`--no-skip-review`). Overrides `build.review.skip` in `.goga/config.yml`; when neither flag is given, the config decides |
+| `-w` / `--workflow` | str | — | The workflow that drives the build (its `build:` block layers onto the config; its `profile:` default joins the activation). Validated host-side for path containment and file existence under `.goga/workflows/` (the file itself is never read on the host); forwarded in-container as `--workflow NAME` only when set. A value starting with `-` is rejected |
+| `-p` / `--profile` | str | — | The contributor-profile activation channel (`--profile` > `GOGA_PROFILE` > the workflow `profile:` default). Forwarded in-container as `--profile NAME` only when set. A value starting with `-` is rejected |
 | `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE). The entries travel in the env-file AND as the `GOGA_EXTRA_ENV` payload (one source), so the in-container build applies them above the task env layers at the pass launches |
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
 | `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
@@ -150,6 +153,24 @@ docker:
     - --no-cache
 ```
 
+## Profile carriage
+
+The launcher loads the home profiles bundle once via `load_home_profiles`
+(`~/.goga/profiles/`)
+BEFORE any docker activity — a malformed home profile is one clean error
+before any container launches. Two engine lines join the env-file after the
+CLI entries under the engine-skip rule (an explicit `-e` entry keeps
+winning):
+
+| Variable | Value | Written when |
+|---|---|---|
+| `GOGA_PROFILE` | the ambient host value | non-empty |
+| `GOGA_HOME_PROFILES` | the encoded home bundle (`encode_home_profiles`) | the bundle is non-empty |
+
+`GOGA_WORKFLOW` is never written by this launcher (the pipeline-run launcher
+owns it), and the build feedback line (`Build running with workflow "…" and
+profile "…"`) prints in-container — the host launcher prints none.
+
 ## Ralphex runtime isolation
 
 By default, ralphex writes its state (config, prompts, agents, progress files) relative to its current working directory inside the container. The `goga build` command bind-mounts a centralized host directory at `/workspace/.ralphex` so this state never lands in the user's project directory.
@@ -171,3 +192,20 @@ By default, ralphex writes its state (config, prompts, agents, progress files) r
 **Crash safety:** because the runtime state lives under `~/.goga/runtime/`, interrupting a build (Ctrl+C, SIGKILL on docker) leaves no `.ralphex/` behind in the project directory. The host launcher removes any `.ralphex/` that Docker creates in the project directory on every exit path, including crash/SIGKILL. `.ralphex/` is never legitimate user data in the project directory — removal is unconditional when the directory exists.
 
 **Concurrent builds:** two simultaneous `goga build` invocations on the same project + same branch share the same runtime directory and may collide on ralphex progress files. Run on different branches, or use `--clean` in only one of the invocations, to avoid the collision.
+
+## Direct in-container execution (GOGA_DOCKER=1)
+
+Inside the goga image the same command runs without docker: the
+composed in-container argv and env contract execute as a child process.
+
+    # in-container
+    goga build plan.md              # direct build
+    goga build plan.md --clean      # wipes <cwd>/.ralphex first
+    goga build plan.md --dry-run    # prints the direct command, exits 0
+
+- Host-only options are errors on this path: -e/--env, --add-host,
+  --proxy, --update — each fails naming the option.
+- ralphex state does not persist across direct runs (the host runtime
+  bind-mount exists only under docker); the project directory stays
+  clean in every case.
+- On the host (no marker) nothing changes — docker run as always.

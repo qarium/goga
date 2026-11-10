@@ -36,10 +36,22 @@ The pipelines layer is split into two authoring surfaces:
   (user).
 - **[Workflows](workflows.md)** — an optional layering document that extends
   a compiled pipeline at run time with a top-level prompt, per-stage agent /
-  prompt overrides, loop expansion, stage skipping via `skip`, manual launch
-  via `manual`, note buttons via `notes`, new stages declared via `extend`,
-  and project-memory participation via the `memory` block and the per-stage
-  `reflect` / `memory` instructions.
+  prompt overrides, per-stage environment variables via `env`, loop
+  expansion, stage skipping via `skip`, manual launch via `manual`, note
+  buttons via `notes`, new stages declared via `extend`, project-memory
+  participation via the `memory` block and the per-stage `reflect` /
+  `memory` instructions, helper-agent collaboration via the top-level
+  `assistants` catalog, the `delegation` block, and the per-stage
+  `assistants` instruction (see
+  [Workflows — Collaboration](workflows.md#collaboration-assistants-delegation)),
+  run-cycle tuning via the top-level `repeat` block (see
+  [Workflows — Run cycles](workflows.md#run-cycles-repeat)),
+  stage-completion quality gates via the top-level `gates` block and the
+  per-stage `gates` check-step lists (see
+  [Workflows — Quality gates](workflows.md#quality-gates-gates)),
+  profile-driven rendering (one file adapting per
+  contributor — see [Workflows — Profiles](workflows.md#profiles)), and a
+  `build:` block configuring nested `goga build` runs.
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers
@@ -68,8 +80,8 @@ Each pipeline-file is compiled into a single deterministic pipeline
 definition in two stages:
 
 1. **Parse** — goga reads the pipeline-file, validates the header
-   (`name`, `description`, optional `roles`), and detects the body format
-   (phases list or stages map).
+   (`name`, `description`, optional `roles`, optional `repeatable`), and
+   detects the body format (phases list or stages map).
 2. **Serialize** — goga applies per-format `depends_on` rules,
    merges any workflow overrides, embeds any `extend` stages, performs loop
    expansion, resolves the agent mode for each stage, and writes the exact
@@ -88,7 +100,20 @@ the stage's manual launch mode (a stage-body `trigger: manual` makes the
 stage pause until launched). A per-stage `notes` map becomes the stage's
 note buttons. A workflow `memory` block plus per-stage `reflect` /
 `memory` instructions turn on project-memory participation — active only
-when at least one stage takes part. Every stage is either an **agent stage** — a `prompt` for an AI agent,
+when at least one stage takes part. Every compiled flow also carries a
+`collaboration` block (mode `assistants` always, the delegation depth when
+authored), and a workflow declaring an `assistants` catalog adds a `team`
+list and per-stage `assistants` entries — the helper-agent plumbing
+delivered to the engine configuration on launch (see
+[Workflows — Collaboration](workflows.md#collaboration-assistants-delegation)).
+A repeatable pipeline (header `repeatable: true`) always compiles a
+top-level `repeat` key — a workflow `repeat` block's authored bounds, else
+the scalar `repeat: true` (see
+[Workflows — Run cycles](workflows.md#run-cycles-repeat)). A workflow
+`gates` block plus per-stage `gates` check-step lists compiles each gated
+stage's completion `verify` gate (see
+[Workflows — Quality gates](workflows.md#quality-gates-gates)).
+Every stage is either an **agent stage** — a `prompt` for an AI agent,
 with optional `skills` and `roles` — or a **script stage** — a literal
 `script` executed without an agent (see
 [Pipeline File — Stage fields](pipeline-file.md#stage-fields)). Any stage

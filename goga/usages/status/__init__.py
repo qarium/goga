@@ -1,3 +1,4 @@
+from .compare import compute_dep_status, hash_tree
 from .status import (
     DepStatus,
     EntryChange,
@@ -15,5 +16,7 @@ __all__ = [
     "EntryStatus",
     "UsageState",
     "UsageStatusReport",
+    "compute_dep_status",
+    "hash_tree",
     "status",
 ]

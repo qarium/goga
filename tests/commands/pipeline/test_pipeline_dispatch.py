@@ -56,6 +56,8 @@ from tests.commands.pipeline.conftest import make_config
 # pipeline Click command, so a string-based mock.patch path walking through it
 # fails on Python 3.10. Resolve the real module via sys.modules.
 _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
+# The run launcher submodule the same way (the __init__ binds its function).
+_rpc_module = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 
 
 def _make_config(
@@ -123,6 +125,27 @@ class TestPipelineDispatchContract:
         assert "--clean" in output
         assert "--update" in output
         assert "-u" in output
+
+
+class TestPipelineFailOnErrorOptionContract:
+    def test_pipeline_has_fail_on_error_option(self) -> None:
+        param_names = [p.name for p in pipeline.params]
+        assert "fail_on_error" in param_names
+
+    def test_pipeline_fail_on_error_option_is_flag_default_false(self) -> None:
+        fail_on_error_param = next(p for p in pipeline.params if p.name == "fail_on_error")
+        assert fail_on_error_param.is_flag is True
+        assert fail_on_error_param.default is False
+
+    def test_pipeline_fail_on_error_placed_after_parallel(self) -> None:
+        param_names = [p.name for p in pipeline.params]
+        assert param_names.index("fail_on_error") == param_names.index("parallel") + 1
+
+    def test_help_advertises_fail_on_error(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(pipeline, ["--help"])
+        assert result.exit_code == 0
+        assert "--fail-on-error" in result.output
 
 
 class TestPipelineTopicOptionContract:
@@ -197,8 +220,12 @@ class TestPipelineDispatchLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            profile=None,
             skip=(),
             parallel=None,
+            home_profiles=None,
+            fail_on_error=False,
+            port=None,
         )
 
     def test_pipeline_proxy_none_falls_back_to_config(self) -> None:
@@ -222,8 +249,12 @@ class TestPipelineDispatchLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            profile=None,
             skip=(),
             parallel=None,
+            home_profiles=None,
+            fail_on_error=False,
+            port=None,
         )
 
     def test_pipeline_update_flag_forwarded(self) -> None:
@@ -270,6 +301,8 @@ class TestPipelineDispatchEdge:
             update=False,
             workflow=None,
             no_workflow=False,
+            profile=None,
+            home_profiles=None,
         )
 
     def test_pipeline_add_host_merges_over_config(self) -> None:
@@ -402,10 +435,10 @@ class TestPipelineWorkflowOptionHelpText:
         assert no_workflow_param.help == "Disable workflow application entirely (run and card forms)"
         assert skip_param.help == "Exclude a stage from the compiled pipeline (run and card forms; repeatable)"
 
-        runner = CliRunner()
-        result = runner.invoke(pipeline, ["--help"])
-        assert result.exit_code == 0
-        assert "GOGA" not in result.output
+        # The guard's object is the OPTION helps (the removed environment
+        # channel), not the command docstring body — which names the
+        # GOGA_DOCKER substrate marker per the direct-substrate contract.
+        assert all("GOGA" not in (param.help or "") for param in pipeline.params)
 
 
 class TestPipelineTopicRunForm:
@@ -517,3 +550,107 @@ class TestPipelineCallbackSignature:
         hints = typing.get_type_hints(pipeline_cmd.callback)
         assert hints["topic"] == str | None
         assert "branch" not in hints
+
+
+class TestPipelineDirectSubstrate:
+    """The direct substrate (GOGA_DOCKER=1): the same composed argv as a child, host-only options rejected.
+
+    Step 1a contract: with the marker set, the run form executes the SAME
+    composed in-container argv as a direct child (SC1/SC8 plumbing — the
+    spawn carries the forwarded ``--fail-on-error`` and the allocated port,
+    and no docker machinery runs), while each of the six host-only options
+    is rejected with an error naming it BEFORE any other work (SC2 —
+    nothing is silently ignored, no spawn, no topic procedure).
+    """
+
+    def test_pipeline_direct_run_spawns_child_and_forwards_flag(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A direct-substrate run spawns the composed argv with the flag; no docker runs."""
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import (
+            DirectSpawnPopen,
+            apply_run_mode_common_mocks,
+            write_minimal_config,
+        )
+
+        write_minimal_config(tmp_path)
+        # The common mocks pin the port (part of the composed contract on both
+        # substrates) and keep the env-line composition offline/deterministic.
+        apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        runner_cls = mock.Mock()
+
+        with (
+            mock.patch.object(_rpc_module, "DockerRunner", runner_cls),
+            mock.patch.object(_rpc_module, "docker_build_if_not_exist") as mock_build,
+            mock.patch.object(_rpc_module, "docker_update") as mock_refresh,
+        ):
+            result = CliRunner().invoke(pipeline, ["deploy", "--fail-on-error"])
+
+        assert result.exit_code == 0
+        assert len(spawn.calls) == 1
+        argv, env = spawn.calls[0]
+        # The SAME composed argv as the host substrate, prefixed with the
+        # program token — the forwarded flag and the allocated port included.
+        assert argv == [
+            "python3",
+            "-m",
+            "goga.pipeline",
+            "run",
+            "deploy",
+            "--port",
+            "50321",
+            "--fail-on-error",
+        ]
+        # The composed env lines reach the child env layer (the overlay parsed
+        # over the inherited environment by run_direct).
+        assert env["AFM_DIR"] == "/home/goga/pipeline"
+        assert "GOGA_EXTRA_ENV" in env
+        # No docker machinery ran — the docker substrate is fully bypassed.
+        runner_cls.assert_not_called()
+        mock_build.assert_not_called()
+        mock_refresh.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("argv", "flag"),
+        [
+            (["deploy", "-t", "feat"], "--topic/-t"),
+            (["deploy", "--todo"], "--todo"),
+            (["deploy", "-u"], "--update/-u"),
+            (["deploy", "-e", "K=V"], "--env/-e"),
+            (["deploy", "--add-host", "h:1.2.3.4"], "--add-host"),
+            (["deploy", "--proxy", "http://p"], "--proxy"),
+        ],
+        ids=["topic", "todo", "update", "env", "add-host", "proxy"],
+    )
+    def test_pipeline_direct_rejects_each_host_only_option(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch, argv: list[str], flag: str
+    ) -> None:
+        """Each host-only option exits 1 naming the option, before any spawn or git action."""
+        import goga.docker.runner
+
+        from tests.commands.pipeline.conftest import DirectSpawnPopen, write_minimal_config
+
+        write_minimal_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        spawn = DirectSpawnPopen(returncode=0)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+
+        with mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure:
+            result = CliRunner().invoke(pipeline, argv)
+
+        assert result.exit_code == 1
+        assert flag in result.stderr
+        assert "is host-only" in result.stderr
+        # Nothing was silently ignored and nothing ran — no child, no topic
+        # procedure, no docker activity.
+        assert spawn.calls == []
+        mock_ensure.assert_not_called()

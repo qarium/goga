@@ -52,6 +52,21 @@ def _skip_version_check(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GOGA_SKIP_VERSION_CHECK", "1")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_goga_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear the goga carriage and substrate variables for the whole suite.
+
+    The suite runs green on CI, where none of these are set; running it inside
+    the goga container leaks the ambient launch carriage (GOGA_WORKFLOW,
+    GOGA_PROFILE, the two encoded bundles) and the GOGA_DOCKER marker into
+    tests that read the environment without pinning it. Tests that need a
+    specific value still win: their own monkeypatch.setenv / delenv calls run
+    after this autouse fixture and override it.
+    """
+    for name in ("GOGA_WORKFLOW", "GOGA_PROFILE", "GOGA_EXTRA_ENV", "GOGA_HOME_PROFILES", "GOGA_DOCKER"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def project_root() -> Path:
     return Path(__file__).parent / ".project"

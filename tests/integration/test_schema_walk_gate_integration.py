@@ -4,8 +4,8 @@ The cross-package half of ``tests/schema/test_schema.py``: the real
 ``goga.ast`` parser over ``tmp_path`` CODEMANIFEST trees, the real
 ``goga.hooks`` registry with fake ``goga_tool_*`` packages, and the
 ``goga.schema.hooks`` checkpoint delivery and validation gate, asserting the
-JSON output of ``goga.schema.schema``. The scaffolding (the manifest writer,
-the two-cell fixture tree, the tool installers) lives in
+``SchemaNode`` tree of ``goga.schema.schema``. The scaffolding (the manifest
+writer, the two-cell fixture tree, the tool installers) lives in
 ``tests/schema/conftest.py`` and is shared with the zone suite.
 """
 
@@ -14,9 +14,11 @@ from __future__ import annotations
 import copy
 import json
 import os
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
+from goga.commands.schema.schema import _project_node
 from goga.schema.hooks import DependencyFacts, SchemaNode
 from goga.schema.schema import schema
 
@@ -65,8 +67,7 @@ def test_schema_walk_places_tools_on_nodes(
     with _cwd(tmp_path):
         result = schema([], None, [])
 
-    data = json.loads(result)
-    assert data[0]["tools"] == {"docs": {"score": 3}}
+    assert result[0].tools == {"docs": {"score": 3}}
 
 
 def test_schema_walk_places_tools_and_keeps_base_fields(
@@ -87,10 +88,17 @@ def test_schema_walk_places_tools_and_keeps_base_fields(
     with _cwd(tmp_path):
         result = schema([], None, [])
 
-    data = json.loads(result)
-    assert data[0]["tools"] == {"docs": {"score": 3}}
-    assert data[0]["children"][0]["tools"] == {"docs": {"score": 3}}
-    assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "tools", "types", "usages"}
+    assert result[0].tools == {"docs": {"score": 3}}
+    assert result[0].children[0].tools == {"docs": {"score": 3}}
+    assert {field.name for field in fields(result[0])} == {
+        "path",
+        "description",
+        "types",
+        "usages",
+        "dependencies",
+        "children",
+        "tools",
+    }
 
 
 # --- the validation gate of the generation walk, cross-package ---
@@ -132,16 +140,18 @@ def test_schema_gate_no_subscriptions_byte_identical(
     tmp_path: Path,
     pin_package_environment,
 ) -> None:
-    """No tool packages — the gate approves and the output stays the recorded golden, byte for byte."""
+    """No tool packages — the gate approves and the serialized tree stays the recorded golden, byte for byte."""
     _write_walk_project(tmp_path)
     pin_package_environment({})
 
     with _cwd(tmp_path):
         result = schema([], None, [])
 
-    assert result == GATE_GOLDEN
-    assert '"tools"' not in result
-    assert json.loads(result) == json.loads(GATE_GOLDEN)
+    serialized = json.dumps([_project_node(n) for n in result], indent=4, sort_keys=True, ensure_ascii=False)
+
+    assert serialized == GATE_GOLDEN
+    assert '"tools"' not in serialized
+    assert json.loads(serialized) == json.loads(GATE_GOLDEN)
 
 
 def test_schema_gate_veto_raises_merged_error_listing_every_violation(
@@ -245,9 +255,8 @@ def test_gate_delivers_the_projected_filtered_tree_with_the_committed_overlay(
     assert child.children == []
     assert child.tools == {}  # no contribution committed on the child — no empty overlay key
 
-    data = json.loads(result)
-    assert data[0]["tools"] == {"alpha": {"score": 3, "tags": ["docs", {"nested": True}]}}
-    assert "tools" not in data[0]["children"][0]
+    assert result[0].tools == {"alpha": {"score": 3, "tags": ["docs", {"nested": True}]}}
+    assert result[0].children[0].tools == {}
 
     # The depth filter reaches the delivered view — the validator sees the
     # pruned tree, never the unfiltered one.

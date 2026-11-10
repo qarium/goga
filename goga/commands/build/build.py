@@ -3,19 +3,32 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import shlex
 import shutil
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
 
 from ...config import HomeConfig, load_home_config, load_project_config
 from ...config.hooks import ConfigHooks
-from ...docker import DockerRunner, docker_build_if_not_exist, docker_update, encode_extra_env
+from ...docker import (
+    DockerRunner,
+    docker_build_if_not_exist,
+    docker_update,
+    encode_extra_env,
+    is_in_docker,
+    profile_carriage_lines,
+    run_direct,
+    translate_params,
+)
+from ...pipeline.workflow import load_home_profiles
 from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
@@ -80,7 +93,8 @@ def _write_env_file(lines: list[str]) -> Path:
 
     Args:
         lines: The fully assembled KEY=VALUE lines of the container env-file,
-            in ladder order (the ``GOGA_EXTRA_ENV`` payload line last).
+            in ladder order (the ``GOGA_EXTRA_ENV`` payload line, then the
+            profile engine lines when they carry cargo).
 
     Returns:
         Path to the written temporary file.
@@ -94,6 +108,112 @@ def _write_env_file(lines: list[str]) -> Path:
             f.write(f"{line}\n")
 
     return Path(path)
+
+
+def _compose_env_lines(
+    home_env: dict[str, str],
+    git_env: dict[str, str],
+    extra_env: tuple[str, ...],
+    proxy: str | None,
+    home_profiles: dict[str, dict[str, Any]] | None = None,
+) -> list[str]:
+    """Compose the container env lines (Algorithm step 7) — environment layers only.
+
+    The single composition shared by both execution substrates (one
+    composition, two sinks — per ``direct-runner``): the host path writes the
+    lines into the private env-file consumed by ``docker run --env-file``; the
+    direct path parses them into the child env layer of ``run_direct``.
+
+    Args:
+        home_env: ``home.env`` from the machine-wide home config — the
+            lowest-priority env layer (git identity and CLI win on key
+            conflict). Survives where unconflicted.
+        git_env: Git identity variables from ``_read_git_config`` — layered
+            over ``home_env`` (an absent git config contributes nothing).
+        extra_env: Additional raw KEY=VALUE strings written verbatim (a
+            SEPARATE channel above the dict layers, winning on key conflict)
+            and encoded into the payload line from the same values.
+        proxy: Resolved HTTP/HTTPS proxy URL (CLI wins over config in the
+            caller); populates the proxy triple when non-None.
+        home_profiles: The loaded home bundle (the ``load_home_profiles``
+            result of the caller) — encoded into the ``GOGA_HOME_PROFILES``
+            engine line only when non-empty (per ``home-profiles-carriage``);
+            the payload never appears in any message.
+
+    Returns:
+        The fully assembled KEY=VALUE lines in ladder order (the
+        ``GOGA_EXTRA_ENV`` payload line before the two profile-carriage
+        engine lines).
+
+    Note:
+        Ladder order (lowest to highest): the ``home_env`` base under git
+        identity, the raw ``extra_env`` lines, the engine proxy triple when a
+        proxy resolved, the ``GOGA_EXTRA_ENV`` payload line, then the two
+        profile-carriage engine lines (``GOGA_PROFILE`` — the ambient host
+        value, only when non-empty — and ``GOGA_HOME_PROFILES``, only when the
+        bundle is non-empty). The engine lines follow the CLI lines and SKIP a
+        key the CLI explicitly supplied — the raw CLI line keeps winning
+        without a duplicate launcher line (the documented
+        ``-e HTTP_PROXY=...`` escape hatch). ``GOGA_WORKFLOW`` is NEVER
+        written by this launcher (the pipeline-run launcher owns it); the task
+        env layer (``build.env``) NEVER enters the lines — it reaches the
+        container through the mounted ``.goga/config.yml`` and applies
+        in-container at the pass launches.
+    """
+    # home.env is the BASE layer — lowest priority; git identity overrides it.
+    # The CLI raw channel and the engine lines are appended after the base
+    # lines, so they still win on key conflict.
+    lines = [f"{key}={value}" for key, value in {**home_env, **git_env}.items()]
+    lines += list(extra_env)
+
+    # Engine lines — the proxy triple only in the build domain (NO_PROXY is
+    # fixed at localhost,127.0.0.1, there is no --no-proxy) — are written after
+    # the CLI lines so the env-file itself respects the ladder; a key the CLI
+    # explicitly supplied is SKIPPED, keeping the documented -e escape hatch
+    # winning under docker's last-write-wins.
+    cli_keys = {pair.partition("=")[0] for pair in extra_env if "=" in pair}
+    engine: dict[str, str] = {}
+
+    if proxy is not None:
+        engine |= {
+            "HTTP_PROXY": proxy,
+            "HTTPS_PROXY": proxy,
+            "NO_PROXY": "localhost,127.0.0.1",
+        }
+
+    engine = {key: value for key, value in engine.items() if key not in cli_keys}
+    lines += [f"{key}={value}" for key, value in engine.items()]
+
+    # The payload line — the second carrier composed from the SAME parsed CLI
+    # values as the raw lines above (one source, two carriers per
+    # extra-env-carriage).
+    lines.append(f"GOGA_EXTRA_ENV={encode_extra_env(list(extra_env))}")
+
+    # The contributor-profile carriage — two engine lines after the payload
+    # line, composed by the shared `profile_carriage_lines` helper (same
+    # engine-skip rule: an explicit -e key keeps winning; each line written
+    # only when it carries cargo). GOGA_WORKFLOW is NEVER written by this
+    # launcher (the pipeline-run launcher owns it); the payload values never
+    # appear in any message.
+    lines += profile_carriage_lines(os.environ.get("GOGA_PROFILE", ""), home_profiles, None, cli_keys)
+
+    return lines
+
+
+def _env_overlay(lines: list[str]) -> dict[str, str]:
+    """Parse env-file lines into the direct-substrate child env layer.
+
+    Args:
+        lines: The ``_compose_env_lines`` result — KEY=VALUE lines in ladder
+            order.
+
+    Returns:
+        The parsed mapping — each line split on the FIRST ``=``, applied in
+        order so a later line of the same key wins, mirroring the
+        ``docker run --env-file`` last-write-wins semantics the host path
+        relies on.
+    """
+    return dict(line.split("=", 1) for line in lines)
 
 
 def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[str]:
@@ -121,7 +241,16 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
     elif sr is False:
         args.append("--no-skip-review")
 
-    for flag in ("session_timeout", "idle_timeout", "wait", "max_iterations", "review_patience", "base_ref"):
+    for flag in (
+        "session_timeout",
+        "idle_timeout",
+        "wait",
+        "max_iterations",
+        "review_patience",
+        "base_ref",
+        "workflow",
+        "profile",
+    ):
         val = cli_flags.get(flag)
         if val is not None:
             args.extend([f"--{flag.replace('_', '-')}", str(val)])
@@ -201,6 +330,22 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     default=None,
     help="Review diff base (branch name or commit hash); addresses build.review.base_ref",
 )
+@click.option(
+    "-w",
+    "--workflow",
+    "workflow",
+    type=str,
+    default=None,
+    help="Workflow that drives the build; validated against .goga/workflows/, forwarded in-container",
+)
+@click.option(
+    "-p",
+    "--profile",
+    "profile",
+    type=str,
+    default=None,
+    help="Contributor-profile activation channel; overrides GOGA_PROFILE, forwarded in-container",
+)
 @click.option("-e", "--env", "extra_env", multiple=True, help="Pass env var to container (KEY=VALUE)")
 @click.option("--proxy", type=str, default=None, help="HTTP/HTTPS proxy URL; overrides config.build.proxy")
 @click.option(
@@ -244,6 +389,8 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     max_iterations: int | None,
     review_patience: int | None,
     base_ref: str | None,
+    workflow: str | None,
+    profile: str | None,
     extra_env: tuple[str, ...],
     proxy: str | None,
     add_host: tuple[str, ...],
@@ -252,6 +399,13 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     skip_review: bool | None,
 ) -> None:
     """Build code via a ralph-loop by launching goga.build inside a Docker container.
+
+    Inside the goga container itself (the GOGA_DOCKER=1 marker) the command
+    instead executes the SAME composed in-container command directly as a
+    child process; the host-only options (-e/--env, --add-host, --proxy,
+    -u/--update) are rejected there with an error naming the option before
+    any other work — they configure the docker launch, which does not exist
+    in-container.
     \f
     Home (machine-wide) config from ``~/.goga/config.yml`` is applied up front:
     ``home.env`` is the lowest-priority container environment layer (git identity
@@ -261,7 +415,32 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     container env-file — it reaches the container through the mounted
     ``.goga/config.yml`` and is applied in-container as the tasks-pass layer.
     """
-    if not _check_docker():
+    # Step 1a — resolve the execution substrate once; on the direct path
+    # (inside the goga image, the GOGA_DOCKER marker) reject every host-only
+    # option BEFORE any other work — the docker-CLI check, the config load,
+    # no env assembly, no launch. Each option configures the docker launch,
+    # which does not exist inside the container; nothing is silently ignored.
+    # The host path (marker absent) skips this step entirely.
+    direct = is_in_docker()
+
+    if direct:
+        host_only = [
+            ("--env/-e", bool(extra_env)),
+            ("--add-host", bool(add_host)),
+            ("--proxy", proxy is not None),
+            ("--update/-u", update),
+        ]
+
+        for flag, passed in host_only:
+            if passed:
+                raise click.ClickException(
+                    f"{flag} is host-only: it configures the docker launch, "
+                    f"which does not exist inside the goga container"
+                )
+
+    # Step 1 — docker-CLI gate (host substrate only): inside the goga image
+    # there is no docker launch to check or acquire.
+    if not direct and not _check_docker():
         raise click.ClickException("docker not found in PATH")
 
     # Home (machine-wide) config preamble — an empty HomeConfig when the file is
@@ -306,6 +485,36 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     if config.build is None:
         raise click.ClickException("build section is required in .goga/config.yml to run 'goga build'")
 
+    # Step 3.1 — argv parsability of the two new channels. Click consumes any
+    # next token as an option value, so `-w "-x"` parses on the host with the
+    # dash-leading token swallowed as the name — but the in-container argparse
+    # surface classifies it as an option and dies only AFTER the whole launch
+    # ceremony. Reject both forms here, before any docker activity (mirroring
+    # the pipeline command's workflow name rule).
+    if workflow is not None and workflow.startswith("-"):
+        raise click.ClickException(f"invalid workflow name {workflow!r}")
+
+    if profile is not None and profile.startswith("-"):
+        raise click.ClickException(f"invalid profile name {profile!r}")
+
+    # Step 3.2 — light host-side diagnostic for an explicit -w: path
+    # containment + file existence under <cwd>/.goga/workflows/ (the same
+    # resolution root the in-container build composes). The file itself is
+    # NEVER read here — a typo surfaces as a clean message + exit 1 before
+    # any docker activity, and an escaping name (``..`` segment, absolute
+    # prefix) is never resolved into the wider filesystem.
+    if workflow is not None:
+        workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
+        workflow_path = workflows_root / f"{workflow}.yml"
+
+        try:
+            workflow_path.resolve().relative_to(workflows_root)
+        except ValueError:
+            raise click.ClickException(f"invalid workflow name {workflow!r}") from None
+
+        if not workflow_path.exists():
+            raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
+
     cli_flags = {
         "skip_manifest_check": skip_manifest_check,
         "skip_review": skip_review,
@@ -315,6 +524,8 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         "max_iterations": max_iterations,
         "review_patience": review_patience,
         "base_ref": base_ref,
+        "workflow": workflow,
+        "profile": profile,
         "dry_run": dry_run,
     }
 
@@ -334,35 +545,65 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # Step 6 — read the git identity (tolerated absent, no error).
     git_env = _read_git_config()
 
-    # Step 7 — assemble the env-file ladder: home.env < git identity < CLI -e <
-    # engine variables, then the CLI entries payload line. The raw CLI lines and
-    # the payload compose from the SAME parsed values (one source, two carriers
-    # per the extra-env-carriage practice — never parsed or filtered
-    # independently). The task env (config.build.env) is NOT written into the
-    # env-file — it reaches the container only through the mounted
-    # .goga/config.yml and is applied in-container at the pass launches.
-    lines = [f"{k}={v}" for k, v in {**home.env, **git_env}.items()]
-    lines += list(extra_env)
+    # Step 7 — the home bundle loads ONCE here, before any docker activity: a
+    # malformed home profile is one clean error (no image refresh, no launch),
+    # and the payload value itself never appears in any message.
+    try:
+        home_profiles = load_home_profiles(Path.home() / ".goga" / "profiles")
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
-    # Engine lines — the proxy triple only in the build domain (NO_PROXY is
-    # fixed at localhost,127.0.0.1, there is no --no-proxy) — are written after
-    # the CLI lines so the env-file itself respects the ladder; a key the CLI
-    # explicitly supplied is SKIPPED, keeping the documented -e escape hatch
-    # winning under docker's last-write-wins.
-    cli_keys = {pair.partition("=")[0] for pair in extra_env if "=" in pair}
-    engine: dict[str, str] = {}
+    # The env ladder — one composition, two sinks (per direct-runner): the
+    # host substrate writes these lines into the private env-file (step 9);
+    # the direct substrate parses them into the child env layer (step 14a).
+    # The raw CLI lines and the payload compose from the SAME parsed values
+    # (one source, two carriers per the extra-env-carriage practice — never
+    # parsed or filtered independently). The task env (config.build.env) is
+    # NOT part of the lines — it reaches the container only through the
+    # mounted .goga/config.yml and is applied in-container at the pass
+    # launches.
+    lines = _compose_env_lines(home.env, git_env, extra_env, resolved_proxy, home_profiles)
 
-    if resolved_proxy is not None:
-        engine |= {
-            "HTTP_PROXY": resolved_proxy,
-            "HTTPS_PROXY": resolved_proxy,
-            "NO_PROXY": "localhost,127.0.0.1",
-        }
+    # Step 14a — the direct substrate: execute the SAME composed command line
+    # and env contract as a child of the current environment. Substrate-scoped
+    # skips: the image guard below, the host ralphex runtime-dir machinery,
+    # the env-file write, the docker-run assembly, docker_build_if_not_exist,
+    # docker_update, DockerRunner, and the caller-side D7 handler — run_direct
+    # owns the signals (SIGTERM/SIGINT forwarded to the child, exit 128 +
+    # signum). Ralphex state does not persist across direct runs (no host
+    # runtime mount exists on this path) — an accepted, documented property.
+    if direct:
+        # --clean wipes the directory ralphex actually uses without the nested
+        # bind-mount — the cwd-relative .ralphex of the project — BEFORE the
+        # run, never after.
+        if clean:
+            with contextlib.suppress(FileNotFoundError):
+                shutil.rmtree(Path.cwd() / ".ralphex")
 
-    engine = {k: v for k, v in engine.items() if k not in cli_keys}
-    lines += [f"{k}={v}" for k, v in engine.items()]
+        args = ["-m", "goga.build", plan, *_cli_flags_to_args(cli_flags)]
 
-    lines.append(f"GOGA_EXTRA_ENV={encode_extra_env(list(extra_env))}")
+        try:
+            if dry_run:
+                # The direct command line — the same argv the spawn below
+                # would execute — printed, never executed (the ralphex
+                # launcher's dry-run pattern: command lines only).
+                print(shlex.join(["python3", *args]), file=sys.stderr)
+                ctx.exit(0)
+
+            # The spawn failure channel (D5): run_direct propagates a raw
+            # OSError from Popen (the executor never wraps); the caller owns
+            # the wrapping, so a missing/unusable program token is the same
+            # clean message + exit 1 as every other failure of the command.
+            try:
+                exit_code = run_direct(["python3", *args], env=_env_overlay(lines))
+            except OSError as exc:
+                raise click.ClickException(str(exc)) from exc
+
+            ctx.exit(exit_code)
+        finally:
+            # The no-.ralphex-in-project invariant holds under every exit
+            # path on BOTH substrates.
+            _cleanup_ralphex_in_project(Path.cwd())
 
     # Step 8 — reject the missing-image case before creating any temp files: the
     # env file (written below) carries git identity and CLI -e secrets and is
@@ -429,6 +670,13 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         }
 
         if dry_run:
+            # The assembled launch line — the same param→flag translation and
+            # argv order DockerRunner would launch — printed, never executed
+            # (the ralphex launcher's dry-run pattern: command lines only).
+            print(
+                shlex.join(["docker", "run", *translate_params(params), config.image, *args]),
+                file=sys.stderr,
+            )
             ctx.exit(0)
 
         # First-run safety net: build the local image if it is absent and a

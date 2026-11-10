@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 _OK_STATUS = 200
 _METHOD_NOT_ALLOWED = 405
-_REQUEST_TIMEOUT = 5
+_REQUEST_TIMEOUT = 15
 
 
 class AllUsagesIsUsed(DocumentRule):

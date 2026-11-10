@@ -18,6 +18,7 @@ from goga.config import (
     TopicsConfig,
     load_project_config,
 )
+from goga.config.project import loader as project_loader
 from goga.config.project.config import (
     DepConfig,
     TopicsCreateConfig,
@@ -36,6 +37,7 @@ from goga.config.project.loader import (
     _parse_usages,
     _validate_usages_root,
 )
+from goga.config.yaml import parse_env_yaml
 
 from tests.config.conftest import _write_goga_yml
 from tests.conftest import is_kw_only_dataclass
@@ -127,6 +129,22 @@ class TestLoadConfigFacade:
         _write_goga_yml(goga_project, MINIMAL_YAML)
         result = load_project_config()
         assert isinstance(result, ProjectConfig)
+
+
+class TestLoadConfigEnvParseContract:
+    def test_project_loader_parses_through_the_yaml_cell(self):
+        """The loader's parse step routes through parse_env_yaml of goga/config/yaml."""
+        assert project_loader.parse_env_yaml is parse_env_yaml
+
+    def test_project_loader_carries_no_code_level_yaml_import(self):
+        """The yaml module is no longer bound in the loader (docstrings keep the exception names)."""
+        assert not hasattr(project_loader, "yaml")
+
+    def test_project_loader_signature_unchanged(self):
+        """load_project_config still takes no parameters and returns ProjectConfig."""
+        signature = inspect.signature(load_project_config)
+        assert list(signature.parameters) == []
+        assert signature.return_annotation is ProjectConfig
 
 
 # --- Positive tests ---
@@ -1036,6 +1054,54 @@ class TestLoadConfigEdgeCases:
             "language: python\npipeline:\n  agent: claude\nbuild:\n  agent: [unclosed\n",
         )
         with pytest.raises(yaml.YAMLError):
+            load_project_config()
+
+
+class TestLoadConfigEnvReferences:
+    ENV_AGENT_YAML = "language: python\npipeline:\n  agent: !ENV PIPELINE_AGENT\n"
+
+    def test_load_project_config_env_agent_unset_resolves_absent(self, goga_project, monkeypatch):
+        """An unset !ENV variable resolves to "" and the agent field's empty rule yields None (SC6)."""
+        monkeypatch.delenv("PIPELINE_AGENT", raising=False)
+        _write_goga_yml(goga_project, self.ENV_AGENT_YAML)
+
+        config = load_project_config()
+
+        assert config.pipeline is not None
+        assert config.pipeline.agent is None
+
+    def test_load_project_config_env_agent_set_resolves_value(self, goga_project, monkeypatch):
+        """A set !ENV variable resolves to its string value at load time."""
+        monkeypatch.setenv("PIPELINE_AGENT", "claude")
+        _write_goga_yml(goga_project, self.ENV_AGENT_YAML)
+
+        config = load_project_config()
+
+        assert config.pipeline is not None
+        assert config.pipeline.agent == "claude"
+        assert isinstance(config.pipeline.agent, str)
+
+    def test_load_project_config_malformed_env_tag_raises_yaml_error(self, goga_project):
+        """A malformed !ENV use propagates the yaml constructor error naming the position."""
+        _write_goga_yml(goga_project, "language: python\nagent: !ENV\n")
+
+        with pytest.raises(yaml.YAMLError, match="expected a variable name in !ENV"):
+            load_project_config()
+
+    def test_load_project_config_env_on_int_field_rejects_without_coercion(self, goga_project, monkeypatch):
+        """An !ENV value stays a string — an int-typed field rejects it, never coerces it.
+
+        Resolution is always a string (no coercion): a field expecting an
+        int owns the rejection through its own validation, naming the
+        dotted field — even when the resolved text looks numeric.
+        """
+        monkeypatch.setenv("PATIENCE", "3")
+        _write_goga_yml(
+            goga_project,
+            "language: python\nbuild:\n  agent: claude\n  review:\n    additional:\n      patience: !ENV PATIENCE\n",
+        )
+
+        with pytest.raises(ValueError, match=re.escape("build.review.additional.patience must be an int")):
             load_project_config()
 
 
@@ -3486,6 +3552,105 @@ build:
         )
         config = load_project_config()
         assert not hasattr(config.build, "review_patience")
+
+
+class TestAdditionalReviewEnvLayer:
+    """The independent env layer of build.review.additional (loader step 7)."""
+
+    def test_loader_additional_env_string_mapping_verbatim(self, goga_project):
+        """additional.env accepts a string mapping verbatim through the full ProjectConfig."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  agent: claude
+  review:
+    additional:
+      agent: gemini
+      env:
+        ANTHROPIC_MODEL: gemini-external
+        REVIEW_STRICT: "2"
+""",
+        )
+        config = load_project_config()
+
+        assert config.build.review.additional == AdditionalReviewConfig(
+            agent="gemini",
+            patience=None,
+            max_iterations=None,
+            env={"ANTHROPIC_MODEL": "gemini-external", "REVIEW_STRICT": "2"},
+        )
+
+    @pytest.mark.parametrize(
+        ("additional_snippet", "env_id"),
+        [("", "absent"), ("      env:\n", "yaml-null"), ("      env: {}\n", "empty-mapping")],
+    )
+    def test_loader_additional_env_absent_defaults_empty(self, goga_project, additional_snippet, env_id):
+        """Absent/YAML-null/empty additional.env resolves to an empty dict."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  agent: claude
+  review:
+    additional:
+      agent: gemini
+{additional_snippet}""",
+        )
+        config = load_project_config()
+
+        assert config.build.review.additional.agent == "gemini", env_id
+        assert config.build.review.additional.env == {}, env_id
+
+    @pytest.mark.parametrize(
+        ("env_literal", "match", "env_id"),
+        [
+            ("env: x", r"build\.review\.additional\.env must be a mapping", "scalar-string"),
+            ("env: [1]", r"build\.review\.additional\.env must be a mapping", "list-root"),
+            ("env:\n        A: 1", r"build\.review\.additional\.env must have string keys and values", "int-value"),
+            ("env:\n        1: a", r"build\.review\.additional\.env must have string keys and values", "int-key"),
+        ],
+    )
+    def test_loader_additional_env_non_string_value_raises(self, goga_project, env_literal, match, env_id):
+        """Each structurally invalid additional.env raises ValueError naming the key."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  agent: claude
+  review:
+    additional:
+      {env_literal}
+""",
+        )
+        with pytest.raises(ValueError, match=match):
+            load_project_config()
+
+    def test_loader_additional_env_never_inherits_review_env(self, goga_project):
+        """additional.env and review.env stay independent layers — no inheritance either way."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  agent: claude
+  review:
+    env:
+      REVIEW_ONLY: "yes"
+    additional:
+      env:
+        ADDITIONAL_ONLY: "yes"
+""",
+        )
+        config = load_project_config()
+
+        assert config.build.review.env == {"REVIEW_ONLY": "yes"}
+        assert config.build.review.additional.env == {"ADDITIONAL_ONLY": "yes"}
+        assert "REVIEW_ONLY" not in config.build.review.additional.env
+        assert "ADDITIONAL_ONLY" not in config.build.review.env
 
 
 # --- Contract + logic tests for TopicsConfig + the topics section (loader step 9) ---

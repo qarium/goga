@@ -1,13 +1,28 @@
+profile: default
+
 prompt: |
-  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in Russian language.
+  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in {{ language }} language.
   Any content written to the project files is in English.
 
 memory:
   max_rules: 15
   commit: true
 
+{% macro stage_config(stage_data) %}
+{% if stage_data["agent"] %}
+    agent: {{ stage_data["agent"] }}
+{% endif %}
+{% if stage_data["env"] %}
+    env:
+{% for k, v in stage_data["env"].items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
 stages:
   hotfix:
+{{ stage_config(stages["hotfix"]) }}
     prompt: |
       Find problem and fix it.
 
@@ -19,3 +34,7 @@ stages:
       - Don't research before you receive the task from user
     reflect:
       file: code-design.md
+  commit-changes:
+{{ stage_config(stages["commit-changes"]) }}
+  accept-result:
+{{ stage_config(stages["accept-result"]) }}

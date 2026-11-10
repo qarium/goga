@@ -12,6 +12,7 @@ from __future__ import annotations
 from goga.pipeline.workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
+    WorkflowGates,
     WorkflowMemory,
     WorkflowStage,
 )
@@ -140,3 +141,36 @@ class TestWorkflowDocumentLogic:
 
         assert first.memory is not None
         assert second.memory is None
+
+    def test_workflow_document_gates_defaults_none(self) -> None:
+        """The default ``gates`` is None — no settings block was authored.
+
+        The trailing field is additive: every pre-existing construction site
+        (documents built from prompt/stages/extend/memory alone) keeps
+        ``gates`` at ``None`` without edits.
+        """
+        assert WorkflowDocument().gates is None
+        assert WorkflowDocument(prompt="guidance").gates is None
+        assert WorkflowDocument(stages={"x": WorkflowStage()}).gates is None
+        assert WorkflowDocument(extend={"y": WorkflowExtendStage(body={})}).gates is None
+
+    def test_workflow_document_gates_stored_verbatim(self) -> None:
+        """The supplied ``gates`` block is stored verbatim — the same object, not a copy."""
+        gates = WorkflowGates(patience=1, fresh_correction=True)
+        document = WorkflowDocument(gates=gates)
+
+        assert document.gates is gates
+        assert document.gates == WorkflowGates(patience=1, fresh_correction=True)
+
+    def test_workflow_document_gates_block_alone_is_a_document(self) -> None:
+        """A document carrying only the gates block is a valid parsed shape.
+
+        The empty-workflow rule counts the block (``parse_workflow`` enforces
+        it, Task 3): the model itself accepts a block-only document.
+        """
+        document = WorkflowDocument(gates=WorkflowGates(max_iterations=2))
+
+        assert document.prompt is None
+        assert document.stages == {}
+        assert document.extend == {}
+        assert document.gates == WorkflowGates(max_iterations=2)

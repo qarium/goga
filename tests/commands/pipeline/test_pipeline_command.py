@@ -743,6 +743,184 @@ class TestPipelineTodoFlag:
         mock_info.assert_not_called()
 
 
+# --- Logic tests: the -p/--profile flag (the contributor-profile channel) ---
+
+
+class TestPipelineProfileFlag:
+    """The ``-p/--profile`` surface — binding in both acted forms, the
+    leading-dash guard, the pre-docker home-bundle load, and the bundle handoff
+    to both launchers. The ``-p`` short alias moved here from ``--parallel``
+    (now long-only); the Docker ``-p port:host`` port-publish token is a
+    separate namespace assembled by the launchers.
+    """
+
+    def test_profile_short_flag_binds_in_run_form(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``deploy -p mixa`` forwards profile="mixa" to the run launcher."""
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy", "-p", "mixa"])
+
+        assert result.exit_code == 0
+        assert mock_run.call_args.kwargs["profile"] == "mixa"
+
+    def test_profile_long_flag_binds_in_card_form(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``deploy --info --profile mixa`` forwards profile="mixa" to the info launcher."""
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info:
+            result = runner.invoke(pipeline, ["deploy", "--info", "--profile", "mixa"])
+
+        assert result.exit_code == 0
+        assert mock_info.call_args.kwargs["profile"] == "mixa"
+
+    def test_parallel_still_binds_long_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``--parallel 4`` still binds parallel=4 and leaves the profile unset."""
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy", "--parallel", "4"])
+
+        assert result.exit_code == 0
+        assert mock_run.call_args.kwargs["parallel"] == 4
+        assert mock_run.call_args.kwargs["profile"] is None
+
+    def test_numeric_short_value_binds_profile_not_parallel(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``-p 5000`` binds the profile channel; the Docker port namespace is unaffected.
+
+        ``-p`` is the profile short alias now, so a numeric token is consumed
+        as the profile NAME string — ``parallel`` stays None, and the docker
+        ``-p <port>:<port>`` port-publish token stays a launcher-internal
+        namespace the flag never touches.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy", "-p", "5000"])
+
+        assert result.exit_code == 0
+        assert mock_run.call_args.kwargs["profile"] == "5000"
+        assert mock_run.call_args.kwargs["parallel"] is None
+
+    def test_profile_leading_dash_value_rejected_before_docker(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``-p -x`` exits 1 with the invalid-profile message; no launcher runs.
+
+        Click consumes any next token as an option value, so the dash-leading
+        token parses on the host — but the composed ``--profile -x`` argv is
+        unparsable in-container (argparse reads ``-x`` as an option). The same
+        step-2.5 guard as the workflow name rejects it before any docker
+        activity.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with (
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "-p", "-x"])
+
+        assert result.exit_code == 1
+        assert "invalid profile name '-x'" in result.output
+        mock_run.assert_not_called()
+        mock_info.assert_not_called()
+
+    def test_malformed_home_profile_clean_error_before_dispatch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A malformed ``~/.goga/profiles`` entry is one clean error; no dispatch.
+
+        The home bundle loads after the argument-form checks and before the
+        dispatch, so a non-mapping home profile surfaces as a ClickException
+        naming the file — before any docker activity — and neither launcher
+        runs.
+        """
+        _write_config(tmp_path)
+        profiles_dir = tmp_path / "home" / ".goga" / "profiles"
+        profiles_dir.mkdir(parents=True)
+        (profiles_dir / "broken.yml").write_text("- a\n")
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with (
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "-p", "mixa"], standalone_mode=False)
+
+        assert result.exit_code != 0
+        assert isinstance(result.exception, click.ClickException)
+        assert "broken.yml" in str(result.exception)
+        mock_run.assert_not_called()
+        mock_info.assert_not_called()
+
+    def test_home_bundle_reaches_both_launchers(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The loaded home bundle is handed to both launchers in every acted form.
+
+        ``~/.goga/profiles/mixa.yml`` loads once pre-docker; the run form, the
+        card form, AND the listing forms hand the identical bundle dict to
+        their launcher (the info launcher decides per form what cargo its
+        env-file carries).
+        """
+        _write_config(tmp_path)
+        bundle = {"mixa": {"worker": {"agent": "codex"}}}
+        profiles_dir = tmp_path / "home" / ".goga" / "profiles"
+        profiles_dir.mkdir(parents=True)
+        (profiles_dir / "mixa.yml").write_text("worker:\n  agent: codex\n")
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy"])
+
+        assert result.exit_code == 0
+        assert mock_run.call_args.kwargs["home_profiles"] == bundle
+
+        with mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info:
+            result = runner.invoke(pipeline, ["deploy", "--info", "-p", "mixa"])
+
+        assert result.exit_code == 0
+        assert mock_info.call_args.kwargs["home_profiles"] == bundle
+
+        with mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info:
+            result = runner.invoke(pipeline, ["--list"])
+
+        assert result.exit_code == 0
+        assert mock_info.call_args.kwargs["home_profiles"] == bundle
+
+    def test_empty_home_bundle_forwards_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Without ``~/.goga/profiles`` the launchers receive home_profiles=None.
+
+        ``load_home_profiles`` returns ``{}`` for a missing directory; the
+        command normalizes the empty bundle to None (the carriage contract:
+        the caller hands the bundle "None when empty").
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy"])
+
+        assert result.exit_code == 0
+        assert mock_run.call_args.kwargs["home_profiles"] is None
+
+
 # --- Facade contract: goga/commands/pipeline exports the full contract API ---
 
 # The eight names declared in the cell CODEMANIFEST — the pipeline command, the

@@ -264,3 +264,33 @@ class TestResolveRunSettings:
         from_config = resolve_run_settings(config, {})
 
         assert from_config.review.additional.patience == 1
+
+    def test_resolve_run_settings_additional_env_verbatim_and_independent(self) -> None:
+        """The additional env flows verbatim from the config block; an absent block or
+        absent env resolve empty — the layer never inherits the review env."""
+        config = BuildConfig(
+            agent="claude",
+            env={"ROOT": "secret"},
+            review=ReviewConfig(
+                env={"REVIEW": "layer"},
+                additional=AdditionalReviewConfig(agent="cursor", env={"ADD": "layer"}),
+            ),
+        )
+
+        settings = resolve_run_settings(config, {})
+
+        assert settings.review.additional.env == {"ADD": "layer"}
+        assert settings.review.env == {"REVIEW": "layer"}
+        assert settings.tasks.env == {"ROOT": "secret"}
+
+        without_env = resolve_run_settings(
+            BuildConfig(agent="claude", review=ReviewConfig(additional=AdditionalReviewConfig(agent="cursor"))),
+            {},
+        )
+
+        assert without_env.review.additional.env == {}
+        assert without_env.review.additional.agent == "cursor"
+
+        without_review = resolve_run_settings(BuildConfig(agent="claude", review=None), {})
+
+        assert without_review.review.additional.env == {}

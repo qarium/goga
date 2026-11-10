@@ -1,8 +1,12 @@
+Imports:
+  - Types:
+      - parse_env_yaml
+    Usages:
+      - env-variables
+    From: goga/config/yaml
+
 Usages:
   convention: .goga/usages/conventions.md
-  yaml: |
-    Use yaml.safe_load() to parse .goga/config.yml.
-    Requires the PyYAML library.
 
 Annotations: |
   The `convention` practice is used for:
@@ -17,7 +21,11 @@ Annotations: |
   dataclasses module — NOT pydantic (pydantic is treated as tech debt in this
   project).
 
-  Use the `yaml` practice for parsing .goga/config.yml via yaml.safe_load().
+  Load .goga/config.yml through `parse_env_yaml` — the environment-aware
+  loader resolving !ENV NAME references at load time (per
+  `env-variables`). Field validation applies verbatim: a resolved value
+  is a plain string, and each field's established emptiness and type
+  semantics hold.
 
   The cell enforces structural validation only; semantic validation is
   deferred to the owning consumers.
@@ -42,7 +50,11 @@ Annotations: |
 
     Algorithm:
     1. Locate .goga/config.yml in the project root
-    2. Parse the YAML via the `yaml` practice
+    2. Parse the YAML via `parse_env_yaml` — the environment-aware
+       loader; !ENV NAME scalars resolve
+       to plain strings at load time (unset resolves to ""); yaml errors,
+       including constructor errors of malformed tag use, propagate
+       unchanged through the library's error machinery
     3. Validate the parsed document is a mapping; raise FileNotFoundError when
        the file is absent/empty, ValueError when it is not a mapping
     4. Extract and validate the top-level fields (language, image,
@@ -72,7 +84,9 @@ Annotations: |
        (absent/null → None; present but not a mapping → ValueError; inside:
        agent — the agent pattern; patience — absent/null → None, non-int
        including a YAML boolean → ValueError; max_iterations — the patience
-       pattern); the session knobs (the root pattern); max_iterations (the
+       pattern; env — the env pattern: optional string mapping, default
+       empty dict; a non-string value → ValueError); the session knobs (the
+       root pattern); max_iterations (the
        patience pattern — the review-pass iteration cap, stored verbatim).
        Construct a
        `ReviewConfig` from the resolved fields and an `AdditionalReviewConfig`
@@ -138,6 +152,12 @@ Annotations: |
       → ValueError); base_ref and the three sub-sections are structural
       string checks — the strategy whitelists, the template grammar, and
       the defaults belong to the consuming domain
+    - Environment references resolve at load time — a !ENV NAME scalar
+      yields the referenced variable's value as a string; an unset
+      variable yields "", which each field's own emptiness semantics
+      treats exactly like an authored empty string (the agent fields
+      resolve it to None; non-string fields reject it per their own
+      validation)
 
     Constraints:
     - Do not default image — None is a valid value, surface it to the caller
@@ -170,6 +190,8 @@ Annotations: |
       error — it passes through verbatim with no warning and no effect
     - The final `ProjectConfig` assembly MUST include topics
     - The final `ProjectConfig` assembly MUST include lint
+    - Do not resolve !ENV references in this cell — loading goes
+      through `parse_env_yaml`; no local tag handling exists
 
 "ProjectConfig(language: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None, topics: TopicsConfig | None = None)":
   location: config.py
@@ -364,7 +386,7 @@ Annotations: |
       the root build.max_iterations caps the tasks pass only and never
       reaches the review part.
 
-"AdditionalReviewConfig(agent: str | None, patience: int | None, max_iterations: int | None)":
+"AdditionalReviewConfig(agent: str | None, patience: int | None, max_iterations: int | None, env: dict[str, str])":
   location: config.py
   annotations: |
     The build.review.additional external-review block source.
@@ -373,6 +395,9 @@ Annotations: |
              inherits review.agent)
     `patience`: external-review stop threshold (0 = disabled)
     `max_iterations`: external review iteration cap (0 = ralphex auto)
+    `env`: independent env layer for the external reviewer — empty
+            mapping by default, values verbatim; never inherited from
+            review env (the layer is independent by design)
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`
@@ -391,6 +416,10 @@ Annotations: |
     "max_iterations -> int | None": |
       External review iteration cap; 0 = ralphex auto (max(3,
       max_iterations/5)). None when unset.
+    "env -> dict[str, str]": |
+      Independent env layer for the external reviewer. Empty mapping by
+      default; values verbatim. Never inherited from review env — the
+      layer is independent by design.
 
 "PipelineConfig(agent: str | None, env: dict, proxy: str | None, hosts: dict[str, str])":
   location: config.py
@@ -639,5 +668,6 @@ CreatedAt: 24/07/26
 Description: |
   Project configuration model + loader for .goga/config.yml, with the
   two-part build section (the root tasks-pass settings plus the optional
-  review part). Structural validation only; semantic validation is deferred
-  to the owning consumers.
+  review part; build.review.additional carries an independent env layer
+  for the external reviewer). Structural validation only; semantic
+  validation is deferred to the owning consumers.

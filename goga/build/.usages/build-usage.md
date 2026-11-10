@@ -12,6 +12,11 @@ generation with the external-review surface, vendored defaults sync with
 finalize materialization, and delegation of the launch to `run_ralphex`
 (goga/ralphex).
 
+A workflow may drive the build settings on top of the configuration: the
+workflow-file's six-field `build:` block layers onto the effective build
+configuration (config < workflow build: < CLI), and the workflow-file is rendered with the
+active contributor profile before its block is read.
+
 Every non-skipped run is exactly two ralphex invocations: a tasks pass
 (`--tasks-only`) then a review pass (`--review`, or `-e` under the short
 strategy). A skipped review yields exactly one tasks pass. The combined full
@@ -20,7 +25,8 @@ pass does not exist.
 The executor agent comes from `.goga/config.yml`: the `build.agent` root key
 for the tasks pass, `build.review.agent` for the review pass (inheriting the
 root agent when unset). The agent name is resolved at runtime to the absolute
-in-container path of its `*-as-claude.sh` wrapper, and that path is written
+in-container path of its `*-as-claude.sh` wrapper; every pass executor runs
+through a generated per-role closure wrapper and that wrapper path is written
 into `.ralphex/config` `claude_command`.
 
 ## Usage
@@ -62,8 +68,8 @@ exit_code = build(
   point performs the composition; direct callers do the same)
 - `cli_options` — options dictionary (`dry_run`, `skip_manifest_check`,
   `skip_review`, `base_ref`, `review_patience`, `session_timeout`,
-  `idle_timeout`, `wait`, `max_iterations`); each knob is None when the CLI
-  flag was not given
+  `idle_timeout`, `wait`, `max_iterations`, `workflow`, `profile`); each knob
+  is None when the CLI flag was not given
 
 ## Two-part settings and inheritance
 
@@ -141,16 +147,35 @@ no events.
 
 ## Environment ladder
 
-Each pass launches with the ladder applied in-container: the inherited launch
-environment (home.env, git identity, the CLI `-e` lines, the engine variables)
-stays untouched, and the pass env layer — the effective task env layer of the
-pass (`build.env` for the tasks pass, `build.review.env` for the review pass)
-with the decoded CLI `-e` entries applied above it, engine-variable keys
-(`AFM_DIR`, `AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`)
-dropped — passes to `run_ralphex` as its env layer, applying to that pass's
-subprocess only. The task env layer never reaches the review pass; the CLI
-entries payload reaches both passes (the same values already sit in the
-inherited environment). Nothing is printed.
+Task env layers leave the ralphex launch env: the ralphex subprocess inherits
+the container environment unchanged, and each pass executor runs through a
+generated per-role closure wrapper. The wrapper exports the role's env layer —
+the effective task env layer of the pass (`build.env` for the tasks pass,
+`build.review.env` for the review pass, `build.review.additional.env` for the
+external reviewer; a workflow `build:` block overlays each key-wise) with the
+decoded CLI `-e` entries applied above it, engine-variable keys dropped — and
+then execs the role agent's resolved wrapper. The layers stay independent:
+the task env layer never reaches the review pass and the additional layer
+never inherits review env. The wrappers are regenerated at each pass launch
+(each per-run directory of its own under a container-local temp base, so
+concurrent builds never share closures) and the pass executor writes
+`.ralphex/config` with both wrapper paths as the last write before the
+launch. Nothing is printed.
+
+## Workflow and profile flags
+
+The in-container argparse surface carries `-w/--workflow NAME` and
+`-p/--profile NAME` (`-p` is free here — build has no parallel option). A
+build invoked inside a pipeline runtime inherits the workflow through the
+`GOGA_WORKFLOW` environment variable (written solely by the pipeline-run
+launcher; the `-w` flag beats it) and the profile through `GOGA_PROFILE`. The
+activation precedence is `--profile` > `GOGA_PROFILE` > the workflow's
+`profile:` default — the same channels pipelines use. With no workflow in
+effect, activation is ignored entirely.
+
+Launch feedback: one stderr line — `Build running with workflow "<w>" and
+profile "<p>"` — prints only when a workflow is in effect AND an effective
+profile resolved; every other run prints no line.
 
 ## Agent guard
 
@@ -161,11 +186,12 @@ amendment supplying `build.agent` satisfies the guard.
 
 ## Review-pass environment
 
-`build.review.env` (mapping of strings) overrides same-named variables for the
-review pass subprocess only; every other container variable passes through
-unchanged. The tasks pass receives `build.env` as its env layer the same way.
-The CLI `-e` entries apply above each pass's task env layer per the
-environment ladder above. Neither layer is printed on dry-run (secret-safe).
+`build.review.env` (mapping of strings) overrides same-named variables for
+the review pass executor only, delivered through the review role wrapper;
+every other container variable passes through unchanged. The tasks pass
+receives `build.env` through the tasks role wrapper the same way. The CLI
+`-e` entries apply above each pass's task env layer per the environment
+ladder above. Neither layer is printed on dry-run (secret-safe).
 
 ## Plan relocation
 
@@ -177,9 +203,11 @@ move_plan_on_completion = false — goga moves the plan itself.
 
 `.goga/config.yml` field `build.agent` is the tasks-pass agent name;
 `build.review.agent` (default: the root agent) is the review-pass agent name.
-`build()` resolves each through `resolve_wrapper_path` and writes the absolute
-path into `.ralphex/config` `claude_command` of the respective pass. ralphex
-then invokes the wrapper directly (launched via `run_ralphex`).
+Per pass, `write_role_env_wrappers` resolves each role agent through
+`resolve_wrapper_path`, composes the role's closure wrapper (env layer +
+exec of the resolved wrapper), and its absolute path is written into
+`.ralphex/config` `claude_command` of the respective pass. ralphex then
+invokes the wrapper directly (launched via `run_ralphex`).
 
 ## Return value
 
@@ -190,13 +218,15 @@ then invokes the wrapper directly (launched via `run_ralphex`).
 ## Side effects
 
 - Creates `.ralphex/config` per pass with `claude_command` set to the pass's
-  resolved wrapper path and `move_plan_on_completion = false`
+  generated role wrapper path and `move_plan_on_completion = false`
+- Generates the per-role closure wrappers (tasks, review, additional) in a
+  per-run container-local temp directory at each pass launch
 - Fully rewrites prompts and agents in `.ralphex/` from the vendored ralphex
   defaults (or the configured custom directories) on every run; materializes
   the finalize step files when `build.review.finalize` is set
 - Delegates each launch to `run_ralphex` (goga/ralphex), which spawns the
-  `ralphex` subprocess (the pass env layers are applied in-container, not
-  through the host env-file)
+  `ralphex` subprocess inheriting the container environment (the pass env
+  layers ride the role wrappers, not the launch env)
 - Relocates the plan file to `<plan_dir>/completed/` after a successful run
 
 ## .ralphex/ lifecycle
@@ -210,6 +240,7 @@ prepares the mount before launch and wipes it only on `goga build --clean`. The 
 `main()` calls `ensure_in_docker()` first, then argparse handles parsing
 (`--skip-review`/`--no-skip-review`, `--base-ref`, `--dry-run`,
 `--skip-manifest-check`, `--session-timeout`, `--idle-timeout`, `--wait`,
-`--max-iterations`, `--review-patience`), then loads and amends the
+`--max-iterations`, `--review-patience`, `-w/--workflow NAME`,
+`-p/--profile NAME`), then loads and amends the
 configuration (authored load → `amend_config` delivery → summary lines to
 stderr) and calls `build()` with the effective configuration.

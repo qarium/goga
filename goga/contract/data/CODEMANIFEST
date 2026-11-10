@@ -1,5 +1,5 @@
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   contract_format: |
     The implemented contract must conform to the specified format
 
@@ -18,7 +18,7 @@ Usages:
     - a dictionary can be represented as an object
 
 Annotations: |
-  During development and testing, use the practice `conventions`.
+  During development and testing, use the practice `convention`.
 
 ---
 

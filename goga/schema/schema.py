@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -160,17 +159,27 @@ def _to_schema_node(node: dict) -> SchemaNode:
     )
 
 
-def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> str:
-    """Build a JSON schema tree of cells from the project AST — amended per cell, gated once before serialization.
+def schema(
+    cells: list[str],
+    max_depth: int | None,
+    depends_on: list[str],
+    ignore: list[str] | None = None,
+) -> list[SchemaNode]:
+    """Build the schema tree of cells from the project AST — amended per cell, gated once before return.
 
     Args:
         cells: List of cell paths to include. Empty list includes all cells.
         max_depth: Maximum nesting depth for the cell tree. None means unlimited.
         depends_on: Filter cells to those depending on the specified paths.
+        ignore: Optional list of exact relative directory paths skipped during
+            AST traversal, delivered verbatim to ``AST`` — None (default) keeps
+            the traversal unfiltered; ``AST`` owns the matching semantics.
 
     Returns:
-        JSON string representing the filtered cell tree — a node's ``tools`` key is present iff at
-        least one tool wrote at least one fact on it; an emptied tree returns ``"[]"`` before any checkpoint.
+        The assembled schema tree — one :class:`~goga.schema.hooks.SchemaNode` per
+        surviving cell; a node's ``tools`` area is non-empty iff at least one tool
+        wrote at least one fact on it; an emptied tree returns ``[]`` before any
+        checkpoint. The caller owns the serialization of the returned tree.
 
     Raises:
         ValueError: If the AST has parsing errors, a checkpoint hard
@@ -181,7 +190,7 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
         ImportError: If a tool package facade fails to import — the
             message names the package.
     """
-    ast_obj = AST(".")
+    ast_obj = AST(".", ignore=ignore)
     ast_obj.load()
 
     if ast_obj.errors:
@@ -197,14 +206,14 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
         result = [_prune_depth(cell, max_depth) for cell in result]
 
     if not result:
-        return "[]"
+        return []
 
-    nodes = {node["cell"]: node for node in _walk_nodes(result)}
+    node_index = {node["cell"]: node for node in _walk_nodes(result)}
     hooks = SchemaHooks()
 
     for doc in _flatten_tree(ast_obj.tree):
         path = os.path.normpath(doc.path)
-        if path not in nodes:
+        if path not in node_index:
             continue
 
         facts = CellFacts(
@@ -217,13 +226,15 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
         )
         tools = hooks.amend_cell(cell=facts)
         if tools:
-            nodes[path]["tools"] = tools
+            node_index[path]["tools"] = tools
 
-    verdict = hooks.validate_schema([_to_schema_node(node) for node in result])
+    nodes = [_to_schema_node(node) for node in result]
+    verdict = hooks.validate_schema(nodes)
+
     if not verdict.approved:
         details = "\n".join(
             f"- tool {violation.tool} / hook {violation.hook}: {violation.reason}" for violation in verdict.violations
         )
         raise ValueError(f"schema validation failed:\n{details}")
 
-    return json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)
+    return nodes

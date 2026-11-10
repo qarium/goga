@@ -53,6 +53,7 @@ Optional `run` flags:
 - `--max-parallel int` — maximum number of parallel stages (0 = no limit)
 - `--port int` — dashboard port (0 = use the value from `config.yaml`)
 - `--require-approval` — run in approval-required mode (each stage awaits explicit approval before executing)
+- `--exit-on-fail` — stop the run and exit with code 1 when a stage fails (verified on v2.0.9). The engine also honors the `AFM_EXIT_ON_FAIL` environment variable, but an integrator that wants the setting visible in the process listing passes the explicit argv flag instead.
 
 ### Key command — `list`
 
@@ -85,13 +86,253 @@ amended by the in-container `amend_config` delivery); a bare agent name is never
 | `proxy`         | map    | Outbound proxy settings. Surfaces at least `proxy.enabled: bool` — when `false`, afm does not use its own internal outbound proxy provider. The goga in-container run coordination always writes `proxy.enabled: false`: goga manages the outbound proxy through the container env-file (`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`), so afm's own internal proxy provider must stay off to avoid the two layers colliding. |
 | `server`        | str    | Server-side settings                                             |
 | `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga in-container run coordination always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
-| `theme`         | str    | Dashboard theme name. The goga in-container run coordination always writes `theme: goga`. |
+| `theme`         | str    | Dashboard theme name. The goga in-container run coordination writes no `theme` — the goga-managed `skin_dir` carries the presentation, and the engine-builtin theme remains the fallback used when the skin directory does not hold `index.css`. |
+| `skin_dir`      | str    | The engine's custom skin directory. When set and holding `index.css` directly inside, afm serves the directory wholesale as the active dashboard skin instead of its built-in copy; `theme` then only names the engine-builtin fallback skin used when the directory does not hold `index.css`. The goga in-container run coordination always writes `skin_dir: /home/goga/.afm/skins/goga` and materializes the packaged goga skin into that directory on every launch (`goga/assets/afm/skin/` in the installed package is the source), so the dashboard always shows the goga-managed skin. |
+| `command_names` | map[str]str | Command-path → display-name labels. The dashboard derives its per-command labels from this map and otherwise falls back to the command's file base name (an unmapped command can surface as an unknown label). The goga in-container run coordination writes it — only when non-empty — mapping every generated command (the resolved client wrapper and each generated profile command, wrapper or env closure alike) to the bare agent id of its underlying `<agent>-as-claude.sh` wrapper (e.g. `/home/goga/bin/claude-as-claude.sh` → `claude`), so a `claude-as-claude.sh` wrapper never shows as a file name. |
+| `add_stage`     | map    | Governs the dashboard's stage-addition capability. A map with a single `enabled` (bool) key; `enabled: false` makes the run's stage set immutable from the dashboard (the "add stage" capability is off for the run). Verified on v2.0.9 (`yaml:"add_stage,omitempty"` with a nested `enabled` field). |
+
+## Collaboration (afm v2.x)
+
+afm offers a collaboration mechanism: helper agents attached to stages, run-level
+team agents, delegation bounds, and a per-run helper task budget. Facts below are
+recovered from the afm v2.x documentation (verified against the `v2.0.9` binary in
+the image).
+
+### Config layers and the kill-switch
+
+Roles (profiles) live in `collaboration:` blocks of global `~/.afm/config.yaml` or
+project `.afm/config.yaml`. Profiles with the same id in the project layer REPLACE
+the global ones (union otherwise). `AFM_COLLABORATION=0` disables collaboration and
+takes precedence over `collaboration.enabled` (default `true`); a flow CANNOT set
+`collaboration.enabled`. When collaboration is disabled, declared helpers and unknown
+profiles only produce warnings; `afm run`/`afm validate` proceed.
+
+### `collaboration:` keys (config.yaml)
+
+| Key | Type / values | Default | Notes |
+|-----|---------------|---------|-------|
+| `enabled` | bool | `true` | Overridden by `AFM_COLLABORATION=0`; flow cannot set it |
+| `mode` | `team` \| `assistants` | `team` | Precedence flow > project > global; invalid values stop config loading |
+| `runtime_context` | str | — | Execution context of collaboration commands, global default; a per-profile `collaboration.profiles.*.runtime_context` overrides it. goga always writes `collaboration.runtime_context: wrapper` — every command goga hands the engine (client and generated profiles alike) is an as-claude wrapper or a closure over one — as the static head of the section, written on every launch even when no profiles materialize |
+| `hide_attach_helpers` | bool | `false` | Dashboard toggle: hides the dynamic attach-helpers entry point of the collaboration UI for the run (the binary also carries an `AFM_HIDE_ATTACH_HELPERS` variable). Verified on v2.2.5 (`yaml:"hide_attach_helpers,omitempty"` inside the `collaboration` block; the dashboard reports `hide_attach_helpers` through `/api/status`). goga always writes `collaboration.hide_attach_helpers: true` beside the `runtime_context` head — helpers join a goga-managed run only through the authored workflow plumbing, never through dynamic dashboard attachment |
+| `max_depth` | int | `3` | `0` prevents helper creation; precedence flow > project > global; depth 1 = helper attached directly to a stage. Verified deviation (v2.0.9): at `max_depth: 0` the engine ALSO declines team-member agent creation (`delegation_depth_exceeded` warning; members are added at depth >= 1) |
+| `limits.max_tasks` | int | `20` | Lifetime budget counting every task of the run: helpers, run agents, and their children |
+| `profiles` | map | — | Role definitions (below) |
+
+A flow may override ONLY `max_depth` and `mode` (as a top-level `collaboration:`
+block) — profiles and `limits` are config-layer-only.
+
+### Profiles
+
+Each profile requires its own `command` (it does NOT inherit `client.command`).
+Keys: `title` (str), `command` (required), `instructions` (str), `delegate`
+(bool, default `false`; `true` opts the role into child tasks, subject to depth and
+`max_tasks`). On a native host only the Codex read-only adapter
+(`codex-as-claude`) is accepted for helpers; inside a container any configured
+command works.
+
+### Stage helpers (flow-file `stages[].assistants`)
+
+Accepts a bare profile name, one object, or a mixed list (list order preserved).
+Object keys: `profile` (required) plus optional `title`, `instruction`, `mode`
+(`advisory` | `required`), `trigger` (`one_shot` | `checkpoints` | `on_completion`).
+Omitted `mode`/`trigger` default to `advisory`/`one_shot`. Helpers attach when the
+stage enters execution (after plan approval when planned). Valid on execution stages
+(including `[auto]`), NOT on `script:` or planning-only stages; each profile may
+appear only once per stage. An unknown profile stops `afm run` at preflight; a
+profile unavailable at attach time is logged and skipped. Stage entries are
+STRICT-parsed — any key outside `profile`/`title`/`instruction`/`mode`/`trigger`
+is REJECTED (verified on v2.0.9: `unknown field "skills"; use "profile"`); a
+`skills` list is accepted only on `team:` member entries, never here. Helpers,
+verify agents, and delegated tasks do NOT inherit the author's skills.
+
+### Verdict gating
+
+`advisory` — result does not block the stage. `required` — the verdict must be
+`pass` before the stage finishes; `needs_changes` and `inconclusive` do not pass the
+gate; a human may waive with a recorded reason. Helper output contract: one JSON
+object with `schema_version: 1` and `kind: "result"` (verdict + summary) or
+`kind: "delegate"` (child tasks, delegate roles only); invalid output after repair
+attempts yields `protocol_error`.
+
+### Dashboard triggers
+
+`one_shot` — runs once. `checkpoints` — observes the stage agent's output and can
+run again at each checkpoint. `on_completion` — may run early, gets a final turn
+when the result is ready. A helper attached while its stage is `pending` stays in
+`waiting_parent` (does not start; a required one in that state can block stage
+completion).
+
+### Team / run agents (flow-file top-level `team:`)
+
+Members are added in order before any stage starts (order decides `@name` suffixes
+like `@qa-2`). Keys: `id` (required; "names the declaration, not the agent"; used to
+recognize members on resume; must match `[A-Za-z0-9._-]`), `profile` (required when
+collaboration is enabled; unknown stops preflight), `title` (required; the `@name`
+derives from it; `@assistant` is reserved), optional `instruction`, `skills` (one
+name or a list), `skills_dir`. Resume reuses existing members by `id`; changed
+members keep their saved version with a warning; removed members persist until the
+run ends. Run agents are standing roles, idle between turns; an idle agent never
+keeps the run open.
+
+### Dashboard modes
+
+`team` — Team/Board views, People panel, "Add run agent", human task posting.
+`assistants` — hides those; helpers live under their stages; Attach helper,
+Assistant, stage Feed conversations, Message/Revise remain; `team:` agents still
+start and can message/board.
+
+### goga's stance (decided in `.goga/history/2026/support-afm-assistants/adr.md`)
+
+- goga authors collaboration in the workflow-file only and delivers: flow-file parts
+  (`collaboration: {mode: assistants}` always, `max_depth` when authored, `team`
+  list, stage `assistants` entries) plus global-config plumbing
+  (`collaboration.runtime_context: wrapper` and
+  `collaboration.hide_attach_helpers: true` as the always-written static head of the
+  section, `collaboration.profiles.goga-<name>` = `{title, command, delegate}` only,
+  and `collaboration.limits.max_tasks` when `delegation:` is authored; every
+  generated command is additionally labeled with its bare agent id in the
+  top-level `command_names` map, written only when non-empty).
+- The compiled flow-file is the single source of truth for the config write —
+  profiles are materialized exactly for the ids the flow references.
+- goga never reads or writes `collaboration.enabled` / `AFM_COLLABORATION`; an
+  environment that disables collaboration gets engine warnings and skipped helpers.
+
+## Lifecycle hooks (afm v1.2.17+)
+
+afm ships a lifecycle-hooks mechanism: observer commands afm launches on every flow
+and stage transition of a run. goga consumes this mechanism — its bridge hook is
+registered by the in-container run coordination on every launch (see "goga's stance"
+below).
+
+### Declaration layers
+
+Hooks are declared at four layers; the effective hook list is the union of all:
+
+| Layer | Location |
+|---|---|
+| global | `~/.afm/config.yaml` |
+| project | `.afm/config.yaml` (project root) |
+| flow | the flow-file root |
+| stage | inside a single stage |
+
+- Global, project, and flow hooks receive events from all stages; a stage hook
+  receives only its own stage's events (flow-level events are rejected in a stage
+  hook at parse time).
+- `id` is unique within a layer; a duplicate `id` in a more specific layer REPLACES
+  the one above (precedence `global < project < flow < stage`). The same `id` in two
+  different stages is a config error.
+
+### Hook entry fields
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `id` | str | — | Hook identity used in logs and diagnostics |
+| `events` | `all` or list | — | Subscribed event names; `skip_events` subtracts from it; an unknown event name is a config error |
+| `command` | str | — | Static command string; event values are never interpolated into it |
+| `env` | map | — | Key = variable name the hook sees; value must be `file:PATH` (read and trimmed) or `env:NAME` (resolved from project `.afm/secrets.env` > global `~/.afm/secrets.env` > process env); plain literals are rejected; references resolve once before the flow starts; a missing variable, missing file, or empty value fails fast as a config error |
+| `timeout` | duration | `30s` | Per-invocation timeout |
+| `retries` | int | `0` | Retry count (0 = single attempt) |
+| `inherit_env` | bool | `false` | `false` = minimal env (`PATH`, `HOME`, locale, temp dir, proxy/cert settings, plus the `AFM_*` variables and the resolved `env`); `true` adds the full afm process environment |
+
+### Event catalog
+
+- Flow: `flow_started`, `flow_resumed`, `flow_finished`, `flow_failed`,
+  `flow_interrupted`
+- Stage: `stage_planning_started`, `stage_plan_ready`, `stage_approved`,
+  `stage_revision_started`, `stage_execution_started`, `stage_question_asked`,
+  `stage_question_answered`, `stage_retry_scheduled`, `stage_retry_started`,
+  `stage_paused`, `stage_resumed`, `stage_finished`, `stage_failed`
+- Scripts (script stages and `script_before`/`script_after`):
+  `stage_script_started`, `stage_script_finished`, `stage_script_failed`,
+  `stage_script_before_started`, `stage_script_before_finished`,
+  `stage_script_before_failed`, `stage_script_after_started`,
+  `stage_script_after_finished`, `stage_script_after_failed`
+
+`events: all` covers the public lifecycle catalog only — internal high-frequency
+events (`agent_action`, `script_output`, event-loop wakeups) are not delivered.
+
+### JSON payload (stdin)
+
+Each invocation receives the full event as JSON on stdin:
+
+| Field | Meaning |
+|---|---|
+| `schema_version` | `1` |
+| `event_id` | Stable event identity (e.g. `<run-id>:transition:<n>:<event>`) — the recommended idempotency key |
+| `event` | Event name |
+| `occurred_at` | ISO-8601 UTC timestamp |
+| `flow` | `{ name, run_id, resumed, run_dir, root_dir }` |
+| `stage` | `{ id, name, from, to, phase }` — `from`/`to` are stage statuses; the block is absent for flow-level events |
+| `reason` | Free-text cause, present when afm provides one |
+
+### `AFM_*` environment
+
+`AFM_HOOK_EVENT`, `AFM_HOOK_EVENT_ID`, `AFM_FLOW_NAME`, `AFM_RUN_ID`,
+`AFM_RUN_DIR`, `AFM_ROOT_DIR`, `AFM_STAGE_ID`, `AFM_STAGE_NAME`, `AFM_STAGE_FROM`,
+`AFM_STAGE_TO`. Stage variables are empty for flow-level events. `AFM_RUN_DIR` /
+`AFM_ROOT_DIR` are absolute paths when set.
+
+### Execution model
+
+- The command runs via `sh -c` with CWD set to the flow's `root_dir`.
+- Invocations of a single hook run sequentially (one consumer, in order); different
+  hooks run in parallel.
+- On clean flow exit afm waits a bounded time for the hook queue to drain; the
+  terminal `flow_finished` / `flow_failed` event is emitted before that flush.
+
+### Failure semantics and delivery guarantees
+
+- Hooks are observers: a hook error never changes the FSM, a stage result, or the
+  flow outcome.
+- On ultimate failure (after timeout/retries) the error is written to the per-hook
+  log — `.afm/runs/<run-id>/hooks/<hook-id>.log` — and a warning appears on the
+  dashboard; the flow continues.
+- Delivery is live best-effort: events not delivered before a crash are not replayed
+  after restart (durable at-least-once redelivery is a planned afm-side feature).
+
+### goga's stance
+
+- The in-container run coordination writes the whole `~/.afm/config.yaml` on every
+  launch — including goga's own hook entry in the global layer: `id: goga`,
+  `command: python3 -m goga.pipeline hook`, `events: all`, `inherit_env: true`,
+  afm-default timeout and retries. Always on; no user action or configuration
+  involved.
+- Consequence: manual global-layer hooks do not survive a goga launch — goga fully
+  authors the global layer.
+- `inherit_env: true` is deliberate: the hook process — and the goga subscriber
+  hooks running inside it — inherits the afm process environment, including the
+  launch env layers (env-file layers, the `pipeline.env` task layer, CLI `-e`
+  entries). This carriage is accepted by design and documented; the bridge declares
+  no `env` map of its own.
+- Overridable id: a more specific layer (project, flow, stage) can replace goga's
+  hook by id — afm's designed control point, documented as such.
+
+### The future place for user-authored hooks
+
+- Today user-authored hooks belong in the project layer — `.afm/config.yaml` in the
+  project root — which goga never touches and afm unions natively.
+- The flow-file layers are the future authoring surface for the goga pipeline
+  compiler. Context-formation considerations: a user-authored hook receives the raw
+  afm payload vocabulary; a future authoring task decides how much of goga's bridged
+  context formation (pipeline identity, goga-idiomatic names) is offered to user
+  hooks — extending the mechanism instead of reworking it.
+
+#### Constraints
+
+- Do not declare goga's bridge hook anywhere but the global layer goga authors.
+- Do not rely on manual hooks surviving in `~/.afm/config.yaml` — the file is fully
+  rewritten on every goga launch.
+- Do not treat a hook failure as a run failure — observer semantics hold end-to-end
+  on the goga side as well.
 
 ## Directory layout afm expects
 
 ```
 ~/.afm/
 ├── config.yaml                # optional; afm falls back to defaults when missing
+├── skins/                     # dashboard skins base; goga materializes
+│   └── goga/                  # the packaged skin here per launch (`skin_dir`)
 └── flows/                     # flow *.yaml files discovered by `afm list`
 ```
 
@@ -162,6 +403,112 @@ the global `memory_use: false` under both methods — participation is per-stage
 suffix; the goga-side `method` key (reflect | alignment) is never written to the
 flow-file.
 
+## Repeating runs (flow-file `repeat`, afm v2.0.9)
+
+A flow-file may carry a top-level `repeat` directive — the flow runs its
+complete stage sequence in cycles until a stop condition.
+
+| Form | Meaning |
+|---|---|
+| `repeat: true` | unlimited cycles (afm defaults) |
+| `repeat: {max_cycles: N}` | at most N complete passes |
+| `repeat: {keep_runs: N}` | how many recent cycle run-directories to keep (afm default `2`) |
+| `repeat: {max_cycles: N, keep_runs: N}` | both bounds |
+
+- Each cycle is a complete pass of all stages; afm emits `flow_repeated`
+  events between cycles (visible to lifecycle hooks).
+- A cycle that ends with a failed stage stops the repeat — no next cycle.
+- Old run directories are pruned to the `keep_runs` most recent cycles.
+- `max_cycles: 1` pins the flow to a single pass.
+- afm rejects a negative value and unknown keys in the block (strict parse);
+  cycle semantics beyond the structure belong to afm.
+- A launcher integration performs its usual single `afm run` — repeat does
+  not change the CLI contract.
+
+### goga's stance (decided in `.goga/history/2026/recycle-pipeline/adr.md`)
+
+- The pipeline-file header declares the capability `repeatable: true`; the
+  workflow-file authors the tuning block `repeat: {max_cycles?, keep_runs?}`
+  (map form only, both keys optional, empty block equals absence).
+- A repeatable pipeline ALWAYS compiles with a `repeat` key: the workflow
+  block emits authored keys only (no materialized defaults); no block, no
+  workflow, or `--no-workflow` compiles the scalar `repeat: true`.
+- A workflow `repeat` block on a non-repeatable pipeline is a compile-time
+  structural error; scalar `repeat: true`/`false` in the workflow-file is
+  rejected at parse time.
+- The compiled `repeat` is emitted immediately after `description`, before
+  `memory`.
+
+## Stage verification (flow-file `stages[].verify`, afm v2.x)
+
+afm supports stage-completion quality gates authored through a per-stage
+`verify` field of the flow-file: a list of check steps the stage must pass
+before it counts as done, plus optional retry-tuning settings. Facts below
+are verified against the published verify documentation
+(<https://akopichin.github.io/afm/verify/>, fetched 2026-11-09).
+
+Two authoring forms:
+
+| Form | Shape | Meaning |
+|---|---|---|
+| list | `verify: [ <step>, ... ]` | Steps only — engine defaults for every setting |
+| container | `verify: { steps: [...], max_failures?, review_patience?, fresh_correction? }` | Steps plus authored settings |
+
+Step fields (both forms; one step per list entry):
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | str | A string with ≥ 1 non-space character; empty/space-only is a parse error. The dashboard label — the engine also numbers steps as a fallback, but `name` is the reliable label. |
+| `run` | str | A shell check step — gated on the exit status. Mutually exclusive with `command`; exactly one of the two is required. |
+| `command` | str | An AI-review step. Mutually exclusive with `run`; exactly one required. An agent alias, resolved by the same command/recipe mechanism as `stage.command` — so an absolute in-container `*-as-claude.sh` wrapper path (the goga convention) is the known-good shape. |
+| `prompt` | str | The AI step's review instruction — valid on `command` (AI) steps only. |
+| `timeout` | str (duration) | Valid on both step kinds (shell and AI). |
+
+Container settings (container form only; `steps` is required):
+
+| Field | Type | Notes |
+|---|---|---|
+| `steps` | list | The step list — required in the container form. No other top-level keys are allowed here: a step field (`run`/`command`/`prompt`/`timeout`) at the container's top level is a parse error; `name` likewise. |
+| `max_failures` | int | The bound of failed correction attempts. |
+| `review_patience` | int | Tolerance for an unchanged correction stalemate. |
+| `fresh_correction` | bool | Whether a correction session starts fresh. |
+
+Exclusions and interplay (engine-owned — goga performs no cross-check):
+
+- Gates are forbidden on `script` stages and on planning-only
+  (`agents: [planning]`) stages — the engine rejects both at parse.
+- `max_failures >= review_patience` interplay, with an effective ceiling of
+  `min(max_failures, 15)`; the engine owns and reports these constraints.
+- Execution semantics that stay with the engine (never re-implemented by an
+  integrator): in-order fail-fast steps; full-list re-runs after a
+  correction; the correction budget; stalemate acceptance; strict JSON
+  verdicts (`pass` / `needs_changes` / `inconclusive`); transient verifier
+  retries; human waiver (a human may waive a failed gate with a recorded
+  reason).
+- Older engines reject a gated flow at load — a downgrade is never silent.
+
+### goga's stance (decided in `.goga/history/2026/add-gates-to-workflow/adr.md`)
+
+- goga authors gates in the workflow-file only — the per-stage check-step
+  list (`workflow.stages.<name>.gates`) and the settings block
+  (`workflow.gates`) — and compiles them one-directionally into the stage
+  `verify`: `script` → `run`, `agent` → `command` (composed into the
+  in-container wrapper path `/home/goga/bin/<agent>-as-claude.sh`, no
+  host-side resolution), `patience` → `review_patience`, `max_iterations`
+  → `max_failures`, `fresh_correction` unchanged.
+- Authored keys only: goga materializes no settings defaults; a shell step
+  without an authored `timeout` carries the goga-side product default `1h`
+  (not an engine contract), an AI step materializes no timeout default.
+  When the settings block authored any key, every gated stage's `verify`
+  is the container form; otherwise the list form.
+- The flow-file is the single delivery channel — goga writes no engine
+  configuration for gates. The settings ride only on gated stages; the
+  settings block without per-stage steps is inert.
+- goga mirrors the engine's own exclusions with its own compile-time
+  messages (gates on script / planning-only stages; `gates` in an
+  extend-entry; `gates`/`verify` keys in a stage body) — strict authoring
+  validation on the goga side, exactly as for memory.
+
 ## Integration pattern — running afm in a container
 
 A host-side launcher runs afm **inside a container image** that ships the `afm` binary.
@@ -170,9 +517,13 @@ the container owns the run parameters.
 
 The host does:
 
-1. Pick a free localhost port (bind a `socket` to `("", 0)`, read the assigned port,
-   close it, and hand the same value to both `-p <port>:<port>` and
-   `afm run --port <port>`).
+1. Resolve the dashboard port: a user-pinned `goga pipeline <name> --port <port>`
+   value when given (1–65535; the value goes verbatim to both sinks below and no
+   free-port search runs), else pick a free localhost port (bind a `socket` to
+   `("", 0)`, read the assigned port, close it). Either way the SAME value is handed
+   to both `-p <port>:<port>` and `afm run --port <port>`; a pinned port that is
+   already taken surfaces as the docker/afm bind error itself — no silent fallback
+   to another port.
 2. Mount NO afm config overlay — the host generates and mounts no `config.yaml`
    at all; the whole file is written in-container (step 3). The env-file carries
    the launch base layers only (see "Environment carriage" below).
@@ -181,23 +532,36 @@ The host does:
 
    The entrypoint (the in-container run coordination) performs the load-and-amend of
    the project configuration, writes the whole `~/.afm/config.yaml` before launching
-   afm, and then invokes `afm run --port <port> <flow_path>`. The written file
+   afm, materializes the packaged goga dashboard skin into
+   `/home/goga/.afm/skins/goga/`, and then invokes `afm run --port <port>
+   <flow_path>`. The written file
    carries `client.command: /home/goga/bin/<agent>-as-claude.sh` (an absolute
    in-container wrapper path matching the `*-as-claude.sh` convention, resolved from
    the EFFECTIVE pipeline agent; written only when an agent resolves — omitted
    otherwise so per-stage workflow agents or afm's own defaults cover the absent
-   global default), plus four static constants — `theme: goga` (dashboard theme),
+   global default), plus five static constants —
    `open_browser: false` (the dashboard is reached via the host-printed
    http://localhost:<port> URL; afm must not attempt to open a browser inside
    the container), `proxy.enabled: false` (afm's own internal outbound proxy
    provider is disabled — goga manages the outbound proxy through the container
    env-file `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`, the two layers must never
-   collide), and `prompts_dir: /home/goga/pipeline/prompts` (the in-container
+   collide), `prompts_dir: /home/goga/pipeline/prompts` (the in-container
    prompts directory — afm reads four prompt files from this directory,
    `planning.md`, `implementation.md`, `review.md`, `summary.md`, instead of
    its built-in defaults; written unconditionally so afm uses the goga-managed
    prompt directory regardless of whether the pipeline-file customizes any
-   prompt).
+   prompt), `add_stage.enabled: false` (the run's stage set stays exactly the
+   compiled pipeline — the dashboard accepts no out-of-model stage addition),
+   and `skin_dir: /home/goga/.afm/skins/goga` (the engine's custom skin
+   directory, served wholesale as the active skin while it holds
+   `index.css` — no `theme` is written, so the engine-builtin theme is the
+   fallback; populated from the installed package's
+   `goga/assets/afm/skin/` on every launch), plus the `command_names` map
+   labeling every generated command (the client wrapper and each profile
+   command, wrapper or closure alike) with the bare agent id of its
+   underlying `<agent>-as-claude.sh` wrapper — written only when non-empty —
+   and the always-written `collaboration` section headed by
+   `runtime_context: wrapper` and `hide_attach_helpers: true`.
 
    The launcher adds no credential mounts. A user who wants credentials inside the container
    mounts them through the home configuration (`docker.run` volume tokens) or passes

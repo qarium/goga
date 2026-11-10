@@ -27,9 +27,10 @@ import inspect
 import sys
 import typing
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, ClassVar, NamedTuple
 from unittest import mock
 
+import click
 import pytest
 from goga.commands.pipeline.run_pipeline_info_container import (
     run_pipeline_info_container as rpic,
@@ -37,7 +38,7 @@ from goga.commands.pipeline.run_pipeline_info_container import (
 from goga.config import ProjectConfig
 from goga.docker._flags import translate_params
 
-from tests.commands.pipeline.conftest import make_config
+from tests.commands.pipeline.conftest import DirectSpawnPopen, make_config
 
 
 class _InfoForm(NamedTuple):
@@ -82,6 +83,12 @@ def _snapshot_tree(root: Path) -> set[Path]:
     return set(root.rglob("*"))
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear the ambient ``GOGA_PROFILE`` so each test owns its cargo explicitly."""
+    monkeypatch.delenv("GOGA_PROFILE", raising=False)
+
+
 # --- Contract tests ---
 
 
@@ -92,7 +99,7 @@ class TestRunPipelineInfoContainerContract:
         assert _rpic_mod.run_pipeline_info_container is rpic
 
     def test_signature_matches_contract(self) -> None:
-        """The signature exposes exactly the eight declared parameters in order."""
+        """The signature exposes exactly the ten declared parameters in order."""
         params = list(inspect.signature(rpic).parameters)
         assert params == [
             "name",
@@ -102,7 +109,9 @@ class TestRunPipelineInfoContainerContract:
             "update",
             "workflow",
             "no_workflow",
+            "profile",
             "skip",
+            "home_profiles",
         ]
 
     def test_skip_defaults_to_empty_tuple(self) -> None:
@@ -119,8 +128,16 @@ class TestRunPipelineInfoContainerContract:
         assert hints["update"] is bool
         assert hints["workflow"] == str | None
         assert hints["no_workflow"] is bool
+        assert hints["profile"] == str | None
         assert hints["skip"] == tuple[str, ...]
+        assert hints["home_profiles"] == dict[str, dict[str, Any]] | None
         assert hints["return"] is int
+
+    def test_profile_and_home_profiles_default_none(self) -> None:
+        """``profile`` and ``home_profiles`` are optional — no cargo by default."""
+        params = inspect.signature(rpic).parameters
+        assert params["profile"].default is None
+        assert params["home_profiles"].default is None
 
     def test_no_pipeline_types_imported(self) -> None:
         """The docker boundary holds — no Type import from ``goga/pipeline``."""
@@ -515,6 +532,171 @@ class TestHomeDockerThreading:
         assert mocks["update"].call_args.kwargs["extra_args"] == ["--squash"]
 
 
+class TestProfileCargoEnvFile:
+    """The cargo rule: an env-file joins ONLY with profile cargo, exactly two lines."""
+
+    HOME_BUNDLE: ClassVar[dict[str, dict[str, Any]]] = {"mixa": {"worker": {"agent": "codex"}}}
+
+    def _install_env_file_capture(self, monkeypatch) -> dict[str, object]:
+        """Install the happy-path mocks with the runner reading the cargo env-file.
+
+        Returns a ``captured`` dict the mocked runner fills per call: the
+        docker-run params under their own keys (``env_file`` present only
+        with cargo) plus ``env_lines`` — the env-file lines read while the
+        file still exists (the launcher unlinks it in its ``finally``), or
+        None when no env-file was mounted. The caller invokes ``rpic`` after
+        this install and asserts on the captured state.
+        """
+        mocks = _install_happy_path(monkeypatch)
+        captured: dict[str, object] = {"env_lines": None}
+
+        def _read_env_file(argv, extra_args=None, **params):
+            captured.update(params)
+
+            if "env_file" in params:
+                captured["env_lines"] = Path(str(params["env_file"])).read_text().splitlines()
+
+            return 0
+
+        mocks["runner_instance"].run.side_effect = _read_env_file
+
+        return captured
+
+    def test_info_container_envfile_only_with_cargo(self, tmp_path: Path, monkeypatch) -> None:
+        """No cargo → no env-file; ambient profile → exactly one line, never GOGA_WORKFLOW."""
+        monkeypatch.chdir(tmp_path)
+
+        # No cargo — the minimal read-only shape, no env-file parameter.
+        captured = self._install_env_file_capture(monkeypatch)
+        rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)
+        assert "env_file" not in captured
+        assert captured["env_lines"] is None
+
+        # Ambient profile alone (empty bundle) — exactly the one profile line,
+        # never GOGA_WORKFLOW (the card resolves its own workflow decision).
+        captured = self._install_env_file_capture(monkeypatch)
+        monkeypatch.setenv("GOGA_PROFILE", "mixa")
+        rpic(
+            "deploy",
+            True,
+            _make_config(),
+            {},
+            update=False,
+            workflow="hardening",
+            no_workflow=False,
+            profile="mixa",
+        )
+        assert "env_file" in captured
+        assert captured["env_lines"] == ["GOGA_PROFILE=mixa"]
+
+    def test_bundle_only_cargo_writes_exactly_the_bundle_line(self, tmp_path: Path, monkeypatch) -> None:
+        """A non-empty bundle with no ambient profile → exactly the GOGA_HOME_PROFILES line."""
+        from goga.docker import encode_home_profiles
+
+        monkeypatch.chdir(tmp_path)
+        captured = self._install_env_file_capture(monkeypatch)
+
+        rpic(
+            "deploy",
+            True,
+            _make_config(),
+            {},
+            update=False,
+            workflow="hardening",
+            no_workflow=False,
+            home_profiles=self.HOME_BUNDLE,
+        )
+
+        assert "env_file" in captured
+        assert captured["env_lines"] == [f"GOGA_HOME_PROFILES={encode_home_profiles(self.HOME_BUNDLE)}"]
+
+    def test_both_cargo_kinds_write_both_lines_in_order(self, tmp_path: Path, monkeypatch) -> None:
+        """Ambient profile + bundle → exactly the two profile lines, profile first."""
+        from goga.docker import encode_home_profiles
+
+        monkeypatch.chdir(tmp_path)
+        captured = self._install_env_file_capture(monkeypatch)
+        monkeypatch.setenv("GOGA_PROFILE", "mixa")
+
+        rpic(
+            "deploy",
+            True,
+            _make_config(),
+            {},
+            update=False,
+            workflow="hardening",
+            no_workflow=False,
+            home_profiles=self.HOME_BUNDLE,
+        )
+
+        assert captured["env_lines"] == [
+            "GOGA_PROFILE=mixa",
+            f"GOGA_HOME_PROFILES={encode_home_profiles(self.HOME_BUNDLE)}",
+        ]
+
+    def test_cargo_env_file_is_unlinked_after_launch(self, tmp_path: Path, monkeypatch) -> None:
+        """The private cargo env-file is gone once the launcher returns."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_PROFILE", "mixa")
+        captured = self._install_env_file_capture(monkeypatch)
+
+        rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)
+
+        assert not Path(str(captured["env_file"])).exists()
+
+    def test_cargo_env_file_is_unlinked_when_the_launch_fails(self, tmp_path: Path, monkeypatch) -> None:
+        """The leak-prevention invariant holds on the failure path too — a
+        docker launch that raises still unlinks the secret-bearing env-file,
+        and the failure propagates to the host command."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_PROFILE", "mixa")
+        mocks = _install_happy_path(monkeypatch)
+        mocks["runner_instance"].run.side_effect = RuntimeError("docker exploded")
+
+        with pytest.raises(RuntimeError, match="docker exploded"):
+            rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)
+
+        env_file = mocks["runner_instance"].run.call_args.kwargs.get("env_file")
+        assert env_file is not None
+        assert not Path(str(env_file)).exists()
+
+    def test_card_argv_carries_profile_only_when_set(self, tmp_path: Path, monkeypatch) -> None:
+        """``--profile`` joins the card argv after the workflow decision, before -s."""
+        mocks = _install_happy_path(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+
+        rpic(
+            "deploy",
+            True,
+            _make_config(),
+            {},
+            update=False,
+            workflow="hardening",
+            no_workflow=False,
+            profile="mixa",
+            skip=("build",),
+        )
+
+        args, _kwargs = mocks["runner_instance"].run.call_args
+        argv = args[0]
+        assert argv[argv.index("--profile") + 1] == "mixa"
+        assert argv.index("--profile") > argv.index("-w")
+        assert argv.index("--profile") < argv.index("-s")
+
+        mocks = _install_happy_path(monkeypatch)
+        rpic(
+            "deploy",
+            True,
+            _make_config(),
+            {},
+            update=False,
+            workflow=None,
+            no_workflow=False,
+        )
+        args, _kwargs = mocks["runner_instance"].run.call_args
+        assert "--profile" not in args[0]
+
+
 class TestHostPurity:
     @pytest.mark.parametrize(
         "form",
@@ -553,3 +735,101 @@ class TestHostPurity:
         assert _snapshot_tree(tmp_path) == before_project
         assert _snapshot_tree(home) == before_home
         assert mocks["runner_instance"].run.call_count == 1
+
+
+class TestDirectSubstrate:
+    """The 7a branch: the same minimal read-only shape executed as a direct child.
+
+    Inside the goga image (``GOGA_DOCKER=1``) the SAME ``_compose_argv``
+    composition runs as a ``run_direct`` child — the profile cargo parsed
+    into the child env layer instead of an env-file — with every
+    docker-hosted step skipped (no docker-CLI check, no image guard, no
+    image acquisition, no DockerRunner).
+    """
+
+    def _install_direct(self, monkeypatch, returncode: int = 0) -> tuple[DirectSpawnPopen, dict[str, mock.Mock]]:
+        """Marker + spawn fake + the docker-boundary mocks (unused on this substrate)."""
+        import goga.docker.runner
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        spawn = DirectSpawnPopen(returncode=returncode)
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", spawn)
+        return spawn, _install_happy_path(monkeypatch)
+
+    def test_direct_spawns_python_argv_with_cargo_overlay(self, tmp_path: Path, monkeypatch) -> None:
+        """The card form spawns the composed argv; the bundle cargo reaches the child env layer."""
+        from goga.docker import encode_home_profiles
+
+        monkeypatch.chdir(tmp_path)
+        spawn, mocks = self._install_direct(monkeypatch, returncode=7)
+        bundle = {"mixa": {"worker": {"agent": "codex"}}}
+
+        result = rpic(
+            "deploy",
+            True,
+            _make_config(),
+            {},
+            update=False,
+            workflow="hardening",
+            no_workflow=False,
+            home_profiles=bundle,
+        )
+
+        assert result == 7
+        assert len(spawn.calls) == 1
+        argv, env = spawn.calls[0]
+        # The SAME card argv as the docker substrate, prefixed with python3.
+        assert argv == ["python3", "-m", "goga.pipeline", "run", "deploy", "--info", "-w", "hardening"]
+        # The cargo lines parsed into the child env layer (run_direct overlays
+        # them on the inherited environment) — never an env-file.
+        assert env["GOGA_HOME_PROFILES"] == encode_home_profiles(bundle)
+        # No docker machinery ran.
+        mocks["runner_cls"].assert_not_called()
+        mocks["build"].assert_not_called()
+        mocks["update"].assert_not_called()
+
+    def test_direct_without_cargo_passes_env_none(self, tmp_path: Path, monkeypatch) -> None:
+        """No cargo (no ambient GOGA_PROFILE, empty bundle) → the child inherits the environment untouched."""
+        monkeypatch.chdir(tmp_path)
+        spawn, _ = self._install_direct(monkeypatch)
+
+        result = rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)
+
+        assert result == 0
+        assert len(spawn.calls) == 1
+        argv, env = spawn.calls[0]
+        assert argv == ["python3", "-m", "goga.pipeline", "list"]
+        assert env is None
+
+    def test_direct_skips_docker_check_and_image_guard(self, tmp_path: Path, monkeypatch) -> None:
+        """A failing docker-CLI check and an unset image both pass on the direct substrate."""
+        monkeypatch.chdir(tmp_path)
+        spawn, mocks = self._install_direct(monkeypatch)
+        monkeypatch.setattr(_rpic_mod, "_check_docker", lambda: False)
+
+        result = rpic(None, False, _make_config(image=None), {}, update=False, workflow=None, no_workflow=False)
+
+        assert result == 0
+        assert spawn.called
+        mocks["runner_cls"].assert_not_called()
+
+    def test_direct_spawn_failure_is_clean_click_error(self, tmp_path: Path, monkeypatch) -> None:
+        """A raw OSError from the spawn is wrapped by the caller (D5) — a clean ClickException.
+
+        ``run_direct`` propagates a spawn ``OSError`` raw (its own contract
+        test pins that); this launcher owns the wrapping, so a missing
+        program token is the same clean error surface as every other
+        failure of the informational forms — never a traceback.
+        """
+        import goga.docker.runner
+
+        monkeypatch.chdir(tmp_path)
+        self._install_direct(monkeypatch)
+
+        def _raising_popen(argv: list[str], env: dict[str, str] | None = None) -> object:
+            raise FileNotFoundError(f"No such file or directory: {argv[0]}")
+
+        monkeypatch.setattr(goga.docker.runner.subprocess, "Popen", _raising_popen)
+
+        with pytest.raises(click.ClickException, match="No such file or directory"):
+            rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)

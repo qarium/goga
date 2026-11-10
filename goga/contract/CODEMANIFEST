@@ -1,5 +1,6 @@
 Imports:
   - Types:
+      - BaseContract
       - EntityContract
       - RoutineContract
       - PropertyContract
@@ -32,18 +33,24 @@ Imports:
     From: goga/contract/swift
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
 
 Annotations: |
-  During development and testing, use the practice `conventions`.
+  During development and testing, use the practice `convention`.
   The cell is the facade for all contract operations.
 
 ---
 
+->BaseContract: {}
 ->EntityContract: {}
 ->RoutineContract: {}
 ->PropertyContract: {}
 ->MethodContract: {}
+->python_contract: {}
+->golang_contract: {}
+->javascript_contract: {}
+->kotlin_contract: {}
+->swift_contract: {}
 
 "contract(lang: str, cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
   location: dispatcher.py

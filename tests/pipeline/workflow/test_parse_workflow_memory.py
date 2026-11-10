@@ -37,17 +37,17 @@ def _write(tmp_path: Path, name: str, text: str) -> Path:
 
 def _parse(tmp_path: Path, text: str) -> WorkflowDocument:
     """Parse ``text`` as a workflow-file and return the built document."""
-    return parse_workflow(_write(tmp_path, "workflow.yml", text))
+    return parse_workflow(text)
 
 
 class TestParseWorkflowMemoryContract:
     """Contract tests — the memory surface of the ``parse_workflow`` routine."""
 
     def test_parse_workflow_signature_unchanged(self) -> None:
-        """``parse_workflow`` still takes exactly one parameter (``workflow_path``)."""
+        """``parse_workflow`` takes exactly one parameter — the rendered ``text``."""
         parameters = list(inspect.signature(parse_workflow).parameters)
 
-        assert parameters == ["workflow_path"]
+        assert parameters == ["text"]
 
     def test_parse_workflow_document_memory_is_optional_workflow_memory(self, tmp_path: Path) -> None:
         """The parsed document carries ``memory`` as a ``WorkflowMemory | None``."""
@@ -232,7 +232,7 @@ class TestParseWorkflowMemoryBlockRejections:
 
         message = str(exc_info.value)
         assert "unknown key in workflow: bogus" in message
-        assert "valid keys: prompt, stages, extend, memory" in message
+        assert "valid keys: prompt, stages, extend, memory, profile, build" in message
 
     def test_parse_workflow_unknown_stage_key_message_lists_reflect_and_memory(
         self,
@@ -244,7 +244,7 @@ class TestParseWorkflowMemoryBlockRejections:
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.build: bogus" in message
-        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual, notes, reflect, memory" in message
+        assert "valid keys: agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory" in message
 
 
 class TestParseWorkflowReflectRejections:
@@ -370,10 +370,12 @@ class TestParseWorkflowMethodInstructionMismatch:
         assert document.stages["build"].memory is True
 
     def test_parse_workflow_empty_workflow_message_mentions_memory_block(self, tmp_path: Path) -> None:
-        """The empty-workflow message now offers the memory block as a fourth alternative."""
+        """The empty-workflow message offers the memory block among the alternatives."""
         with pytest.raises(WorkflowSyntaxError) as exc_info:
             _parse(tmp_path, "stages: {}\n")
 
         assert str(exc_info.value) == (
-            "empty workflow — provide at least prompt, one stage, one extend entry, or the memory block"
+            "empty workflow — provide at least prompt, one stage, one extend entry, "
+            "the memory block, the build block, the assistants block, the delegation block, "
+            "the repeat block, or the gates block"
         )

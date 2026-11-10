@@ -28,10 +28,12 @@ The layers, lowest to highest, in both domains:
     home.env < git identity < task env layer (effective) < CLI -e < engine variables
 
 Engine variables — `AFM_DIR`, `AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`,
-`HTTPS_PROXY`, `NO_PROXY` — are launch mechanics: nothing overrides them. In
-the env-file they are written after the CLI lines; in the container the launch
-composition drops a task-layer or CLI key that collides with one, silently —
-the inherited launch value stands, with no warning.
+`HTTPS_PROXY`, `NO_PROXY`, plus the GOGA carriage variables `GOGA_PROFILE`,
+`GOGA_WORKFLOW`, `GOGA_HOME_PROFILES`, `GOGA_EXTRA_ENV` — are launch
+mechanics: nothing overrides
+them. In the env-file they are written after the CLI lines; in the container
+the launch composition drops a task-layer or CLI key that collides with one,
+silently — the inherited launch value stands, with no warning.
 
 ## Host half — write the env-file and the payload
 

@@ -63,7 +63,7 @@ def _compile(tmp_path: Path, pipeline_text: str, workflow_text: str | None = Non
     if workflow_text is not None:
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(workflow_text)
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
 
     compile_flow(pipeline_path, flow_path, workflow=workflow)
 
@@ -267,7 +267,7 @@ class TestCompileFlowTriggerTranslation:
         )
 
         with pytest.raises(StructuralError, match="trigger must be one of: on_success, manual"):
-            compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=parse_workflow(workflow_path))
+            compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=parse_workflow(workflow_path.read_text()))
 
     def test_compile_flow_authoring_auto_run_forbidden(self, tmp_path: Path) -> None:
         """An authoring ``auto_run`` key in a pipeline-file body is rejected."""
@@ -296,7 +296,7 @@ class TestCompileFlowTriggerTranslation:
             compile_flow(
                 pipeline_path,
                 tmp_path / "flow.yml",
-                workflow=parse_workflow(workflow_path),
+                workflow=parse_workflow(workflow_path.read_text()),
             )
 
     def test_compile_flow_no_trigger_no_manual_byte_identical(self, tmp_path: Path) -> None:
@@ -304,11 +304,15 @@ class TestCompileFlowTriggerTranslation:
 
         Neither new branch fires, so the field set and its order are exactly
         the pre-change baseline — the regression anchor for afm's omit
-        contract.
+        contract. The collaboration block (deliberate, later change) is the
+        only post-baseline addition — the golden gains exactly the two-line
+        block between ``description`` and ``stages``.
         """
         expected = (
             "name: Feature\n"
             "description: Feature implementation\n"
+            "collaboration:\n"
+            "  mode: assistants\n"
             "stages:\n"
             "- id: build\n"
             "  name: Build\n"
@@ -487,7 +491,7 @@ class TestCompileFlowWorkflowManual:
             compile_flow(
                 pipeline_path,
                 tmp_path / "flow.yml",
-                workflow=parse_workflow(workflow_path),
+                workflow=parse_workflow(workflow_path.read_text()),
             )
 
     def test_compile_flow_workflow_manual_false_on_explicit_on_success_stage(self, tmp_path: Path) -> None:
@@ -508,7 +512,7 @@ class TestCompileFlowWorkflowManual:
             compile_flow(
                 pipeline_path,
                 tmp_path / "flow.yml",
-                workflow=parse_workflow(workflow_path),
+                workflow=parse_workflow(workflow_path.read_text()),
             )
 
     def test_compile_flow_skip_wins_over_manual(self, tmp_path: Path) -> None:
@@ -537,7 +541,7 @@ class TestCompileFlowWorkflowManual:
         _, flow_doc = compile_flow(
             pipeline_path,
             tmp_path / "flow.yml",
-            workflow=parse_workflow(workflow_path),
+            workflow=parse_workflow(workflow_path.read_text()),
         )
 
         flow_text = (tmp_path / "flow.yml").read_text()
@@ -564,7 +568,7 @@ class TestCompileFlowWorkflowManual:
         pipeline_doc, flow_doc = compile_flow(
             pipeline_path,
             tmp_path / "flow.yml",
-            workflow=parse_workflow(workflow_path),
+            workflow=parse_workflow(workflow_path.read_text()),
         )
 
         assert pipeline_doc.body.steps[0].body["trigger"] == "manual"
@@ -588,7 +592,7 @@ class TestCompileFlowWorkflowManual:
         compile_flow(
             pipeline_path,
             tmp_path / "flow.yml",
-            workflow=parse_workflow(workflow_path),
+            workflow=parse_workflow(workflow_path.read_text()),
         )
 
         flow_text = (tmp_path / "flow.yml").read_text()
@@ -632,7 +636,7 @@ class TestCompileFlowWorkflowManual:
         _, flow_doc = compile_flow(
             pipeline_path,
             tmp_path / "flow.yml",
-            workflow=parse_workflow(workflow_path),
+            workflow=parse_workflow(workflow_path.read_text()),
         )
 
         flow_text = (tmp_path / "flow.yml").read_text()

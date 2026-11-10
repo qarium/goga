@@ -99,6 +99,33 @@ except yaml.YAMLError as e:
     print(e)
 ```
 
+## Environment references (!ENV)
+
+Scalar values in `.goga/config.yml` may reference the environment: a
+value written `!ENV NAME` resolves, at load time, to the string value of
+the variable `NAME`.
+
+```yaml
+pipeline:
+  agent: !ENV PIPELINE_AGENT
+```
+
+- `PIPELINE_AGENT=claude` → `pipeline.agent` is the string `"claude"`.
+- `PIPELINE_AGENT` unset → `pipeline.agent` is the empty string — the
+  loader treats it exactly like an authored empty value (the `agent`
+  fields resolve it to `None`), so the configuration still loads.
+- Resolution is always a string — no coercion. A field expecting an int
+  or bool rejects an `!ENV` value per its own validation.
+- Malformed use (`!ENV` with an empty argument, a tag in an impossible
+  position) fails the load with the yaml library's own error naming the
+  file position.
+- The resolved configuration depends on the environment: one committed
+  file can serve multiple environments. Tests must control the
+  variables explicitly.
+
+The home configuration (`~/.goga/config.yml`) does NOT resolve `!ENV` —
+the tag applies to the project configuration only.
+
 ## .goga/config.yml Schema
 
 Minimal valid configuration (only `language` is required at the loader level):
@@ -278,7 +305,7 @@ afm) that consume these fields.
 | `usages.<group>.<dep>.git`  | str     | —                      | git URL (required, non-empty) |
 | `usages.<group>.<dep>.ref`  | str     | None                   | optional git ref (branch/tag/commit; absent → default branch) |
 | `lint`        | mapping | None | Linter section (optional); when absent, config.lint is None |
-| `lint.ignore` | list    | `[]` | List of exact relative paths excluded from AST traversal by `goga lint`. Glob is not supported |
+| `lint.ignore` | list    | `[]` | List of exact relative paths excluded from AST traversal by the AST-consuming commands (`goga lint`, `goga schema`, `goga contract`, `goga tool`). Glob is not supported |
 | `topics`                    | mapping | None  | Topics section (structural validation only) |
 | `topics.base_ref`           | str     | None  | Base revision of the topic exchange, verbatim |
 | `topics.create.commit`      | str     | None  | Creation todo-commit message template, verbatim |
@@ -480,14 +507,15 @@ lint:
     - build/dist
 ```
 
-- `ignore` entries are exact paths relative to the `goga lint` invocation cwd
-  (after `os.chdir(path)` — relative to the traversal root). Matching is strict:
+- `ignore` entries are exact paths relative to the traversal root — the
+  project-root cwd of the consuming command (`goga lint` chdirs to its path
+  argument first). Matching is strict:
   trailing slash is insignificant (`.venv/` == `.venv`); glob patterns
   (`**`, `*`, `?`) are NOT supported and are not applied.
 - The loader performs only structural validation (list of strings); path
   semantics (glob/normalization/existence) are the consumer's responsibility.
 - Absence of the `lint` section ⇒ `config.lint is None` ⇒ no directories are
-  excluded from validation.
+  excluded from traversal by the consuming commands.
 
 ## Immutability
 

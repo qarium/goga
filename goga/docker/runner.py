@@ -1,7 +1,8 @@
-"""Container launching — goga/docker."""
+"""Container launching and direct child execution — goga/docker."""
 
 from __future__ import annotations
 
+import os
 import signal
 import subprocess
 
@@ -87,3 +88,61 @@ class DockerRunner:
             signal.signal(signal.SIGTERM, prev_term)
             signal.signal(signal.SIGINT, prev_int)
         return exit_code
+
+
+def run_direct(argv: list[str], env: dict[str, str] | None = None) -> int:
+    """Run a composed command line as a child of the current environment.
+
+    The direct-execution counterpart of ``DockerRunner.run``: a dual-surface
+    launcher that composed its command line and env contract once executes
+    them through this routine when ``is_in_docker`` resolved ``True`` — the
+    same composed argv the docker substrate hands to the image entrypoint,
+    prefixed with the program token, spawned with inherited stdio.
+
+    Args:
+        argv: The full child command line INCLUDING the program token (for
+            example ``["python3", "-m", "goga.pipeline", "run", ...]``).
+        env: Optional env layer applied on top of the inherited process
+            environment for this child only, composed by the caller from the
+            same layer code that produces the env-file lines of the docker
+            substrate; ``None`` runs the child with the inherited environment
+            untouched. The caller's own process environment is never written.
+
+    Returns:
+        The child's exit code, verbatim.
+
+    Raises:
+        OSError: propagated raw from the spawn (for example
+            ``FileNotFoundError`` when the program token names no existing
+            program) — the caller wraps.
+    """
+    child_env = {**os.environ, **env} if env else None
+
+    proc = None
+
+    def _on_signal(signum: int, _frame: object) -> None:
+        # Forward FIRST so the child terminates (the docker substrate's
+        # `docker kill` analogue), then convert the asynchronous signal into
+        # a synchronous SystemExit so it unwinds through `finally` (handler
+        # restore) rather than terminating the process on the spot.
+        # 128 + signum is the shell convention (130 SIGINT, 143 SIGTERM).
+        # A signal arriving before the spawn completes finds proc None and
+        # exits without a forward.
+        if proc is not None and proc.poll() is None:
+            proc.send_signal(signum)
+
+        raise SystemExit(128 + signum)
+
+    # Install BOTH handlers and save the previous ones so they are restored
+    # in `finally` — the runner nests correctly under a caller-installed
+    # handler (D7), same as DockerRunner.run.
+    prev_term = signal.signal(signal.SIGTERM, _on_signal)
+    prev_int = signal.signal(signal.SIGINT, _on_signal)
+
+    try:
+        proc = subprocess.Popen(argv, env=child_env)  # inherited stdio → streamed
+
+        return proc.wait()
+    finally:
+        signal.signal(signal.SIGTERM, prev_term)
+        signal.signal(signal.SIGINT, prev_int)

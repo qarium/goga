@@ -34,8 +34,9 @@ class WorkflowAmendment:
         Args:
             document: the complete contribution — a
                 :class:`~goga.pipeline.workflow.WorkflowDocument`-shaped
-                set of instructions (prompt, stages, extend, memory) using
-                the same vocabulary an authored workflow-file uses.
+                set of instructions (prompt, stages, extend, memory,
+                assistants, delegation, repeat, gates) using the same
+                vocabulary an authored workflow-file uses.
         """
 
         self._contribution = document

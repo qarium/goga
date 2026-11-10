@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .workflow_assistant import WorkflowAssistant
+from .workflow_gate_step import WorkflowGateStep
 from .workflow_reflect import WorkflowReflect
 
 
@@ -14,6 +16,12 @@ class WorkflowStage:
     Args:
         agent: Agent name consumed by the compiler to compose the per-stage
             command wrapper path, or ``None`` when not specified.
+        env: Per-stage environment instruction (string map, literal and/or
+            rendered), or ``None`` when not specified. Validated by
+            :func:`parse_workflow` (``dict`` of str→str; an empty map equals
+            absence — ``None``). Declarative — extracted here, consumed by the
+            pipeline run coordination's wrapper generation, NOT the compiler;
+            ``env`` never reaches the serialized flow-file as a stage field.
         prompt: Per-stage prompt text consumed by the compiler as the stage
             description field, or ``None`` when not specified.
         loop: Positive iteration count (>= 1) instructing the compiler to
@@ -73,9 +81,25 @@ class WorkflowStage:
             ``True``. This cell does not act on ``memory`` — it is
             declarative; the compiler performs the emission when applying the
             workflow.
+        assistants: The stage's assistant attachments — a map of
+            :class:`WorkflowAssistant` keyed by assistant name, in authored
+            order (each entry a reference or an inline declaration), or
+            ``None`` when not specified (an empty map equals absence —
+            normalized to ``None`` by ``parse_workflow``). Declarative —
+            extracted here, consumed by the compiler to emit the stage's
+            assistants entries. This cell does not act on ``assistants`` —
+            it is declarative.
+        gates: The stage's completion quality gates — a list of
+            :class:`WorkflowGateStep` check steps in authored order (each a
+            shell check or an AI-review check), or ``None`` when not
+            specified (an empty list equals absence — normalized to
+            ``None`` by ``parse_workflow``). Declarative — extracted here,
+            consumed by the compiler to emit the stage's ``verify`` field.
+            This cell does not act on ``gates`` — it is declarative.
     """
 
     agent: str | None = None
+    env: dict[str, str] | None = None
     prompt: str | None = None
     loop: int | None = None
     skills: list[str] | None = None
@@ -85,3 +109,5 @@ class WorkflowStage:
     notes: dict[str, str] | None = None
     reflect: WorkflowReflect | None = None
     memory: bool | None = None
+    assistants: dict[str, WorkflowAssistant] | None = None
+    gates: list[WorkflowGateStep] | None = None

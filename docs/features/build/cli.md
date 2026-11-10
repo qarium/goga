@@ -10,18 +10,18 @@ goga build PLAN [OPTIONS]
 
 ## Description
 
-`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to the build engine running inside a Docker container with the goga in-container process as the entry point.
+`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to the build engine running inside a Docker container with the goga in-container process as the entry point. Inside the goga image itself the same composed command runs directly as a child process instead — see step 1 below and [Runtime — Direct in-container execution](../pipelines/runtime.md#direct-in-container-execution).
 
 The build pipeline performs these steps:
 
-1. **Docker check** -- Verifies Docker is installed and accessible.
+1. **Docker check (host only)** -- Verifies Docker is installed and accessible. Inside the goga image (`GOGA_DOCKER=1`) there is no docker launch to check or acquire: the docker-CLI check, the version check, and the image steps (6, 7, and the `image` guard) are skipped, and the host-only options (`-e/--env`, `--add-host`, `--proxy`, `-u/--update`) are rejected with an error naming the option before any other work. `--clean` there wipes `<cwd>/.ralphex` (the directory the build engine actually uses) before the run, and ralphex state does not persist across direct runs; `--dry-run` prints the direct command line.
 2. **Config loading** -- Reads `.goga/config.yml` for build settings. The optional machine-wide home config (`~/.goga/config.yml`) layers underneath: `home.env` is the base (lowest-priority) layer of the container env-file, `home.docker.run` is appended to every `docker run`, `home.docker.build` is forwarded to image builds. Git identity env (`GIT_AUTHOR_NAME/EMAIL`, `GIT_COMMITTER_NAME/EMAIL`) is layered in, tolerating absent git config.
 3. **Uncommitted manifest check** -- Scans `git status` for uncommitted `CODEMANIFEST` files (can be skipped).
 4. **Agent preconditions** -- Requires a `build` section host-side (a missing section is rejected with exit 1, before any container launch). The tasks agent (`build.agent`) is guarded in-container on the effective configuration: a `None` agent (after amendments) stops the run with exit 1 before any `.ralphex/` state write or pass, and an amendment supplying `build.agent` satisfies the guard. The review agent's wrapper (`build.review.agent`) and, when the strategy engages the external review, the additional agent's wrapper are validated in-container before their pass.
 5. **Defaults copy** -- Fully rewrites the engine's prompt and agent defaults from the configured `build.prompts_dir`/`build.agents_dir`, or from the defaults shipped with goga. When `build.review.roles` is set, the vendored review prompts are filtered to the selected roles (a custom `build.prompts_dir` is copied as-is, without role filtering — see [Configuration](configuration.md)); when `build.review.finalize` is set, the finalize step's ralphex files are materialized from the prompt.
 6. **Image refresh (optional)** -- When `--update`/`-u` is set, the image is refreshed: if a top-level `dockerfile` is declared in `.goga/config.yml`, `docker build` runs against it (build failure is fatal — exit 1); otherwise `docker pull` runs (a pull failure is logged as a warning and the build proceeds with the locally available image). By default no refresh happens and the local image is used as-is.
 7. **First-run safety net** -- Runs unconditionally at launch entry: when the configured image is absent locally AND a project `dockerfile` is declared, the image is built once before launch (fatal on failure — the launch is skipped). This closes the corner case where a Dockerfile is declared but the image was never built and `--update` is not passed.
-8. **Docker execution** -- Launches the build inside the configured Docker image, after the shared pre-launch host–image version check (see [Runtime — Pre-launch version check](../pipelines/runtime.md#pre-launch-version-check)). The launcher adds no credential mounts — provide the agent's credentials yourself (see [Runtime — Credentials](../pipelines/runtime.md#credentials)). Persistent build state is isolated from the project directory (see [Runtime state isolation](#runtime-state-isolation)). The pass structure: a run with review on is always two passes — a tasks pass (`--tasks-only`) on the `build.agent` wrapper, then a review pass (`--review`, or `-e` (external-only) under `strategy: short`) on the review-stage agent's wrapper with the review env (`build.review.env`) overlaid for that subprocess only; a failed tasks pass skips the review; `--skip-review` (or `build.review.skip: true`) collapses the run to the tasks pass alone. Before the first pass, the `build/validate_build` hooks gate runs — a vetoed run stops with exit 1 and no pass (see [Hooks](hooks.md)).
+8. **Docker execution** -- Launches the build inside the configured Docker image, after the shared pre-launch host–image version check (see [Runtime — Pre-launch version check](../pipelines/runtime.md#pre-launch-version-check)). The launcher adds no credential mounts — provide the agent's credentials yourself (see [Runtime — Credentials](../pipelines/runtime.md#credentials)). Persistent build state is isolated from the project directory (see [Runtime state isolation](#runtime-state-isolation)). The pass structure: a run with review on is always two passes — a tasks pass (`--tasks-only`) on the `build.agent` wrapper, then a review pass (`--review`, or `-e` (external-only) under `strategy: short`) on the review-stage agent's wrapper; the passes launch with no env layer (the subprocess inherits the container environment) and the env layers of the roles (`build.env`, `build.review.env`, `build.review.additional.env`, and the decoded `-e` entries applied on top) travel through generated per-role sh closures; a failed tasks pass skips the review; when a workflow is in effect and a profile resolved, the in-container process prints `Build running with workflow "<name>" and profile "<profile>"` to stderr; `--skip-review` (or `build.review.skip: true`) collapses the run to the tasks pass alone. Before the first pass, the `build/validate_build` hooks gate runs — a vetoed run stops with exit 1 and no pass (see [Hooks](hooks.md)).
 9. **Plan relocation** -- After a successful final pass the plan file moves to `<plan_dir>/completed/<plan_name>` (atomic replace, idempotent by name). A failed run or a dry run leaves the plan in place so the build can resume.
 
 ## Arguments
@@ -39,15 +39,17 @@ The build pipeline performs these steps:
 | `--skip-review` / `--no-skip-review` | bool pair (tri-state) | unset | Skip the review phase (`--skip-review` — a tasks-only run) or force the full cycle (`--no-skip-review`). Overrides `build.review.skip` in `.goga/config.yml`; when neither is given, the config decides |
 | `--session-timeout` | string | config | Session timeout duration |
 | `--idle-timeout` | string | config | Idle timeout duration |
-| `--wait` | string | config | Wait time before starting |
+| `--wait` | string | config | Wait time on rate limit |
 | `--max-iterations` | int | config | Maximum number of build iterations (tasks pass) |
 | `--review-patience` | int | config | External-review patience — addresses `build.review.additional.patience` in `.goga/config.yml`; forwarded to the container only when set |
 | `--base-ref` | string | config | Review diff base (branch name or commit hash); overrides `build.review.base_ref`; reaches ralphex as `--base-ref` on the review pass only |
-| `-e`, `--env` | string (repeatable) | -- | Additional environment variable (`KEY=VALUE`, repeatable) |
+| `-e`, `--env` | string (repeatable) | — | Additional environment variable (`KEY=VALUE`, repeatable) |
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `build.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file |
-| `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `build.hosts` (CLI wins on key conflict) |
+| `--add-host` | string (repeatable) | — | Add a `docker run --add-host HOST:IP` entry; merges on top of `build.hosts` (CLI wins on key conflict) |
 | `-u`, `--update` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Default skips the refresh |
 | `-c`, `--clean` | flag | off | Wipe the build's persistent runtime directory on the host before launch (default preserves state across runs) |
+| `-w`, `--workflow` | string | — | Apply the workflow at `<cwd>/.goga/workflows/<name>.yml` to this build — strict: the host validates containment and existence before launch (a missing file or an escaping name is a clean exit 1, no docker activity). Unlike the pipeline's auto-match, there is no implicit workflow; the value travels to the in-container build as the `--workflow <name>` argv flag (this launcher never writes `GOGA_WORKFLOW` — only the pipeline-run launcher does, so a `goga build` nested inside a pipeline stage inherits the pipeline's effective workflow through it, and the `-w` flag beats it). A value starting with `-` is rejected |
+| `-p`, `--profile` | string | — | Activate a profile — the CLI activation channel of the workflow rendering (same channels and precedence as `goga pipeline`: `--profile` > `GOGA_PROFILE` > the workflow's `profile:` default). A profile renders a workflow: with no workflow in effect (`-w` unset, no `GOGA_WORKFLOW` inherited from an enclosing pipeline run) the flag is inert — nothing loads (see [Workflows — Profiles](../pipelines/workflows.md#profiles)) |
 
 Timeout and iteration options fall back to values in `.goga/config.yml` when not provided on the command line.
 
@@ -78,6 +80,8 @@ The build engine writes its persistent state to a `.ralphex/` directory it auto-
 
 The directory survives across runs of the same project on the same branch by default, so an interrupted build can be resumed. Pass `--clean` to wipe and recreate it before launch for a fresh run. The host path never reaches the container except as the `/workspace/.ralphex` mount source — the container sees only `/workspace/.ralphex`.
 
+On the [direct substrate](../pipelines/runtime.md#direct-in-container-execution) (inside the goga image) there is no host runtime mount: the build engine writes its `.ralphex/` under the current working directory, `--clean` wipes that directory, and the no-`.ralphex/`-left-in-the-project invariant holds on every exit path of both substrates.
+
 Note: concurrent builds of the same project on the same branch share one runtime directory; run them on different branches or use `--clean` if isolation is required.
 
 ### Pre-launch version check
@@ -93,7 +97,7 @@ Run a build plan:
 goga build plan.md
 ```
 
-Dry run to see the command without executing:
+Perform a dry run to see the command without executing:
 
 ```bash
 goga build plan.md --dry-run

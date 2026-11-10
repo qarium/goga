@@ -18,11 +18,89 @@ import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
 
 from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401
+
+
+@pytest.fixture
+def project_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """chdir into a fake project carrying the profile and workflow roots.
+
+    The build-side workflow selection composes workflow paths from
+    ``<cwd>/.goga/workflows`` and the loading chain resolves profiles from
+    ``<cwd>/.goga/profiles``; both directories exist (empty) inside the
+    isolated project so every scenario starts from the same project shape
+    and writes nothing outside the tmp tree. Tests seed files into the
+    returned root.
+
+    Args:
+        tmp_path: the isolated test directory holding the fake project.
+        monkeypatch: the pytest patcher restoring the original CWD.
+
+    Returns:
+        The project root the process CWD was moved into.
+    """
+    root = tmp_path / "project"
+    (root / ".goga" / "profiles").mkdir(parents=True)
+    (root / ".goga" / "workflows").mkdir(parents=True)
+    monkeypatch.chdir(root)
+
+    return root
+
+
+@pytest.fixture
+def home_bundle() -> dict[str, dict[str, Any]]:
+    """Sample personal-bundle mapping — the ``decode_home_profiles`` result shape.
+
+    One profile under one name: the whole mapping under ``mixa`` doubles as
+    the Jinja rendering context (a nested ``worker`` mapping), plus a
+    home-only ``homeonly`` profile no project file shadows.
+    """
+    return {
+        "mixa": {"worker": {"agent": "codex", "model": "sonnet"}},
+        "homeonly": {"worker": {"agent": "gemini", "model": "o4"}},
+    }
+
+
+@pytest.fixture
+def seeded_project(project_root: Path) -> Path:
+    """Seed the fake project with two workflows and two project profiles.
+
+    ``hard.yml`` carries the literal ``profile: mixa`` default; ``custom.yml``
+    is profile-free — the pair distinguishes the CLI/env selection axes from
+    the profile activation channels.
+    """
+    workflows = project_root / ".goga" / "workflows"
+    (workflows / "hard.yml").write_text("profile: mixa\nstages:\n  build:\n    agent: claude\n")
+    (workflows / "custom.yml").write_text("stages:\n  test:\n    agent: codex\n")
+
+    profiles = project_root / ".goga" / "profiles"
+    (profiles / "mixa.yml").write_text("worker:\n  agent: codex\n  model: sonnet\n")
+    (profiles / "alt.yml").write_text("worker:\n  agent: gemini\n  model: o4\n")
+
+    return project_root
+
+
+@pytest.fixture
+def wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Relocate the wrapper base into the isolated tree; expose the run dir.
+
+    The closures land in the PID-keyed per-run subdirectory under the
+    relocated base (``_run_base()``), so the assertions address the run
+    directory directly.
+    """
+    from goga.build import role_env_wrappers
+
+    base = tmp_path / "goga-build-env"
+
+    monkeypatch.setattr(role_env_wrappers, "_WRAPPER_BASE", base)
+
+    return role_env_wrappers._run_base()
+
 
 # goga.build.build is shadowed in the package __init__ by the build function,
 # so a string-based patch path walking through it fails on Python 3.10.
@@ -32,6 +110,34 @@ build_module = importlib.import_module("goga.build.build")
 
 # The five reviewer roles of the vendored ralphex agent definitions.
 VENDORED_ROLES = ("quality", "implementation", "testing", "simplification", "documentation")
+
+
+@pytest.fixture(autouse=True)
+def relocated_wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Relocate the per-role closure wrapper base into the isolated test tree.
+
+    ``write_role_env_wrappers`` writes its generated closures under a
+    container-local ``/tmp/goga-build-env`` (one per-run subdirectory per
+    build process); every orchestration test that reaches a pass (directly
+    or through ``build``) would otherwise write there for real. The
+    zone-wide pin keeps the writes inside ``tmp_path`` (the module constant
+    is the documented test seam).
+
+    Args:
+        tmp_path: The isolated test directory the base relocates into.
+        monkeypatch: The pytest patcher restoring the original constant.
+
+    Returns:
+        The relocated per-run wrapper directory —
+        ``<tmp_path>/goga-build-env/run-<pid>``.
+    """
+    from goga.build import role_env_wrappers
+
+    base = tmp_path / "goga-build-env"
+
+    monkeypatch.setattr(role_env_wrappers, "_WRAPPER_BASE", base)
+
+    return role_env_wrappers._run_base()
 
 
 @pytest.fixture

@@ -1,0 +1,137 @@
+# gates — authoring stage quality gates in the workflow-file
+
+`gates` declares automated stage-completion checks: a per-stage list of check
+steps a stage must pass before it counts as done, plus an optional
+workflow-level settings block tuning the correction retries. The document
+addresses workflow-file authors: everything described here is validated
+structurally at parse time — typos and type or value mismatches are rejected
+with a one-line error naming the workflow location. goga never runs the
+checks: the engine executes the compiled gate and owns every retry semantic.
+
+## The top-level `gates:` settings block
+
+| Key | Type | Default | Note |
+|-----|------|---------|------|
+| `patience` | int >= 0 | not authored | tolerance for an unchanged correction stalemate |
+| `max_iterations` | int >= 0 | not authored | bound of failed correction attempts |
+| `fresh_correction` | bool | not authored | whether a correction session starts fresh |
+
+- Authored keys only — no defaults are materialized; the engine defaults
+  apply for unauthored keys.
+- An empty block (`gates: {}`) equals absence. A workflow consisting of the
+  block alone is valid.
+- A boolean is not an integer for these checks.
+- The settings travel only with stages that declare check steps — the block
+  alone is inert: nothing is emitted, no error is raised.
+
+## Per-stage check steps (`stages.<name>.gates`)
+
+A list of check steps; an empty list equals absence. Each step is a mapping:
+
+| Key | Type | Required | Note |
+|-----|------|----------|------|
+| `name` | str | yes | the dashboard label; required — the step numbering fallback is never relied on |
+| `script` | str, non-empty — or a non-empty list of non-empty strings | xor `agent` | a shell check step; a list is the script's lines, joined with newlines into one multi-line script (shell-identical to authoring the same text as a block scalar) |
+| `agent` | str, non-empty | xor `script` | an AI-review step; the same agent-name vocabulary as the per-stage agent override — a single string, never a list |
+| `timeout` | str | no | carried verbatim; the duration grammar is engine-owned |
+| `prompt` | str | no | the review instruction of an AI step — agent steps only (forbidden on a `script` step) |
+| `env` | map str→str | no | environment variables for the step — valid on BOTH step kinds; an empty map equals absence |
+
+Exactly one of `script`/`agent` per step — both or neither is a structural
+error. The steps compile in authored order. A list-form `script` payload is
+joined at parse time — the model carries one multi-line string, and the
+compiled `run` payload is the same either way.
+
+A step's `env` never reaches the flow-file as an emitted field (the engine's
+verify-step schema has no `env`) — the pipeline run coordination delivers it
+through a generated closure wrapper per env-declaring step. Env keys must be legal environment variable
+names (POSIX shape); an illegal key is a strict pre-run error naming the
+stage, the step, and the key.
+
+## Minimal examples
+
+Settings plus a shell step and an AI-review step:
+
+```yaml
+gates:
+  max_iterations: 2
+  fresh_correction: true
+stages:
+  implementation:
+    gates:
+      - name: tests
+        script: pytest -q
+        env:
+          FOO: bar
+      - name: review
+        agent: reviewer
+        prompt: Review the diff for correctness.
+        env:
+          REVIEW_STRICTNESS: strict
+```
+
+Without the settings block the gated stages carry the steps alone (the
+engine list form); an authored `timeout` overrides the materialized shell
+default:
+
+```yaml
+stages:
+  build:
+    gates:
+      - name: compile
+        script: make all
+        timeout: 30m
+```
+
+A multi-command check authors as the script's lines — a list:
+
+```yaml
+stages:
+  build:
+    gates:
+      - name: checks
+        script:
+          - pytest ./
+          - ruff check .
+```
+
+## Structural errors (parse time)
+
+- "non-mapping gates block in workflow" — a scalar/list settings value
+- "unknown key in workflow.gates: KEY; valid keys: patience, max_iterations, fresh_correction"
+- "non-int value in workflow.gates.KEY" / "KEY must be >= 0 in workflow.gates" (a boolean is not an integer)
+- "non-bool value in workflow.gates.fresh_correction"
+- "non-list gates in workflow.stages.NAME"
+- "non-mapping gate step in workflow.stages.NAME.gates[i]"
+- "unknown key in workflow.stages.NAME.gates[i]: KEY; valid keys: name, script, agent, timeout, prompt, env"
+- "gates step without name in workflow.stages.NAME.gates[i]"
+- "gates step must carry exactly one of script/agent in workflow.stages.NAME.gates[i]"
+- "script must be a non-empty string in workflow.stages.NAME.gates[i]" (and the agent counterpart — an agent alias is a single string)
+- "script must be a non-empty list of non-empty strings in workflow.stages.NAME.gates[i]" — a list-form script payload that is empty or carries a non-str/empty element
+- "prompt is forbidden on a script gate step in workflow.stages.NAME.gates[i]" — prompt belongs to AI steps
+- "non-mapping env in workflow.stages.NAME.gates[i]" / "non-str key in
+  workflow.stages.NAME.gates[i].env" / "non-str value in
+  workflow.stages.NAME.gates[i].env.KEY" — the step env string-map form
+- "gates is forbidden in workflow.extend.NAME" — checks of a new stage are
+  authored in the stages block by the new stage's name
+
+## What is NOT validated here
+
+- The `timeout` duration grammar, the `name` text content, and the step env
+  key shapes — values pass verbatim; the engine reports malformed values at
+  flow load/preflight, and the gate wrapper generation rejects an illegal
+  env key with a strict pre-run error.
+- Stage names — the compiler's strict unknown-stage check covers them.
+- Engine interplay constraints (the failure budget vs the patience value,
+  the effective ceiling) — the engine owns and reports these.
+
+## Anti-patterns
+
+- Do not author `gates` in an extend-entry or in a stage body — both are
+  strict structural errors; the checks of any stage are authored in the
+  stages block by the stage's name.
+
+This cell does NOT act on gates — no command composition, no emission
+decisions, no retry interpretation. The compiler translates the authored
+vocabulary one-directionally into the engine's and emits the stage gate;
+the engine runs it.

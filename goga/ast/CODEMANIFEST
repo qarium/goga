@@ -44,7 +44,7 @@ Imports:
     From: goga/ast/rules
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   nodes: |
     Consumer uses the manifest goga/ast/nodes and its API to work with document structure.
   factory: |
@@ -81,7 +81,7 @@ Usages:
     - Asserts len(errors) and performs strict field-by-field comparison on each error.
 
 Annotations: |
-  When developing and testing: follow the practice `conventions`.
+  When developing and testing: follow the practice `convention`.
   When adding a new rule: create an integration test following the practice `testing`.
 
 ---

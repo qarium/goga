@@ -6,6 +6,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from goga.pipeline import (  # noqa: F401 — the load-and-bind touches, not names used below
+    describe_pipeline,
+    run_pipeline,
+)
 from goga.pipeline.compiler import (
     BodyFormat,
     FlowDocument,
@@ -19,15 +23,28 @@ from tests.hooks.conftest import install_tool_package, pin_package_environment
 
 __all__ = ["install_tool_package", "pin_package_environment"]
 
-# goga.pipeline.run_pipeline is shadowed in the package __init__ by the
-# run_pipeline function, so a string-based mock.patch path walking through it
-# fails on Python 3.10. Resolve the real module via sys.modules and patch its
+# goga.pipeline.run_pipeline and goga.pipeline.describe_pipeline are lazy PEP
+# 562 facade re-exports: the attributes resolve to the functions, and
+# string-based mock.patch paths walking through the package fail on Python
+# 3.10 either way. The facade from-imports above load the submodules and bind
+# the functions ahead of these resolutions, so every process shape — including
+# focused runs whose collected tests never touch the lazy attributes — sees
+# the same state. Resolve the real modules via sys.modules and patch their
 # attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
 # goga.pipeline.afm_config is shadowed the same way (the __init__ re-exports
 # write_afm_config) — resolve the real module for direct attribute patching.
 _afm_config_module = sys.modules["goga.pipeline.afm_config"]
+
+# goga.pipeline.gate_env_wrappers carries no facade shadowing; its fixed
+# closure-base constant is patched the same direct way so no test creates or
+# chmods /tmp/goga-gate-env on the host.
+_gate_env_wrappers_module = sys.modules["goga.pipeline.gate_env_wrappers"]
+
+# goga.pipeline.afm_skin carries no facade shadowing, but its module constant
+# is patched the same direct way for symmetry with the two above.
+_afm_skin_module = sys.modules["goga.pipeline.afm_skin"]
 
 # The four materialized afm prompt-file stems. The first three resolve from the
 # overridable roles (planner/executor/reviewer) via translate_role; summary is a
@@ -58,7 +75,16 @@ def _in_container_run_context(
       packages (tests installing a tool pin their own environment on top —
       the later pin wins);
     - the fixed home-path constant of the afm configuration authorship
-      redirects into the tmp tree, so no test writes the real home.
+      redirects into the tmp tree, so no test writes the real home;
+    - the fixed closure-base constant of the collaboration profiles
+      redirects into the tmp tree the same way, so no test creates or
+      chmods ``/tmp/goga-assistant-env`` on the host;
+    - the fixed closure-base constant of the gate env wrappers redirects
+      into the tmp tree the same way, so no test creates or chmods
+      ``/tmp/goga-gate-env`` on the host;
+    - the fixed skins-base constant of the afm skin materialization
+      redirects into the tmp tree too, so no test writes the real
+      ``~/.afm/skins``.
 
     A test's own patching always wins: its ``monkeypatch``/``pin`` calls run
     after this autouse fixture.
@@ -68,6 +94,9 @@ def _in_container_run_context(
     (goga_dir / "config.yml").write_text("language: python\npipeline: {}\n")
     pin_package_environment({})
     monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
+    monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", tmp_path / "goga-assistant-env")
+    monkeypatch.setattr(_gate_env_wrappers_module, "_GATE_WRAPPER_BASE", tmp_path / "goga-gate-env")
+    monkeypatch.setattr(_afm_skin_module, "_SKINS_TARGET_BASE", tmp_path / ".afm-home" / "skins")
 
 
 @pytest.fixture
@@ -75,6 +104,55 @@ def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """chdir into tmp_path — the workflows root resolves to ``<tmp>/.goga/workflows``."""
     monkeypatch.chdir(tmp_path)
     return tmp_path
+
+
+@pytest.fixture
+def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the fixed home-path constant into the tmp tree.
+
+    The afm configuration authorship writes at
+    ``/home/goga/.afm/config.yaml`` — a container-only path. The fixed-path
+    constant is patched (never the filesystem root), so the written document
+    lands under pytest's tmp_path instead.
+    """
+    path = tmp_path / ".afm" / "config.yaml"
+    monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", path)
+    return path
+
+
+@pytest.fixture
+def closure_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the fixed closure-base constant into the tmp tree.
+
+    The routine generates closures under ``/tmp/goga-assistant-env`` — a
+    container-only path. The fixed base constant is patched so every generated
+    closure lands under pytest's tmp_path instead.
+    """
+    base = tmp_path / "goga-assistant-env"
+    monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", base)
+    return base
+
+
+@pytest.fixture
+def skin_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the fixed skins-base constant into the tmp tree.
+
+    The materializer writes at ``/home/goga/.afm/skins`` — a container-only
+    path. The fixed base constant is patched (never the filesystem root), so
+    the materialized skin lands under pytest's tmp_path instead.
+    """
+    base = tmp_path / ".afm-home" / "skins"
+    monkeypatch.setattr(_afm_skin_module, "_SKINS_TARGET_BASE", base)
+    return base
+
+
+@pytest.fixture
+def packaged_skin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the packaged-dir resolver at a tmp source and seed it with one file."""
+    source = tmp_path / "packaged-skin"
+    write_skin(source, names=("index.css",))
+    patch_skin_source(monkeypatch, source)
+    return source
 
 
 @pytest.fixture
@@ -142,3 +220,15 @@ def write_defaults(defaults_dir: Path, stems: tuple[str, ...] = PROMPT_STEMS) ->
 def patch_defaults(monkeypatch: pytest.MonkeyPatch, defaults_dir: Path) -> None:
     """Redirect run_pipeline's default-prompt resolver at a tmp defaults dir."""
     monkeypatch.setattr(_run_pipeline_module, "_resolve_defaults_dir", lambda: defaults_dir)
+
+
+def write_skin(source_dir: Path, names: tuple[str, ...] = ("index.css", "title.txt")) -> None:
+    """Write placeholder skin files for the given names into source_dir."""
+    source_dir.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (source_dir / name).write_text(f"skin {name}\n")
+
+
+def patch_skin_source(monkeypatch: pytest.MonkeyPatch, source_dir: Path) -> None:
+    """Redirect the afm skin materializer's packaged-dir resolver at a tmp dir."""
+    monkeypatch.setattr(_afm_skin_module, "_resolve_packaged_skin_dir", lambda: source_dir)

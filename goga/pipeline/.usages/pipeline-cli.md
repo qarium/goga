@@ -1,9 +1,9 @@
 # pipeline_cli — in-container CLI for python -m goga.pipeline
 
 `pipeline_cli` parses argv via argparse and dispatches to the flat listing (`list_pipelines`),
-the overview (`describe_pipelines`), the card (`describe_pipeline`), or run coordination
-(`run_pipeline`). Invoked by the host-side docker launcher through the runpy entrypoint in
-`__main__.py`.
+the overview (`describe_pipelines`), the card (`describe_pipeline`), run coordination
+(`run_pipeline`), or the lifecycle-event bridge (`run_hook`). Invoked by the host-side
+docker launcher through the runpy entrypoint in `__main__.py`.
 
 ## Subcommands
 
@@ -21,7 +21,7 @@ the overview (`describe_pipelines`), the card (`describe_pipeline`), or run coor
 
 ### run
 
-`run NAME [--info] [-w WORKFLOW | --no-workflow] [-s NAME]... [--port PORT] [--parallel N]`
+`run NAME [--info] [-w WORKFLOW | --no-workflow] [-p PROFILE] [-s NAME]... [--port PORT] [--parallel N] [--fail-on-error]`
 
 - NAME (positional, required) — pipeline name without extension.
 - `--info`/`-i` (flag) — print the card instead of running: `name:` and `description:` field
@@ -33,17 +33,37 @@ the overview (`describe_pipelines`), the card (`describe_pipeline`), or run coor
 - `-w WORKFLOW` / `--no-workflow` — the workflow decision, available in BOTH modes: a run and a
   card resolve it through the same shared rule set. `--no-workflow` disables application;
   `-w WORKFLOW` names an explicit workflow; neither flag triggers the basename auto-match.
+- `-p PROFILE` / `--profile PROFILE` — the contributor-profile activation channel, available
+  in BOTH modes: the value composes with the `GOGA_PROFILE` env channel and the workflow's
+  `profile:` default (`-p` wins). The workflow-file renders with the active profile; the card
+  reflects the same composition a run with the same flag executes.
 - `-s NAME` (repeatable) — stage names to skip, available in BOTH modes: a run applies them to
   the execution, a card reflects them in the composition. Forwarding-only — unknown names
   surface as the compiler's structural error during composition.
-- `--port PORT` (int) — dashboard port, allocated by the host launcher. Required only when
+- `--port PORT` (int) — dashboard port, resolved by the host launcher (its `--port` CLI
+  value when the user pinned one, else an allocated free port). Required only when
   `--info` is absent; ignored in info mode.
 - `--parallel N` (int, optional) — max concurrently executing stages; run mode only.
+- `--fail-on-error` (flag) — fail-fast: a failed stage ends the run
+  with a non-zero engine exit; binds in both modes, effective in run
+  mode only (ignored with --info).
 
 Dispatch: run without `--info` → `run_pipeline(NAME, project_dir, user_dir, PORT,
-workflow=<WF or None>, no_workflow=<bool>, skip=<names or None>, parallel=<N or None>)`; run
+workflow=<WF or None>, no_workflow=<bool>, profile=<P or None>, skip=<names or None>,
+parallel=<N or None>, fail_on_error=<bool>)`; run
 with `--info` → `describe_pipeline(NAME, project_dir, user_dir, workflow=<WF or None>,
-no_workflow=<bool>, skip=<names or None>)`.
+no_workflow=<bool>, profile=<P or None>, skip=<names or None>)`.
+
+### hook
+
+`hook` (no options)
+
+- Machinery entry for the registered afm observer hook — not a user
+  surface; spawned once per lifecycle event with the event on stdin and
+  the `AFM_*` environment. Non-curated events exit 0 without importing
+  the platform.
+- Dispatch: `hook` → `run_hook()`; the exit code is its result — 0 on
+  success and ignored events, non-zero only on a bridge-internal failure.
 
 ## Exit codes
 

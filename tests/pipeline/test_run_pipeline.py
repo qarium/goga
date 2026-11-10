@@ -10,10 +10,17 @@ from unittest.mock import call
 import pytest
 from goga.config import PipelineConfig, ProjectConfig
 from goga.config.hooks import AppliedAmendment, ConfigHooks, ConfigOverlay
-from goga.docker import encode_extra_env
-from goga.pipeline import run_pipeline
-from goga.pipeline.compiler import FlowDocument, PipelineDocument, PipelineRoles, StructuralError
+from goga.docker import encode_extra_env, encode_home_profiles
+from goga.pipeline import run_pipeline, write_afm_config
+from goga.pipeline.compiler import (
+    FlowDocument,
+    FlowTeamMember,
+    PipelineDocument,
+    PipelineRoles,
+    StructuralError,
+)
 from goga.pipeline.hooks import WorkflowOverlay
+from goga.pipeline.workflow import WorkflowAssistant, WorkflowDelegation, WorkflowDocument
 
 from tests.pipeline.conftest import (
     PROMPT_STEMS,
@@ -36,11 +43,12 @@ class TestRunPipelineContract:
         assert run_pipeline is not None
 
     def test_run_pipeline_signature_matches_contract(self) -> None:
-        """run_pipeline exposes the full 8-parameter contract signature.
+        """run_pipeline exposes the full 10-parameter contract signature.
 
-        ``(name, project_dir, user_dir, port, workflow, no_workflow, skip,
-        parallel)`` — the workflow decision and the skip names arrive as
-        explicit parameters after ``port``.
+        ``(name, project_dir, user_dir, port, workflow, no_workflow, profile,
+        skip, parallel, fail_on_error)`` — the workflow decision, the profile
+        activation channel, the skip names, and the CLI fail-fast decision
+        arrive as explicit parameters after ``port``.
         """
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
@@ -52,9 +60,12 @@ class TestRunPipelineContract:
             "port",
             "workflow",
             "no_workflow",
+            "profile",
             "skip",
             "parallel",
+            "fail_on_error",
         ]
+        assert signature.parameters["fail_on_error"].default is False
 
     def test_run_pipeline_returns_zero_on_success(self, tmp_path: Path, afm_dir: Path) -> None:
         """run_pipeline returns 0 on a successful compile + afm invocation."""
@@ -82,7 +93,9 @@ class TestRunPipelineLogic:
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
+        mock_run_flow.assert_called_once_with(
+            afm_dir / "flow.yml", 50321, max_parallel=None, exit_on_fail=False, env={}
+        )
 
     def test_run_pipeline_resolves_user_source_when_only_in_user_dir(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -115,7 +128,9 @@ class TestRunPipelineLogic:
             root_dir=str(Path.cwd().resolve()),
             project_name="widget",
         )
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
+        mock_run_flow.assert_called_once_with(
+            afm_dir / "flow.yml", 50321, max_parallel=None, exit_on_fail=False, env={}
+        )
 
     def test_run_pipeline_returns_nonzero_when_name_not_found(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -188,7 +203,9 @@ class TestRunPipelineLogic:
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 8080)
 
-        assert mock_run_flow.call_args == call(afm_dir / "flow.yml", 8080, max_parallel=None, env={})
+        assert mock_run_flow.call_args == call(
+            afm_dir / "flow.yml", 8080, max_parallel=None, exit_on_fail=False, env={}
+        )
 
     def test_run_pipeline_threads_parallel_to_run_flow(self, tmp_path: Path, afm_dir: Path) -> None:
         """parallel=4 reaches run_flow as max_parallel=4 (host -p/--parallel → afm --max-parallel)."""
@@ -204,7 +221,7 @@ class TestRunPipelineLogic:
         # max_parallel=4 threads straight through to run_flow — afm then receives
         # ``--max-parallel 4``. ``parallel`` is compilation-orthogonal, so
         # compile_flow is unaffected (the mock still returns the canned docs).
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=4, env={})
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=4, exit_on_fail=False, env={})
 
     def test_run_pipeline_parallel_none_default(self, tmp_path: Path, afm_dir: Path) -> None:
         """Omitting parallel threads max_parallel=None to run_flow (flag omitted downstream)."""
@@ -218,7 +235,39 @@ class TestRunPipelineLogic:
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
         # None reaches run_flow verbatim ⇒ run_flow omits --max-parallel (backward compat).
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
+        mock_run_flow.assert_called_once_with(
+            afm_dir / "flow.yml", 50321, max_parallel=None, exit_on_fail=False, env={}
+        )
+
+    def test_run_pipeline_threads_fail_on_error_to_run_flow(self, tmp_path: Path, afm_dir: Path) -> None:
+        """fail_on_error=True reaches run_flow as exit_on_fail=True (click --fail-on-error → afm --exit-on-fail)."""
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321, fail_on_error=True)
+
+        # exit_on_fail=True threads straight through to run_flow — afm then receives
+        # ``--exit-on-fail``. The decision is compilation-orthogonal, so
+        # compile_flow is unaffected (the mock still returns the canned docs).
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, exit_on_fail=True, env={})
+
+    def test_run_pipeline_fail_on_error_false_default(self, tmp_path: Path, afm_dir: Path) -> None:
+        """Omitting fail_on_error threads exit_on_fail=False to run_flow (flag omitted downstream)."""
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        # False reaches run_flow verbatim ⇒ run_flow omits --exit-on-fail (backward compat).
+        assert mock_run_flow.call_args.kwargs["exit_on_fail"] is False
 
     def test_run_pipeline_afm_dir_not_set_raises_runtime_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -395,7 +444,7 @@ class TestRunPipelineLogic:
         assert loaded["stages"][1]["depends_on"] == ["build"]
 
         # run_flow received the compiled flow path (not the DSL path) and the port.
-        mock_run_flow.assert_called_once_with(flow_path, 50321, max_parallel=None, env={})
+        mock_run_flow.assert_called_once_with(flow_path, 50321, max_parallel=None, exit_on_fail=False, env={})
 
     def test_run_pipeline_threads_real_role_override_through_full_chain(self, tmp_path: Path, afm_dir: Path) -> None:
         """A real ``roles`` header block threads verbatim through the whole chain.
@@ -439,6 +488,215 @@ class TestRunPipelineLogic:
         # Non-overridden roles + summary fall back to the real package defaults.
         for stem in ("implementation", "review", "summary"):
             assert (prompts_dir / f"{stem}.md").read_text() != ""
+
+
+class TestRunPipelineGateEnvDelivery:
+    """Step 14b — the per-step gate env wrappers apply as a post-compile verify-step patch."""
+
+    def test_run_pipeline_delivers_gate_step_env_through_wrappers(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+    ) -> None:
+        """A workflow gate step carrying env compiles, then its verify run/command lines point at wrappers.
+
+        The real (un-mocked) compile chain runs through ``run_pipeline``; the
+        gate env delivery then rewrites the claimed steps' lines in the
+        written flow-file and generates the closures under the (autouse
+        redirected) container-local base.
+        """
+        import yaml
+
+        afm_dir.mkdir(parents=True)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text(
+            "stages:\n"
+            "  build:\n"
+            "    gates:\n"
+            "      - name: tests\n"
+            "        script: pytest -q\n"
+            "        env:\n"
+            "          FOO: bar\n"
+            "      - name: review\n"
+            "        agent: codex\n"
+            "        prompt: Review.\n"
+            "        env:\n"
+            "          MODEL: gpt\n"
+        )
+
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\ndescription: Deploy pipeline\n---\n\n- name: build\n  title: Build\n  prompt: Build it\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+
+        loaded = yaml.safe_load((afm_dir / "flow.yml").read_text())
+        steps = loaded["stages"][0]["verify"]
+
+        script_wrapper = Path(steps[0]["run"])
+        agent_wrapper = Path(steps[1]["command"])
+
+        assert script_wrapper.parent == tmp_path / "goga-gate-env"
+        assert script_wrapper.name == "build-0-tests"
+        assert agent_wrapper.name == "build-1-review"
+        assert script_wrapper.read_text() == "#!/bin/sh\nexport FOO=bar\npytest -q\n"
+        assert agent_wrapper.read_text() == (
+            '#!/bin/sh\nexport MODEL=gpt\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        )
+
+    def test_run_pipeline_without_gate_env_keeps_flow_byte_identical(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+    ) -> None:
+        """A workflow whose gates carry no env maps is neither read nor rewritten by the delivery."""
+        afm_dir.mkdir(parents=True)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text(
+            "stages:\n  build:\n    gates:\n      - name: tests\n        script: pytest -q\n",
+        )
+
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\ndescription: Deploy pipeline\n---\n\n- name: build\n  title: Build\n  prompt: Build it\n",
+        )
+
+        with (
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+        assert "run: pytest -q" in (afm_dir / "flow.yml").read_text()
+        assert not (tmp_path / "goga-gate-env").exists()
+
+
+class TestRunPipelineStageEnvDelivery:
+    """Step 14 — the per-stage env delivery through the full run chain.
+
+    The stage-env forms the run coordination patches after the real compile:
+    the payload-closure form of a script stage and the combined delivery of
+    stage env with gate-step env on one stage (the two sequential patches of
+    steps 14/14b over the same written flow-file).
+    """
+
+    @pytest.fixture
+    def stage_wrapper_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """Relocate the stage wrapper base into the tmp tree and return its path."""
+        from goga.pipeline import stage_env_wrappers
+
+        base = tmp_path / "goga-stage-env"
+        monkeypatch.setattr(stage_env_wrappers, "_WRAPPER_BASE", base)
+
+        return base
+
+    def test_run_pipeline_delivers_script_stage_env_through_payload_closure(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        stage_wrapper_base: Path,
+    ) -> None:
+        """A script stage with a stage env gets the payload closure — its script field points at the wrapper.
+
+        The real (un-mocked) compile chain runs through ``run_pipeline``; the
+        stage env delivery then patches the claimed stage's ``script:`` line in
+        the written flow-file and generates the closure under the redirected
+        container-local base. No agent resolves on this path — the config's
+        ``pipeline`` section carries no agent.
+        """
+        import yaml
+
+        afm_dir.mkdir(parents=True)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text("stages:\n  build:\n    env:\n      FOO: bar\n")
+
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\ndescription: Deploy pipeline\n---\n\n- name: build\n  title: Build\n  script: pytest -q\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+
+        wrapper = str(stage_wrapper_base / "build")
+
+        loaded = yaml.safe_load((afm_dir / "flow.yml").read_text())
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert stage["script"] == wrapper
+        assert "command" not in stage
+        assert (stage_wrapper_base / "build").read_text() == "#!/bin/sh\nexport FOO=bar\npytest -q\n"
+
+    def test_run_pipeline_delivers_stage_and_gate_env_on_one_stage(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        stage_wrapper_base: Path,
+    ) -> None:
+        """Stage env and gate-step env on one stage compose — both patches land in one written flow-file.
+
+        Step 14 patches the stage's ``command:`` line to the exec closure
+        (the workflow stage declares its own agent); step 14b then patches the
+        gate step's ``run:`` line to its gate closure over the same file —
+        neither delivery disturbs the other.
+        """
+        import yaml
+
+        afm_dir.mkdir(parents=True)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text(
+            "stages:\n"
+            "  build:\n"
+            "    agent: codex\n"
+            "    env:\n"
+            "      FOO: bar\n"
+            "    gates:\n"
+            "      - name: tests\n"
+            "        script: pytest -q\n"
+            "        env:\n"
+            "          GATE_KEY: gv\n"
+        )
+
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\ndescription: Deploy pipeline\n---\n\n- name: build\n  title: Build\n  prompt: Build it\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+
+        loaded = yaml.safe_load((afm_dir / "flow.yml").read_text())
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert stage["command"] == str(stage_wrapper_base / "build")
+        assert stage["verify"][0]["run"] == str(tmp_path / "goga-gate-env" / "build-0-tests")
+
+        assert (stage_wrapper_base / "build").read_text() == (
+            '#!/bin/sh\nexport FOO=bar\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        )
+        assert (tmp_path / "goga-gate-env" / "build-0-tests").read_text() == (
+            "#!/bin/sh\nexport GATE_KEY=gv\npytest -q\n"
+        )
 
 
 class TestRunPipelineSkipStages:
@@ -1084,6 +1342,44 @@ class _RecordingPipelineHooks:
         self.completed.append(dict(kwargs))
 
 
+class _MergingPipelineHooks(_RecordingPipelineHooks):
+    """Amendment stand-in returning a MERGED overlay — the tool-contribution shape.
+
+    The base recording stand-in returns the passthrough of the authored
+    workflow (the no-tool-packages shape); this variant returns a distinct
+    merged document, so a threading assertion can prove the step-16 config
+    write receives the OVERLAY's workflow — never the pre-merge resolution.
+    """
+
+    def __init__(self, merged: WorkflowDocument, order: list[str] | None = None) -> None:
+        super().__init__(order)
+        self.merged = merged
+
+    def amend_workflow(self, **kwargs: object) -> WorkflowOverlay:
+        self.order.append("amend_workflow")
+        return WorkflowOverlay(workflow=self.merged, provenance=[])
+
+
+class _WriteAfmConfigSpy:
+    """Recording stand-in for the step-16 afm configuration write seam.
+
+    Wrapped into the module seam's ``MagicMock`` so the clean-error scenarios
+    keep their mock assertions (``call_count``, ``assert_not_called``, a
+    replaced ``side_effect``); records the threaded
+    ``(agent, flow, workflow)`` triplet of every call for the threading
+    assertions.
+    """
+
+    def __init__(self, order: list[str]) -> None:
+        self.order = order
+        self.calls: list[tuple[str | None, object, object]] = []
+
+    def __call__(self, agent: str | None, flow: object = None, workflow: object = None) -> Path:
+        self.order.append("write_afm_config")
+        self.calls.append((agent, flow, workflow))
+        return Path("/home/goga/.afm/config.yaml")
+
+
 class TestRunPipelineConfigAndLaunchLayer:
     """Steps 1-2 and 14/17/19 — the load-and-amend opening, the afm
     configuration write, the launch layer composition, and their clean-error
@@ -1108,8 +1404,9 @@ class TestRunPipelineConfigAndLaunchLayer:
         ``load_project_config`` records and returns the effective
         configuration as the authored one; ``amend_config`` records and
         returns the given overlay (the passthrough of its input when
-        omitted); ``write_afm_config`` and the pipeline hooks zone record
-        into the shared ``order`` list.
+        omitted); ``write_afm_config`` (the recording spy, wrapped in the
+        module seam's mock) and the pipeline hooks zone record into the
+        shared ``order`` list.
         """
 
         def _load() -> ProjectConfig:
@@ -1120,13 +1417,10 @@ class TestRunPipelineConfigAndLaunchLayer:
             order.append("amend")
             return overlay if overlay is not None else ConfigOverlay(config=config, applied=[])
 
-        def _write_afm_config(agent: str | None) -> Path:
-            order.append("write_afm_config")
-            return Path("/home/goga/.afm/config.yaml")
-
+        write_spy = _WriteAfmConfigSpy(order)
         monkeypatch.setattr(_run_pipeline_module, "load_project_config", _load)
         monkeypatch.setattr(ConfigHooks, "amend_config", _amend)
-        monkeypatch.setattr(_run_pipeline_module, "write_afm_config", mock.MagicMock(side_effect=_write_afm_config))
+        monkeypatch.setattr(_run_pipeline_module, "write_afm_config", mock.MagicMock(side_effect=write_spy))
 
         hooks = _RecordingPipelineHooks(order)
         monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: hooks)
@@ -1158,13 +1452,14 @@ class TestRunPipelineConfigAndLaunchLayer:
 
         project_dir = tmp_path / "pipelines"
         write_pipeline(project_dir)
+        documents = fake_documents()
 
         def _run_flow(*args: object, **kwargs: object) -> int:
             order.append("run_flow")
             return 0
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=documents),
             mock.patch.object(_run_pipeline_module, "run_flow", side_effect=_run_flow) as mock_run_flow,
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 9000)
@@ -1177,10 +1472,12 @@ class TestRunPipelineConfigAndLaunchLayer:
         assert tracked == ["load", "amend", "write_afm_config", "emit_run_created", "run_flow"]
 
         # The afm configuration write receives the EFFECTIVE agent — the
-        # amendment's "opencode", never the authored "codex".
+        # amendment's "opencode", never the authored "codex" — with the
+        # compiled flow document and the overlay workflow threaded after it
+        # (no workflow resolved here, so the overlay workflow is None).
         mock_write_afm = _run_pipeline_module.write_afm_config
         assert mock_write_afm.call_count == 1
-        assert mock_write_afm.call_args == call("opencode")
+        assert mock_write_afm.call_args == call("opencode", documents[1], None)
 
         captured = capsys.readouterr()
         assert "config amendments: 1 applied" in captured.err
@@ -1188,6 +1485,91 @@ class TestRunPipelineConfigAndLaunchLayer:
 
         assert mock_run_flow.call_args.kwargs["env"] == {"T": "1"}
         assert mock_run_flow.call_args.kwargs["max_parallel"] is None
+
+    def test_run_pipeline_threads_flow_and_workflow_to_config_write(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Step 16 threads the compiled flow document and the overlay workflow.
+
+        The config write receives the very object ``compile_flow`` returned
+        (the document the flow-file was serialized from) and the very
+        document of the overlay (the MERGED workflow when a tool contributed
+        — never the pre-merge resolution), so the generated collaboration
+        profiles can never diverge from the compiled flow-file.
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig(agent="codex")))
+
+        merged = WorkflowDocument(
+            assistants={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")},
+            delegation=WorkflowDelegation(depth=2),
+        )
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: _MergingPipelineHooks(merged, order))
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+        documents = fake_documents()
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=documents),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        write_spy = _run_pipeline_module.write_afm_config.side_effect
+        assert isinstance(write_spy, _WriteAfmConfigSpy)
+
+        # The threaded objects are the compile output and the overlay
+        # workflow themselves — the same instances, no copies.
+        assert write_spy.calls == [("codex", documents[1], merged)]
+        assert write_spy.calls[0][1] is documents[1]
+        assert write_spy.calls[0][2] is merged
+        mock_run_flow.assert_called_once()
+
+    def test_run_pipeline_collaboration_error_fires_no_events(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A collaboration ValueError from the config write propagates — no events, no launch.
+
+        The workflow's assistant resolves no agent (no own agent, no global
+        agent) and the compiled flow references it, so the REAL config write
+        raises its pre-run error before any file is written — step 16
+        precedes the run-creation facts, so no events fire and afm never
+        launches.
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig()))
+        monkeypatch.setattr(_run_pipeline_module, "write_afm_config", write_afm_config)
+
+        merged = WorkflowDocument(assistants={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")})
+        merging_hooks = _MergingPipelineHooks(merged, order)
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: merging_hooks)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+        pipeline_doc, _ = fake_documents()
+        flow_doc = FlowDocument(
+            name="deploy",
+            description="d",
+            team=[FlowTeamMember(id="reviewer", title="reviewer", profile="goga-reviewer", instruction="", skills=[])],
+            stages=[],
+        )
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=(pipeline_doc, flow_doc)),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+            pytest.raises(ValueError, match=r"assistant reviewer at workflow\.assistants resolved no agent"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        # The pre-run error precedes the run-creation facts and the launch —
+        # the declared error semantics of step 16.
+        assert "emit_run_created" not in order
+        assert "run_flow" not in order
+        assert merging_hooks.created == []
+        assert merging_hooks.completed == []
+        mock_run_flow.assert_not_called()
 
     def test_run_pipeline_launch_layer_cli_entries_above_task_env_engine_keys_dropped(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -1411,3 +1793,146 @@ class TestRunPipelineConfigAndLaunchLayer:
         assert hasattr(_run_pipeline_module, "decode_extra_env")
         assert not hasattr(_run_pipeline_module, "encode_extra_env")
         assert not hasattr(_run_pipeline_module, "DockerRunner")
+
+
+class TestRunPipelineProfileActivation:
+    """Steps 8/9/19 — the activation context, the feedback line, and the layer export.
+
+    The run coordination decodes the ``GOGA_HOME_PROFILES`` bundle and reads
+    ``GOGA_PROFILE`` once (step 8), prints the launch feedback line when a
+    workflow resolved (step 9), and composes the launch layer over the widened
+    engine drop set with the effective profile exported explicitly (step 19).
+    Every scenario drives the real resolution and the real config load (the
+    conftest-authored ``.goga/config.yml``), with only ``compile_flow`` /
+    ``run_flow`` and the hooks zone mocked at the module boundaries.
+    """
+
+    @staticmethod
+    def _write_env_config(cwd: Path, env: dict[str, str]) -> None:
+        """Overwrite the authored configuration with one pipeline.env layer."""
+        lines = ["language: python", "pipeline:", "  env:"]
+        # Values are double-quoted so YAML keeps them strings — an unquoted
+        # ``OTHER: 1`` parses as int and trips the string-values validation.
+        lines += [f'    {key}: "{value}"' for key, value in env.items()]
+        (cwd / ".goga" / "config.yml").write_text("\n".join(lines) + "\n")
+
+    def test_run_pipeline_launch_layer_exports_effective_profile(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Design scenario: the effective profile exports above the dropped engine spoofs.
+
+        The bundle carries ``mixa``; the workflow ``hard`` declares the
+        literal default ``profile: mixa``; ``pipeline.env`` spoofs
+        ``GOGA_PROFILE``/``GOGA_WORKFLOW`` and carries one plain entry; the
+        CLI payload adds one entry. The captured layer keeps the two plain
+        entries and exports exactly the EFFECTIVE profile — the spoofed
+        values never enter, and stdout carries the full feedback line.
+        """
+        workflows_dir = isolated_cwd / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "hard.yml").write_text("profile: mixa\nprompt: hard prompt\n")
+
+        monkeypatch.setenv("GOGA_HOME_PROFILES", encode_home_profiles({"mixa": {"worker": {"agent": "codex"}}}))
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["K=v"]))
+        self._write_env_config(isolated_cwd, {"GOGA_PROFILE": "evil", "GOGA_WORKFLOW": "spoof", "OTHER": "1"})
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hard")
+
+        assert exit_code == 0
+        assert mock_run_flow.call_args.kwargs["env"] == {"OTHER": "1", "K": "v", "GOGA_PROFILE": "mixa"}
+
+        captured = capsys.readouterr()
+        assert 'Pipeline running with workflow "hard" and profile "mixa"' in captured.out
+
+    def test_run_pipeline_damaged_bundle_no_events_no_launch(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Design scenario: a damaged bundle is one clean error before the delivery.
+
+        ``GOGA_HOME_PROFILES="###"`` decodes to nothing: the run returns 1
+        with a clean stderr line naming the variable, no run event fires
+        (neither creation nor completion), and afm never launches — the
+        return precedes the amendment delivery and every downstream step.
+        """
+        monkeypatch.setenv("GOGA_HOME_PROFILES", "###")
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+
+        hooks = _RecordingPipelineHooks()
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: hooks)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "GOGA_HOME_PROFILES" in captured.err
+        assert "Traceback" not in captured.err + captured.out
+        assert hooks.created == []
+        assert hooks.completed == []
+        assert hooks.order == []
+        mock_run_flow.assert_not_called()
+        mock_compile.assert_not_called()
+
+    def test_run_pipeline_feedback_line_variants(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The feedback line prints per the workflow resolution — never otherwise.
+
+        Without a resolved workflow no line prints (activation ignored
+        entirely); a profile-free workflow prints the short form naming the
+        resolved file stem.
+        """
+        workflows_dir = isolated_cwd / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "plain.yml").write_text("prompt: plain prompt\n")
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+        monkeypatch.delenv("GOGA_HOME_PROFILES", raising=False)
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert capsys.readouterr().out == ""
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="plain")
+
+        assert capsys.readouterr().out == 'Pipeline running with workflow "plain"\n'

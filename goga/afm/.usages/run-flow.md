@@ -8,7 +8,7 @@ or port allocation — those live in other cells.
 
 ## Signature
 
-run_flow(flow_path: Path, port: int, max_parallel: int | None = None, env: dict[str, str] | None = None) -> exit_code: int
+run_flow(flow_path: Path, port: int, max_parallel: int | None = None, exit_on_fail: bool = False, env: dict[str, str] | None = None) -> exit_code: int
 
 ## Parameters
 
@@ -21,6 +21,10 @@ run_flow(flow_path: Path, port: int, max_parallel: int | None = None, env: dict[
   (default), the `--max-parallel` flag is OMITTED and afm applies its own
   default. Decided by the caller; `run_flow` only forwards
   it.
+- `exit_on_fail` — fail-fast decision for the run. When True, the launch argv
+  carries the engine's explicit `--exit-on-fail` flag — a failed stage stops
+  the run and the engine exits with code 1. When False (default), the flag is
+  OMITTED and the engine's own failure semantics apply.
 - `env` — optional environment layer applied on top of the inherited process
   environment for the afm subprocess only. Composed by the caller (the
   in-container run coordination): the effective task env layer (`pipeline.env`)
@@ -39,6 +43,14 @@ The `--max-parallel` flag is emitted **only** when `max_parallel` is not None.
 Absence (None) propagates from the host CLI (no `-p/--parallel`) all the way to
 `run_flow`, where it becomes the omission of `--max-parallel` — afm then runs
 unbounded (its default). Never substitute a default value for None.
+
+## Fail-fast contract
+
+The `--exit-on-fail` flag is emitted **only** when `exit_on_fail` is
+True — the same omission discipline as `--max-parallel`. The flag rides
+the argv (visible in the process listing); the `AFM_EXIT_ON_FAIL`
+environment variable is never set by goga. The engine's exit code —
+including the failure exit under the flag — propagates verbatim.
 
 ## Environment layer contract
 
@@ -62,6 +74,8 @@ unchanged.
 - Do not pass a flow name instead of an absolute path — afm treats the argument
   as a path.
 - Do not default `max_parallel` to 0 or any value — None means "omit the flag".
+- Do not set `AFM_EXIT_ON_FAIL` in the env layer or the process
+  environment — the argv flag is the single channel.
 - Do not compose the layer here — the caller owns the composition; `run_flow`
   only applies what it receives.
 - Do not resolve paths or allocate ports here — those are the caller's jobs.

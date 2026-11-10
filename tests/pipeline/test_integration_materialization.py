@@ -126,7 +126,9 @@ class TestIntegrationMaterializationScenarioA(_MaterializationHarness):
 
         # The composition still drives afm: run_flow is called once with the
         # compiled flow path (not the DSL path) and the caller-allocated port.
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
+        mock_run_flow.assert_called_once_with(
+            afm_dir / "flow.yml", 50321, max_parallel=None, exit_on_fail=False, env={}
+        )
 
 
 class TestIntegrationMaterializationScenarioB(_MaterializationHarness):
@@ -177,7 +179,9 @@ class TestIntegrationMaterializationScenarioB(_MaterializationHarness):
             "review.md",
             "summary.md",
         ]
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
+        mock_run_flow.assert_called_once_with(
+            afm_dir / "flow.yml", 50321, max_parallel=None, exit_on_fail=False, env={}
+        )
 
 
 class TestIntegrationMaterializationScenarioC(_MaterializationHarness):

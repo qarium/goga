@@ -8,6 +8,13 @@
   notification, the facts of the composed moment
 - ``RunCompleted(...)`` — the same facts recomputed at the completion
   moment, plus the launch attempt's ``exit_code``
+- ``RunIdentity(run_id, run_dir, root_dir, resumed)`` — the run facts of
+  the afm flow block, the shared spine of both bridged events
+- ``StageTransition(id, name, from_status, to_status, phase)`` — one
+  stage transition of the afm stage block (the raw ``from`` / ``to``
+  keywords renamed)
+- ``RunEvent(...)`` / ``StageEvent(...)`` — the read-only contexts the
+  bridged run-interior emissions deliver, ``reason`` defaulting to ``''``
 - ``PipelineHooks()`` — the checkpoint surface delivering the hard
   amendment and emitting the two soft notifications
 
@@ -22,6 +29,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import logging
+from typing import ClassVar
 
 import pytest
 from goga.pipeline.hooks import (
@@ -30,11 +38,15 @@ from goga.pipeline.hooks import (
     PipelineIdentity,
     RunCompleted,
     RunCreated,
+    RunEvent,
+    RunIdentity,
+    StageEvent,
+    StageTransition,
     WorkflowDecision,
     WorkflowOverlay,
     WorkIdentity,
 )
-from goga.pipeline.workflow import WorkflowDocument
+from goga.pipeline.workflow import WorkflowDocument, WorkflowGates, WorkflowRepeat
 
 from tests.conftest import is_kw_only_dataclass
 from tests.pipeline.hooks.conftest import ZONE_ALL, field_defaults
@@ -115,6 +127,103 @@ class TestContextsContract:
     def test_run_completed_is_run_created_plus_exit_code_last(self) -> None:
         """The same eight fields plus ``exit_code`` as the ninth and last."""
         assert field_defaults(RunCompleted) == [*_CREATED_FIELDS, ("exit_code", dataclasses.MISSING)]
+
+
+class TestBridgedContextsContract:
+    def test_bridged_models_are_importable_from_the_zone_facade(self) -> None:
+        """The four afm-bridge fact bundles live on the zone package and its ``__all__`` is exact."""
+        import goga.pipeline.hooks as zone
+
+        assert zone.RunIdentity is RunIdentity
+        assert zone.StageTransition is StageTransition
+        assert zone.RunEvent is RunEvent
+        assert zone.StageEvent is StageEvent
+        # The bridged-events task completed the facade to the fifteen
+        # contract names.
+        assert zone.__all__ == ZONE_ALL
+        assert len(ZONE_ALL) == 15
+
+    def test_bridged_models_are_kw_only_dataclasses(self) -> None:
+        """Positional construction raises ``TypeError`` for every bridged model."""
+        for cls in (RunIdentity, StageTransition, RunEvent, StageEvent):
+            assert dataclasses.is_dataclass(cls)
+            assert is_kw_only_dataclass(cls)
+
+        run = RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=False)
+
+        with pytest.raises(TypeError):
+            RunIdentity("run-42", "/runs/run-42", "/workspace", False)  # type: ignore[misc]
+
+        with pytest.raises(TypeError):
+            StageTransition("build", "Build", "approved", "executing", "execution")  # type: ignore[misc]
+
+        with pytest.raises(TypeError):
+            RunEvent("deploy", run, "e", "t", "")  # type: ignore[misc]
+
+        with pytest.raises(TypeError):
+            StageEvent("deploy", run, object(), "e", "t", "")  # type: ignore[misc]
+
+    def test_bridged_models_carry_exactly_the_declared_fields(self) -> None:
+        """Names and order per the manifest — ``reason`` last, defaulting to ``''``."""
+        assert field_defaults(RunIdentity) == [
+            ("run_id", dataclasses.MISSING),
+            ("run_dir", dataclasses.MISSING),
+            ("root_dir", dataclasses.MISSING),
+            ("resumed", dataclasses.MISSING),
+        ]
+        assert field_defaults(StageTransition) == [
+            ("id", dataclasses.MISSING),
+            ("name", dataclasses.MISSING),
+            ("from_status", dataclasses.MISSING),
+            ("to_status", dataclasses.MISSING),
+            ("phase", dataclasses.MISSING),
+        ]
+        assert field_defaults(RunEvent) == [
+            ("pipeline", dataclasses.MISSING),
+            ("run", dataclasses.MISSING),
+            ("event_id", dataclasses.MISSING),
+            ("occurred_at", dataclasses.MISSING),
+            ("reason", ""),
+        ]
+        assert field_defaults(StageEvent) == [
+            ("pipeline", dataclasses.MISSING),
+            ("run", dataclasses.MISSING),
+            ("stage", dataclasses.MISSING),
+            ("event_id", dataclasses.MISSING),
+            ("occurred_at", dataclasses.MISSING),
+            ("reason", ""),
+        ]
+
+    def test_bridged_constructors_match_the_declared_signatures(self) -> None:
+        """``inspect.signature`` parameter order matches the contract."""
+        assert list(inspect.signature(RunIdentity).parameters) == [
+            "run_id",
+            "run_dir",
+            "root_dir",
+            "resumed",
+        ]
+        assert list(inspect.signature(StageTransition).parameters) == [
+            "id",
+            "name",
+            "from_status",
+            "to_status",
+            "phase",
+        ]
+        assert list(inspect.signature(RunEvent).parameters) == [
+            "pipeline",
+            "run",
+            "event_id",
+            "occurred_at",
+            "reason",
+        ]
+        assert list(inspect.signature(StageEvent).parameters) == [
+            "pipeline",
+            "run",
+            "stage",
+            "event_id",
+            "occurred_at",
+            "reason",
+        ]
 
 
 # --- Logic tests ---
@@ -263,6 +372,118 @@ class TestRunCompleted:
             )
 
         assert build() == build()
+
+
+class TestRunIdentity:
+    def test_construction_carries_every_field_verbatim(self) -> None:
+        """Each attribute round-trips — the run facts are observed, not derived."""
+        context = RunIdentity(
+            run_id="run-42",
+            run_dir="/home/goga/pipeline/runs/run-42",
+            root_dir="/workspace",
+            resumed=False,
+        )
+
+        assert context.run_id == "run-42"
+        assert context.run_dir == "/home/goga/pipeline/runs/run-42"
+        assert context.root_dir == "/workspace"
+        assert context.resumed is False
+
+    def test_identically_built_identities_are_equal(self) -> None:
+        """Dataclass equality holds for two identically-built identities."""
+
+        def build() -> RunIdentity:
+            return RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=True)
+
+        assert build() == build()
+
+
+class TestStageTransition:
+    def test_construction_carries_every_field_verbatim(self) -> None:
+        """The transition facts round-trip under their idiomatic names."""
+        transition = StageTransition(
+            id="build",
+            name="Build",
+            from_status="approved",
+            to_status="executing",
+            phase="execution",
+        )
+
+        assert transition.id == "build"
+        assert transition.name == "Build"
+        assert transition.from_status == "approved"
+        assert transition.to_status == "executing"
+        assert transition.phase == "execution"
+
+    def test_the_raw_from_to_keywords_never_become_attributes(self) -> None:
+        """The documented rename — no ``from`` / ``to`` attribute exists."""
+        transition = StageTransition(
+            id="build",
+            name="Build",
+            from_status="approved",
+            to_status="executing",
+            phase="execution",
+        )
+
+        assert not hasattr(transition, "from")
+        assert not hasattr(transition, "to")
+
+
+class TestRunEvent:
+    def test_construction_carries_every_field_verbatim(self) -> None:
+        """Each attribute round-trips — the event is a passthrough fact bundle."""
+        run = RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=True)
+
+        event = RunEvent(
+            pipeline="deploy",
+            run=run,
+            event_id="run-42:lifecycle:flow_resumed",
+            occurred_at="2026-10-21T12:00:00Z",
+            reason="operator request",
+        )
+
+        assert event.pipeline == "deploy"
+        assert event.run is run
+        assert event.event_id == "run-42:lifecycle:flow_resumed"
+        assert event.occurred_at == "2026-10-21T12:00:00Z"
+        assert event.reason == "operator request"
+
+    def test_reason_defaults_to_the_empty_string(self) -> None:
+        """Omitting ``reason`` lands ``''`` — the only default."""
+        run = RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=False)
+
+        event = RunEvent(pipeline="deploy", run=run, event_id="e", occurred_at="t")
+
+        assert event.reason == ""
+
+
+class TestStageEvent:
+    def test_construction_carries_every_field_verbatim(self) -> None:
+        """Each attribute round-trips — the nested facts included, ``reason`` defaulting."""
+        run = RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=False)
+        stage = StageTransition(
+            id="build",
+            name="Build",
+            from_status="approved",
+            to_status="executing",
+            phase="execution",
+        )
+
+        event = StageEvent(
+            pipeline="deploy",
+            run=run,
+            stage=stage,
+            event_id="run-42:transition:7:stage_execution_started",
+            occurred_at="2026-10-21T12:00:00Z",
+        )
+
+        assert event.pipeline == "deploy"
+        assert event.run is run
+        assert event.stage is stage
+        assert event.stage.name == "Build"
+        assert event.event_id == "run-42:transition:7:stage_execution_started"
+        assert event.occurred_at == "2026-10-21T12:00:00Z"
+        assert event.reason == ""
 
 
 # --- Task 7: the checkpoint surface — contract tests ---
@@ -555,6 +776,55 @@ class TestAmendWorkflowDelivery:
 
         assert witnesses == []  # the walk stopped at the failing tool — no merge ran
 
+    def test_amend_workflow_missing_gates_fact_fails_that_hook_hard(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A duck-typed document with every fact except ``gates`` fails its hook — not the merge.
+
+        ``gates`` is the LAST entry of the fact-validation tuple, so only a
+        document carrying the seven earlier facts pins it: without the
+        entry, a pre-gates tool document would crash past the loop with a
+        bare ``AttributeError`` (the discard check reads ``document.gates``
+        outside the try) instead of the structured hard error naming the
+        hook, the tool, and the action.
+        """
+
+        class _SevenFactDocument:
+            """A workflow-document duck carrying every amend fact except ``gates``."""
+
+            prompt: ClassVar[None] = None
+            stages: ClassVar[dict[str, object]] = {}
+            extend: ClassVar[dict[str, object]] = {}
+            memory: ClassVar[None] = None
+            assistants: ClassVar[dict[str, object]] = {}
+            delegation: ClassVar[None] = None
+            repeat: ClassVar[None] = None
+
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_stale(hooks: object) -> None:
+            def stale(self: object, context: object) -> None:
+                context.contribute(_SevenFactDocument())
+
+            hooks.subscribe("pipeline", "amend_workflow", "stale", stale)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_stale)
+
+        pipeline, decision, work = _facts()
+
+        with pytest.raises(
+            ValueError,
+            match=r"pipeline\.amend_workflow: .* object has no attribute 'gates'",
+        ):
+            PipelineHooks().amend_workflow(
+                pipeline=pipeline,
+                decision=decision,
+                workflow=WorkflowDocument(prompt="authored"),
+                work=work,
+            )
+
     def test_amend_workflow_two_hooks_of_one_tool_share_one_view_and_buffer(
         self,
         pin_package_environment,
@@ -600,6 +870,76 @@ class TestAmendWorkflowDelivery:
         assert overlay.workflow is not None
         assert overlay.workflow.prompt == "authored\n\nsecond"
         assert overlay.provenance == ["demo"]
+
+    def test_repeat_only_contribution_is_not_empty(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A repeat-only contribution commits and merges — the emptiness rule counts repeat.
+
+        The delivery's emptiness discard covers ``repeat``: a document whose
+        only content is the repeat block is NOT empty, so the tool commits
+        (no discard warning) and the overlay carries the contributed block —
+        a dropped ``repeat`` term would discard the contribution and yield
+        ``workflow=None``.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_repeat(hooks: object) -> None:
+            def cycling(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(repeat=WorkflowRepeat(max_cycles=4)))
+
+            hooks.subscribe("pipeline", "amend_workflow", "cycling", cycling)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_repeat)
+
+        pipeline, decision, work = _facts()
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.hooks.events"):
+            overlay = PipelineHooks().amend_workflow(pipeline=pipeline, decision=decision, workflow=None, work=work)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.repeat is not None
+        assert overlay.workflow.repeat.max_cycles == 4
+        assert overlay.provenance == ["demo"]
+        assert not [r for r in caplog.records if r.message == "tool contributed an empty document; discarded"]
+
+    def test_gates_only_contribution_is_not_empty(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A gates-only contribution commits and merges — the emptiness rule counts gates.
+
+        The delivery's emptiness discard covers the gates block: a document
+        whose only content is the settings block is NOT empty, so the tool
+        commits (no discard warning) and the overlay carries the contributed
+        block — a dropped ``gates`` term would discard the contribution and
+        yield ``workflow=None``.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_gates(hooks: object) -> None:
+            def gating(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(gates=WorkflowGates(max_iterations=1)))
+
+            hooks.subscribe("pipeline", "amend_workflow", "gating", gating)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_gates)
+
+        pipeline, decision, work = _facts()
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.hooks.events"):
+            overlay = PipelineHooks().amend_workflow(pipeline=pipeline, decision=decision, workflow=None, work=work)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.gates is not None
+        assert overlay.workflow.gates.max_iterations == 1
+        assert overlay.provenance == ["demo"]
+        assert not [r for r in caplog.records if r.message == "tool contributed an empty document; discarded"]
 
     def test_blank_prompt_contribution_commits_and_merges_to_nothing(
         self,

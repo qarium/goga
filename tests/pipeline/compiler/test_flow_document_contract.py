@@ -12,13 +12,25 @@ Also covers the memory-slot extension: ``FlowDocument`` gains an optional
 (default ``None``), emitted between the two by ``serialize_flow`` when not
 ``None`` and omitted entirely when ``None`` — the byte-identity default for
 memory-free workflows.
+
+Also covers the collaboration-slot extension: ``FlowDocument`` gains the
+optional ``collaboration: FlowCollaboration | None`` and
+``team: list[FlowTeamMember] | None`` fields between ``memory`` and
+``stages`` (both default ``None``) — the canonical top-level emission order
+of the collaboration block and the team list.
+
+Also covers the repeat-slot extension: ``FlowDocument`` gains the optional
+``repeat: FlowRepeat | None`` field between ``description`` and ``memory``
+(default ``None``), emitted between the two by ``serialize_flow`` when not
+``None`` and omitted entirely when ``None`` — the byte-identity default for
+non-repeatable pipelines.
 """
 
 from __future__ import annotations
 
 from dataclasses import fields as dataclass_fields
 
-from goga.pipeline.compiler import FlowDocument, FlowMemory, FlowStage
+from goga.pipeline.compiler import FlowCollaboration, FlowDocument, FlowMemory, FlowRepeat, FlowStage, FlowTeamMember
 
 
 class TestFlowDocumentPromptContract:
@@ -79,17 +91,32 @@ class TestFlowDocumentMemoryContract:
         assert "memory" in names
 
     def test_flow_document_field_order_with_memory_slot(self) -> None:
-        """The fixed field order is prompt, root_dir, name, description, memory, stages.
+        """The fixed field order is prompt, root_dir, name, description, repeat, memory, collaboration, team, stages.
 
         The order matches the canonical emission order in ``serialize_flow`` —
-        the memory block sits strictly between ``description`` and ``stages``.
+        the repeat directive sits strictly between ``description`` and the
+        memory block; the memory block sits strictly between ``repeat`` and the
+        collaboration block; the team list sits strictly between the
+        collaboration block and ``stages``.
         """
         ordered = [f.name for f in dataclass_fields(FlowDocument)]
 
-        assert ordered == ["prompt", "root_dir", "name", "description", "memory", "stages"]
-        assert ordered[3] == "description"
-        assert ordered[4] == "memory"
-        assert ordered[5] == "stages"
+        assert ordered == [
+            "prompt",
+            "root_dir",
+            "name",
+            "description",
+            "repeat",
+            "memory",
+            "collaboration",
+            "team",
+            "stages",
+        ]
+        assert ordered[4] == "repeat"
+        assert ordered[5] == "memory"
+        assert ordered[6] == "collaboration"
+        assert ordered[7] == "team"
+        assert ordered[8] == "stages"
 
     def test_flow_document_memory_type_is_optional_flow_memory(self) -> None:
         """``memory`` must be typed ``FlowMemory | None``."""
@@ -117,3 +144,98 @@ class TestFlowDocumentMemoryContract:
         assert doc.name == "N"
         assert doc.description == "D"
         assert doc.stages == [stage]
+
+
+class TestFlowDocumentRepeatContract:
+    """Contract tests — the ``repeat`` slot declared by the CODEMANIFEST."""
+
+    def test_flow_document_has_repeat_field(self) -> None:
+        """``FlowDocument`` must declare a ``repeat`` field."""
+        names = [f.name for f in dataclass_fields(FlowDocument)]
+
+        assert "repeat" in names
+
+    def test_flow_document_repeat_type_is_optional_flow_repeat(self) -> None:
+        """``repeat`` must be typed ``FlowRepeat | None``."""
+        repeat_field = next(f for f in dataclass_fields(FlowDocument) if f.name == "repeat")
+
+        assert repeat_field.type == "FlowRepeat | None"
+
+    def test_flow_document_repeat_defaults_to_none(self) -> None:
+        """A ``FlowDocument`` built without ``repeat`` has ``repeat=None``.
+
+        The default is the byte-identity pin — a non-repeatable pipeline
+        serializes without the directive entirely.
+        """
+        doc = FlowDocument(name="N", description="D", stages=[])
+
+        assert doc.repeat is None
+
+    def test_flow_document_round_trips_with_repeat(self) -> None:
+        """An explicit ``FlowRepeat`` round-trips through construction verbatim."""
+        stage = FlowStage(id="a", name="A", depends_on=None, fields={})
+        directive = FlowRepeat(max_cycles=3, keep_runs=5)
+        doc = FlowDocument(name="N", description="D", repeat=directive, stages=[stage])
+
+        assert doc.repeat is directive
+        assert doc.name == "N"
+        assert doc.description == "D"
+        assert doc.stages == [stage]
+
+
+class TestFlowDocumentCollaborationContract:
+    """Contract tests — the ``collaboration`` and ``team`` slots declared by the CODEMANIFEST."""
+
+    def test_flow_document_has_collaboration_and_team_fields(self) -> None:
+        """``FlowDocument`` must declare both new fields."""
+        names = [f.name for f in dataclass_fields(FlowDocument)]
+
+        assert "collaboration" in names
+        assert "team" in names
+
+    def test_flow_document_collaboration_type_is_optional_flow_collaboration(self) -> None:
+        """``collaboration`` must be typed ``FlowCollaboration | None``."""
+        collaboration_field = next(f for f in dataclass_fields(FlowDocument) if f.name == "collaboration")
+
+        assert collaboration_field.type == "FlowCollaboration | None"
+
+    def test_flow_document_team_type_is_optional_member_list(self) -> None:
+        """``team`` must be typed ``list[FlowTeamMember] | None``."""
+        team_field = next(f for f in dataclass_fields(FlowDocument) if f.name == "team")
+
+        assert team_field.type == "list[FlowTeamMember] | None"
+
+    def test_flow_document_collaboration_and_team_default_to_none(self) -> None:
+        """A ``FlowDocument`` built without the new slots carries ``None``/``None``.
+
+        The defaults are the omission pins — a document without collaboration
+        slots serializes without those keys entirely (the byte-identity
+        default for collaboration-free hand-built documents).
+        """
+        doc = FlowDocument(name="N", description="D", stages=[])
+
+        assert doc.collaboration is None
+        assert doc.team is None
+
+    def test_flow_document_round_trips_with_collaboration_and_team(self) -> None:
+        """Explicit collaboration and team values round-trip through construction."""
+        stage = FlowStage(id="a", name="A", depends_on=None, fields={})
+        block = FlowCollaboration(mode="assistants", max_depth=2)
+        members = [
+            FlowTeamMember(id="reviewer", title="reviewer", profile="goga-reviewer", instruction="Review.", skills=[]),
+        ]
+        doc = FlowDocument(name="N", description="D", collaboration=block, team=members, stages=[stage])
+
+        assert doc.collaboration is block
+        assert doc.team is members
+        assert doc.stages == [stage]
+
+    def test_existing_construction_sites_without_collaboration_still_work(self) -> None:
+        """Pre-existing kw_only construction without the new slots is unaffected."""
+        doc = FlowDocument(name="Goga feature", description="Feature implementation", stages=[])
+
+        assert doc.name == "Goga feature"
+        assert doc.description == "Feature implementation"
+        assert doc.stages == []
+        assert doc.collaboration is None
+        assert doc.team is None

@@ -228,7 +228,7 @@ class TestEndToEndParseCompile:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         # Top-level workflow prompt carried through and emitted first.
@@ -334,7 +334,7 @@ class TestSkipStageRoundTrip:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
@@ -357,7 +357,7 @@ class TestSkipStageRoundTrip:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
@@ -382,7 +382,7 @@ class TestSkipStageRoundTrip:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
@@ -416,7 +416,7 @@ class TestSkipStageRoundTrip:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
@@ -448,7 +448,7 @@ class TestSkipStageRoundTrip:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         assert isinstance(pipeline_doc, PipelineDocument)

@@ -4,13 +4,27 @@ Imports:
     Usages:
       - registering-hooks
     From: goga/schema
-  - Usages:
+  - Types:
+      - SchemaNode
+      - DependencyFacts
+    Usages:
       - checkpoints
     From: goga/schema/hooks
+  - Types:
+      - load_project_config
+      - ProjectConfig
+    Usages:
+      - project-configuration
+    From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    From: goga/config/hooks
 
 Usages:
   click: .goga/usages/cooks/click.md
   convention: .goga/usages/conventions.md
+  beautiful_json: .goga/usages/cooks/beautiful_json.md
 
 Annotations: |
   The `convention` practice is used for:
@@ -22,7 +36,9 @@ Annotations: |
     development and testing in the project
 
   The developer must use the `click` practice to create CLI commands.
-  The `schema` command delegates its business logic to `schema_logic`.
+  The `schema` command delegates its business logic to `schema_logic`
+  and serializes the returned object tree via the `beautiful_json`
+  practice.
   The caller uses the `checkpoints` practice for the hard-failure handling of
   the schema generation — every failure of `schema_logic` surfaces as a clean
   command failure.
@@ -30,23 +46,50 @@ Annotations: |
   hook subscription surface of the schema domain actions behind the
   checkpoints of the generation.
 
+  Use the `project-configuration` practice to load the authored
+  configuration via `load_project_config` (a `ProjectConfig`) and
+  derive the traversal ignore list from the optional lint section.
+  The config amendment checkpoint runs at the load moment: the command
+  delivers the authored configuration over the `ConfigHooks` surface —
+  amend_config(config=...) — consumes the effective configuration of
+  the returned `ConfigOverlay`, and prints the amendment summary lines
+  to stderr.
+
 ---
 
 "schema(cells: list[str], max_depth: int | None = None, depends_on: list[str] = [])":
   location: schema.py
   annotations: |
-    CLI wrapper for the schema command. Delegates business logic to `schema_logic`.
+    CLI wrapper for the schema command. Delegates business logic to
+    `schema_logic` and serializes the returned object tree.
 
-    `cells` (list[str]): cell paths to filter the schema output
-    `max_depth` (int, optional): maximum nesting depth of the dependency tree
-    `depends_on` (list[str]): filter cells by dependency relationship
+    `cells`: cell paths to filter the schema output
+    `max_depth`: maximum nesting depth of the dependency tree
+    `depends_on`: filter cells by dependency relationship
 
+    Use the `project-configuration` practice for the config load of the
+    traversal ignore derivation; the config amendment checkpoint runs
+    at that load moment over the `ConfigHooks` surface.
     Use the `checkpoints` practice for the failure handling of the
     generation checkpoint.
 
     Algorithm:
-    1. Invoke `schema_logic`(`cells`, `max_depth`, `depends_on`)
-    2. On any error from `schema_logic` — AST parse errors, a hard failure
+    1. Derive the traversal ignore list: load the project configuration
+       via `load_project_config` following the `project-configuration`
+       practice; .goga/config.yml is optional for the command — its
+       absence OR invalidity runs the generation unfiltered (any loader
+       exception is swallowed, ignore=None, and no checkpoint is
+       offered — nothing was loaded); a successful load delivers the
+       config amendment checkpoint via the `ConfigHooks` surface —
+       amend_config(config=...) — and derives ignore from the effective
+       configuration of the `ConfigOverlay` — when its lint is None ->
+       ignore=None; otherwise ignore=config.lint.ignore; a hard
+       checkpoint failure (ValueError or ImportError) stops the command
+       with a clean error — never treated as config-absent; the
+       amendment summary lines print to stderr
+    2. Invoke `schema_logic`(`cells`, `max_depth`, `depends_on`,
+       ignore)
+    3. On any error from `schema_logic` — AST parse errors, a hard failure
        of the cell-amendment checkpoint (a crashed hook or a structurally
        malformed contribution; the error names the tool, the action, and
        the failing cell path), a vetoed validation gate of the final tree
@@ -54,12 +97,23 @@ Annotations: |
        reason), or a register-facade import failure (the error names the
        package) — write the error message to stderr and exit 1; nothing is
        printed to stdout and no raw traceback is shown
-    3. Output the result via `click`.echo
+    4. Project the returned `SchemaNode` tree onto the output nodes — the
+       keys cell (from the node path), description, types, usages,
+       dependencies, children, and tools; group each node's
+       `DependencyFacts` records into the dependencies map — the record
+       path as the key, the nested types and usages lists as the value;
+       the tools key is written only when the overlay is non-empty
+    5. Serialize the projected tree via the `beautiful_json` practice and
+       output it via `click`.echo
 
     Requirements:
     - stdout carries the machine-consumed JSON only — every warning and
       diagnostic goes to stderr
     - Exit 0 only on a complete generation
+    - ignore is passed verbatim to `schema_logic` — the command performs
+      no path normalization or glob interpretation
+    - When .goga/config.yml or the lint section is absent, ignore is None
+      in both cases (no directories excluded)
 
 ---
 
@@ -68,3 +122,4 @@ CreatedAt: 20/05/26
 
 Description: |
   CLI wrapper command that generates a JSON schema representation of the project structure
+

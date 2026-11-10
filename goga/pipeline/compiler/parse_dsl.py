@@ -85,8 +85,9 @@ def _parse_header(header_text: str) -> PipelineHeader:
     Raises:
         StructuralError: If the header is not a mapping, lacks string
             name/description, carries the legacy ``agents`` key (hard-rename
-            error), or carries a malformed ``roles`` block (non-mapping,
-            unknown key, or non-str value).
+            error), carries a malformed ``roles`` block (non-mapping,
+            unknown key, or non-str value), or carries a present
+            ``repeatable`` value that is not strictly bool.
     """
     header_data = yaml.safe_load(header_text)
 
@@ -108,8 +109,9 @@ def _parse_header(header_text: str) -> PipelineHeader:
         raise StructuralError("agents key is forbidden in header; use roles")
 
     roles = _extract_roles(header_data.get("roles"))
+    repeatable = _extract_repeatable(header_data)
 
-    return PipelineHeader(name=name, description=description, roles=roles)
+    return PipelineHeader(name=name, description=description, roles=roles, repeatable=repeatable)
 
 
 def _extract_roles(raw: Any) -> PipelineRoles | None:
@@ -141,6 +143,38 @@ def _extract_roles(raw: Any) -> PipelineRoles | None:
             raise StructuralError(f"non-str value in header.roles.{key}")
 
     return PipelineRoles(**{key: raw.get(key) for key in _ROLE_KEYS})
+
+
+def _extract_repeatable(header_data: dict[str, Any]) -> bool:
+    """Validate the optional header-level ``repeatable`` flag.
+
+    Args:
+        header_data: The YAML-parsed header mapping (key presence separates
+            an absent flag from an authored explicit ``null`` — ``dict.get``
+            alone cannot).
+
+    Returns:
+        The strictly bool flag value, or ``False`` when the key is absent —
+        an absent key equals an explicit ``false``. The flag is carried into
+        ``PipelineHeader`` and never enters the compiled flow-file directly
+        (the compiled repeat directive is derived from it).
+
+    Raises:
+        StructuralError: If the key is present and its value is not strictly
+            bool — an explicit ``null``, an int (``1``), or a quoted string
+            (``"yes"``) all fail the strict ``isinstance(value, bool)`` test
+            (``1 == True`` in Python, but ``1`` is an ``int`` that is not a
+            ``bool``).
+    """
+    if "repeatable" not in header_data:
+        return False
+
+    value = header_data["repeatable"]
+
+    if not isinstance(value, bool):
+        raise StructuralError("non-bool value in header.repeatable")
+
+    return value
 
 
 def _extract_phase_step(item: Any) -> PhaseStep:
@@ -278,7 +312,8 @@ def parse_dsl(text: str) -> tuple[PipelineHeader, BodyFormat, PhasesBody | Stage
 
     Raises:
         StructuralError: If the separator is missing, the header lacks string
-            name/description, the body is neither list nor mapping, a step is
+            name/description, the header's ``repeatable`` flag is present and
+            not strictly bool, the body is neither list nor mapping, a step is
             not a mapping or lacks required fields, or ``depends_on`` is not
             ``None``/``list[str]``.
     """

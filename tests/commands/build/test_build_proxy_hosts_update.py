@@ -81,9 +81,11 @@ class TestBuildProxyHostsUpdateContract:
         update_param = next(p for p in build_cmd.params if p.name == "update")
         assert "-u" in update_param.opts
 
-    def test_build_fourteen_options(self) -> None:
+    def test_build_sixteen_options(self) -> None:
+        # 14 historical options + the -w/--workflow and -p/--profile channels
+        # of the contributor-profile surface.
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 14
+        assert len(options) == 16
 
     def test_help_lists_new_options(self) -> None:
         runner = CliRunner()
@@ -95,6 +97,8 @@ class TestBuildProxyHostsUpdateContract:
         assert "--clean" in output
         assert "--update" in output
         assert "-u" in output
+        assert "--workflow" in output
+        assert "--profile" in output
 
 
 # --- Logic tests (positive) ---

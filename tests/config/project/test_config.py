@@ -282,12 +282,25 @@ class TestAdditionalReviewConfigAPIShape:
             additional.agent = "codex"  # type: ignore[misc]
 
     def test_additional_review_config_declared_fields(self):
-        """AdditionalReviewConfig declares exactly agent, patience, max_iterations."""
+        """AdditionalReviewConfig declares exactly agent, patience, max_iterations, env."""
         names = [f.name for f in dataclasses.fields(AdditionalReviewConfig)]
-        assert names == ["agent", "patience", "max_iterations"]
+        assert names == ["agent", "patience", "max_iterations", "env"]
+
+    def test_additional_review_config_env_field_shape(self):
+        """env is a dict[str, str] factory-defaulted to an empty mapping."""
+        env_field = AdditionalReviewConfig.__dataclass_fields__["env"]
+        assert env_field.type == dict[str, str]
+        assert env_field.default is dataclasses.MISSING
+        assert env_field.default_factory is dict
+        assert AdditionalReviewConfig().env == {}
+
+    def test_additional_review_config_kw_only_construction_with_env(self):
+        """kw_only construction accepts env alongside the scalar fields, verbatim."""
+        additional = AdditionalReviewConfig(agent="gemini", patience=1, max_iterations=2, env={"A": "1"})
+        assert additional.env == {"A": "1"}
 
     def test_additional_review_config_defaults_none(self):
-        """All three fields default to None."""
+        """The scalar fields default to None; env defaults to an empty dict."""
         params = {f.name: f for f in dataclasses.fields(AdditionalReviewConfig)}
         for name in ("agent", "patience", "max_iterations"):
             assert params[name].default is None, name

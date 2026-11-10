@@ -12,6 +12,7 @@ from goga.commands.build import build as build_cli
 from goga.commands.connect import connect as connect_cli
 from goga.commands.schema import schema as schema_cli
 from goga.commands.usages import usages as usages_cli
+from goga.schema.hooks import SchemaNode
 
 from tests.conftest import cwd as _cwd
 
@@ -60,25 +61,35 @@ class TestSchemaDelegation:
         )
 
         with (
-            mock.patch.object(_schema_mod, "schema_logic", return_value='[{"cell": "."}]') as mock_logic,
+            mock.patch.object(
+                _schema_mod,
+                "schema_logic",
+                return_value=[SchemaNode(path=".", description="", types=[], usages=[], dependencies=[], children=[])],
+            ) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
             result = runner.invoke(schema_cli, [])
 
-        mock_logic.assert_called_once_with([], None, [])
+        mock_logic.assert_called_once_with([], None, [], ignore=None)
         assert result.exit_code == 0
         assert '"cell": "."' in result.output
 
     def test_schema_delegates_with_cells_and_options(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(_schema_mod, "schema_logic", return_value='[{"cell": "pkg_a"}]') as mock_logic,
+            mock.patch.object(
+                _schema_mod,
+                "schema_logic",
+                return_value=[
+                    SchemaNode(path="pkg_a", description="", types=[], usages=[], dependencies=[], children=[])
+                ],
+            ) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
             result = runner.invoke(schema_cli, ["pkg_a", "--max-depth", "2", "--depends-on", "lib"])
 
-        mock_logic.assert_called_once_with(["pkg_a"], 2, ["lib"])
+        mock_logic.assert_called_once_with(["pkg_a"], 2, ["lib"], ignore=None)
         assert result.exit_code == 0
 
     def test_schema_handles_value_error_from_logic(self, tmp_path: Path) -> None:
@@ -271,13 +282,13 @@ class TestAllCommandsDelegationViaApp:
 
     def test_schema_via_app_delegates(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(_schema_mod, "schema_logic", return_value="[]") as mock_logic,
+            mock.patch.object(_schema_mod, "schema_logic", return_value=[]) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
             result = runner.invoke(app, ["schema"])
 
-        mock_logic.assert_called_once_with([], None, [])
+        mock_logic.assert_called_once_with([], None, [], ignore=None)
         assert result.exit_code == 0
         assert "[]" in result.output
 
