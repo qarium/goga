@@ -1,4 +1,4 @@
-name: Editor
+name: Worker
 description: "Make changes in the project by request"
 
 repeatable: true
@@ -20,15 +20,15 @@ repeatable: true
     - Do NOT proceed with executing any tasks until you have analyzed the frontier,
       confirmed it is clear of blockers or critical risks, and explicitly verified that it is safe to move forward.
 
-- name: commit-changes
-  title: "Commit changes"
-  prompt: |
-    Commit all added and modified files
-
 - name: accept-result
   title: "Requirements & coverage audit"
   communication: true
   prompt: |
-    Commit changes after fixes
+    Your task is to align the system specification and tests with recent source code modifications.
   skills:
     - goga-accept
+
+- name: commit-changes
+  title: "Commit changes"
+  prompt: |
+    Commit all added and modified files
