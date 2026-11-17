@@ -1383,14 +1383,14 @@ run seams). These verify the FEATURE end to end, not any single entity.
   modules/packages; `tmp_path` for the file I/O; the existing chain
   fixtures and seams.
 
-- [ ] Create/extend `tests/pipeline/workflow/test_loading_chain_integration.py`:
+- [x] Create/extend `tests/pipeline/workflow/test_loading_chain_integration.py`:
   `test_workflow_global_env_renders_from_profile_data` — a workflow text
   with `env: {MODEL: "{{ agent_cfg.model }}"}` and a profile dict
   `{"agent_cfg": {"model": "opus"}}` (the existing `load_workflow` chain
   fixtures of `tests/pipeline/workflow/conftest.py`); `load_workflow(path,
   cli_profile=…)` → `loaded.document.env == {"MODEL": "opus"}` (the
   ride-the-rendering law; no rendering-code change)
-- [ ] Create/extend the build cross-entity test (in
+- [x] Create/extend the build cross-entity test (in
   `tests/build/test_workflow_build_merge_logic.py` or
   `tests/build/test_run_settings.py`):
   `test_build_cascade_runs_from_layered_root` — config
@@ -1399,14 +1399,14 @@ run seams). These verify the FEATURE end to end, not any single entity.
   `resolve_run_settings(layered, {})` → `settings.review.agent == "g"` and
   `settings.tasks.agent == "g"` (the cascade runs from the effective,
   post-override root)
-- [ ] Create the composed run scenario (in
+- [x] Create the composed run scenario (in
   `tests/pipeline/test_run_pipeline.py`): one workflow file carrying BOTH
   globals and one skippable stage; `run_pipeline(…, skip=[…])` under the
   seams → the skip rebuild AND the overlay both preserved the globals, the
   seams received the workflow agent, and the `run_flow` env carries the
   merged base (the full parse → skip → overlay → resolve chain)
-- [ ] Run the full battery: `.venv/bin/pytest tests/ -x` — green
-- [ ] Run the facade battery (Validation Commands) — green
+- [x] Run the full battery: `.venv/bin/pytest tests/ -x` — green
+- [x] Run the facade battery (Validation Commands) — green
 
 ---
 
@@ -1437,34 +1437,34 @@ interpreter:
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
-- [ ] Every contract entity is accessible from the facade (no `__all__`
+- [x] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is accessible from the facade (no `__all__`
       changes were needed — verified none were made)
-- [ ] Properties and methods match the declared API (the two model fields;
+- [x] Properties and methods match the declared API (the two model fields;
       the 4-parameter merge signature; unchanged signatures everywhere else)
-- [ ] Descriptions are reflected in behavior (the exact five messages, the
+- [x] Descriptions are reflected in behavior (the exact five messages, the
       12-key enumeration, the grown empty-workflow message, the verbatim
       carriage, the effective-agent three consumers, the key-wise env laws,
       the 4-layer build order)
-- [ ] Contract dependencies are met (workflow → hooks → pipeline → build in
+- [x] Contract dependencies are met (workflow → hooks → pipeline → build in
       dependency order)
-- [ ] Re-exports are accessible from the facade (none added — verified)
-- [ ] Every coding task followed the TDD workflow (contract tests → code →
+- [x] Re-exports are accessible from the facade (none added — verified)
+- [x] Every coding task followed the TDD workflow (contract tests → code →
       verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within
+- [x] Contract tests and logic tests cover facade, API, and behavior within
       each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them
+- [x] Integration tests exist where cross-entity scenarios require them
       (Task 9)
-- [ ] No package boundary was expanded (no new cells, no new Imports, no
+- [x] No package boundary was expanded (no new cells, no new Imports, no
       facade growth)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass (full battery, ruff check, ruff format
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (full battery, ruff check, ruff format
       --check, goga lint 93/0, facade imports)
-- [ ] The Mandatory Rules were enforced at every task end and before every
+- [x] The Mandatory Rules were enforced at every task end and before every
       local commit (style, tests, lint/format gates, REPL cycle)
-- [ ] `goga/pipeline/compiler`, `goga/agents/wrapper`, `goga/config`, and
+- [x] `goga/pipeline/compiler`, `goga/agents/wrapper`, `goga/config`, and
       every `goga/commands/*` remain untouched (the contract-drift
       guarantee survives)
-- [ ] No commit message carries a `Co-Authored-By:` trailer
-- [ ] The deferred follow-up (de-stamping `.goga/profiles/default.yml`) was
+- [x] No commit message carries a `Co-Authored-By:` trailer
+- [x] The deferred follow-up (de-stamping `.goga/profiles/default.yml`) was
       NOT done in this feature

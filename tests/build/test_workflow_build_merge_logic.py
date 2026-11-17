@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from goga.build import merge_workflow_build
+from goga.build import merge_workflow_build, resolve_run_settings
 from goga.config import AdditionalReviewConfig, BuildConfig, ReviewConfig
 from goga.pipeline.workflow import WorkflowBuild
 
@@ -287,3 +287,26 @@ class TestMergeWorkflowBuildGlobalLayering:
         to_config = merge_workflow_build(config, WorkflowBuild(agent=""), None, None)
 
         assert to_config.agent == "cfg-root"
+
+
+class TestBuildCascadeIntegration:
+    """Integration — the layered root feeds the settings resolution cascade."""
+
+    def test_build_cascade_runs_from_layered_root(self) -> None:
+        """The agent-inheritance cascade of ``resolve_run_settings`` runs from the LAYERED root.
+
+        The configuration roots the tasks agent at "cfg-root" with a review
+        part whose agent is unset; the workflow global agent "g" (no build
+        block) overrides the root through ``merge_workflow_build``, and the
+        settings resolution consumes the layered value — the review and tasks
+        agents both resolve "g", never "cfg-root" (the unlayered cascade
+        would inherit the configuration root instead).
+        """
+        config = BuildConfig(agent="cfg-root", review=ReviewConfig(agent=None))
+
+        layered = merge_workflow_build(config, None, "g", None)
+        settings = resolve_run_settings(layered, {})
+
+        assert settings.tasks.agent == "g"
+        assert settings.review.agent == "g"
+        assert settings.review.additional.agent == "g"

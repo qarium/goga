@@ -19,8 +19,13 @@ from goga.pipeline.compiler import (
     PipelineRoles,
     StructuralError,
 )
-from goga.pipeline.hooks import WorkflowOverlay
-from goga.pipeline.workflow import WorkflowAssistant, WorkflowDelegation, WorkflowDocument
+from goga.pipeline.hooks import ToolContribution, WorkflowOverlay, merge_workflow_overlay
+from goga.pipeline.workflow import (
+    WorkflowAssistant,
+    WorkflowDelegation,
+    WorkflowDocument,
+    WorkflowStage,
+)
 
 from tests.pipeline.conftest import (
     PROMPT_STEMS,
@@ -1360,6 +1365,35 @@ class _MergingPipelineHooks(_RecordingPipelineHooks):
         return WorkflowOverlay(workflow=self.merged, provenance=[])
 
 
+class _OverlayingPipelineHooks(_RecordingPipelineHooks):
+    """Amendment stand-in running the REAL overlay merge — the tool shape.
+
+    The merge folds one committed contribution (carrying CLASHING globals and
+    a fresh stage) onto the received base with :func:`merge_workflow_overlay`,
+    so a composed scenario proves the authored globals survive the real
+    overlay merge while a tool-supplied global never reaches the effective
+    workflow. The skip-rebuilt base is recorded for the pre-merge assertions.
+    """
+
+    def __init__(self, order: list[str] | None = None) -> None:
+        super().__init__(order)
+        self.received: WorkflowDocument | None = None
+
+    def amend_workflow(self, **kwargs: object) -> WorkflowOverlay:
+        self.order.append("amend_workflow")
+        self.received = kwargs["workflow"]
+        contribution = ToolContribution(
+            tool="t1",
+            document=WorkflowDocument(
+                agent="tool-agent",
+                env={"B": "tool"},
+                stages={"smoke": WorkflowStage(prompt="Smoke-check the release.")},
+            ),
+        )
+
+        return merge_workflow_overlay(self.received, [contribution])
+
+
 class _WriteAfmConfigSpy:
     """Recording stand-in for the step-17 afm configuration write seam.
 
@@ -1739,6 +1773,76 @@ class TestRunPipelineConfigAndLaunchLayer:
         assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["codex"]
         mock_wrappers.assert_called_once()
         assert mock_wrappers.call_args.args[2] == "codex"
+
+    def test_run_pipeline_composed_run_globals_survive_skip_and_overlay(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One composed run — the globals survive skip AND the overlay, then resolve.
+
+        The workflow file carries BOTH globals (``agent: claude``,
+        ``env: {B: "2"}``) and one stage the run skips; the amendment folds a
+        contribution whose own globals CLASH. The skip rebuild and the real
+        overlay merge both preserve the authored globals verbatim (the
+        contribution's globals never arrive, its stage does), the compiled
+        workflow carries them, both consumer seams receive the workflow agent
+        "claude" — never the configuration's "codex" nor the tool's
+        "tool-agent" — and the launch env base merges the workflow env
+        key-wise over the pipeline env (the full parse → skip → overlay →
+        resolve chain).
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig(agent="codex", env={"A": "1", "B": "1"})))
+        overlaying_hooks = _OverlayingPipelineHooks(order)
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: overlaying_hooks)
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+        monkeypatch.chdir(tmp_path)
+        self._write_global_workflow(
+            tmp_path, "prompt: hi\nagent: claude\nenv:\n  B: '2'\nstages:\n  build:\n    agent: codex\n"
+        )
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+        documents = fake_documents()
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=documents) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "apply_stage_env_wrappers") as mock_wrappers,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, skip=["build"])
+
+        assert exit_code == 0
+
+        # The skip rebuild preserved the globals verbatim and applied the
+        # skip directive (the base the amendment received).
+        assert overlaying_hooks.received is not None
+        assert overlaying_hooks.received.agent == "claude"
+        assert overlaying_hooks.received.env == {"B": "2"}
+        assert overlaying_hooks.received.stages["build"].skip is True
+
+        # The overlay merged the clashing contribution: the compiled workflow
+        # (the post-merge document) still carries the authored globals, the
+        # contribution's globals never arrived, and its stage DID merge.
+        compiled = mock_compile.call_args.kwargs["workflow"]
+        assert compiled is not overlaying_hooks.received
+        assert compiled.agent == "claude"
+        assert compiled.env == {"B": "2"}
+        assert compiled.stages["build"].skip is True
+        assert compiled.stages["smoke"].prompt == "Smoke-check the release."
+
+        # Both consumer seams receive the workflow global agent — never the
+        # configuration's "codex" nor the tool's "tool-agent".
+        write_spy = _run_pipeline_module.write_afm_config.side_effect
+        assert isinstance(write_spy, _WriteAfmConfigSpy)
+        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["claude"]
+        assert write_spy.calls[0][2] is compiled
+        mock_wrappers.assert_called_once()
+        assert mock_wrappers.call_args.args[2] == "claude"
+
+        # The launch env base merges the workflow global env key-wise over
+        # the pipeline env: the workflow value wins per key, the untouched
+        # configuration key survives.
+        assert mock_run_flow.call_args.kwargs["env"] == {"A": "1", "B": "2"}
 
     def test_run_pipeline_afm_config_write_oserror_propagates_before_events(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch

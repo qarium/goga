@@ -179,6 +179,32 @@ class TestLoadingChainActivationIntegration:
         assert loaded.document.stages["build"].agent == "codex"
 
 
+class TestLoadingChainGlobalRunSettingsIntegration:
+    """Integration — the workflow-global run settings ride the profile render."""
+
+    def test_workflow_global_env_renders_from_profile_data(self, project_root: Path) -> None:
+        """A workflow-global env value materializes through the profile render.
+
+        The workflow's global ``env:`` map interpolates ``{{ agent_cfg.model }}``
+        from the active profile's data — the whole-file rendering law carries
+        the two global keys like every other byte, so the loaded document's
+        global env holds the RENDERED value while no rendering code changed
+        (the profile peek still reads raw text, so a value materializing only
+        through rendering activates nothing on its own).
+        """
+        (project_root / ".goga" / "profiles" / "mixa.yml").write_text("agent_cfg:\n  model: opus\n")
+
+        workflow_path = project_root / ".goga" / "workflows" / "global.yml"
+        workflow_path.write_text('profile: mixa\nprompt: hi\nenv:\n  MODEL: "{{ agent_cfg.model }}"\n')
+
+        loaded = load_workflow(workflow_path, "mixa", None, {})
+
+        assert loaded.profile is not None
+        assert loaded.profile.name == "mixa"
+        assert loaded.document.env == {"MODEL": "opus"}
+        assert loaded.document.agent is None
+
+
 class TestLoadingChainIdentityIntegration:
     """Integration — the template-free identity invariant across the whole chain."""
 
