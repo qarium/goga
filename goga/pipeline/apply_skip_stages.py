@@ -19,7 +19,7 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
         - When ``workflow`` is ``None`` and ``skip_stages`` is non-empty,
           construct a document whose stages map carries only the skip entries
           (``prompt=None``, ``extend={}``, ``memory=None``, ``profile=None``,
-          ``build=None``).
+          ``build=None``, ``agent=None``, ``env=None``).
         - The memory configuration, the profile field, and the build block of
           the input workflow survive the rebuild verbatim — a rebuild that
           dropped them would silently disable memory participation, change
@@ -47,6 +47,10 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
           field needed): the compiler removes the skipped stage before the
           gates walk, so the skipped stage's checks drop silently
           downstream.
+        - The global run settings (``agent``, ``env``) of the input workflow
+          survive the rebuild verbatim (the same objects, carried opaque) —
+          a rebuild that drops them would silently revert a skip-driven run
+          to configuration-level globals.
         - Stage-name validation is NOT performed here — the compiler's strict
           check raises a structural error on a name absent from the pipeline
           body; this Routine stays declarative.
@@ -88,11 +92,11 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
 
     # Step 4 — return a NEW document; the input is NOT mutated. The memory
     # configuration, the profile field, the build block, the assistants
-    # catalog, the delegation block, the repeat block, and the gates
-    # settings block ride along verbatim (same objects, opaque — never
-    # rebuilt); a None workflow with non-empty skip synthesizes the default
-    # empty catalog, no delegation block, no repeat block, and no gates
-    # block.
+    # catalog, the delegation block, the repeat block, the gates settings
+    # block, and the global run settings (agent, env) ride along verbatim
+    # (same objects, opaque — never rebuilt); a None workflow with non-empty
+    # skip synthesizes the default empty catalog, no delegation block, no
+    # repeat block, no gates block, and no global run settings.
     return WorkflowDocument(
         prompt=workflow.prompt if workflow is not None else None,
         stages=new_stages,
@@ -104,4 +108,6 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
         delegation=workflow.delegation if workflow is not None else None,
         repeat=workflow.repeat if workflow is not None else None,
         gates=workflow.gates if workflow is not None else None,
+        agent=workflow.agent if workflow is not None else None,
+        env=workflow.env if workflow is not None else None,
     )

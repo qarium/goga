@@ -1090,21 +1090,21 @@ the docstring enumeration grows the two fields.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail): in
+- [x] **Contract tests** (expected to fail): in
   `tests/pipeline/test_apply_skip_stages.py` — signature unchanged; the
   rebuild result type carries `agent`/`env`
-- [ ] **Code**: add to the rebuild
+- [x] **Code**: add to the rebuild
   `agent=workflow.agent if workflow is not None else None` and
   `env=workflow.env if workflow is not None else None` (the explicit
   per-field pattern matches the file's style; the kw_only defaults also
   cover the None case)
-- [ ] **Code**: extend the docstring's synthesized-default enumeration and
+- [x] **Code**: extend the docstring's synthesized-default enumeration and
   the rebuild note with the two globals (the CODEMANIFEST step 4 wording:
   carried verbatim — a rebuild that drops them would silently revert a
   skip-driven run to configuration-level globals)
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/pipeline/test_apply_skip_stages.py -v` — all pass
-- [ ] **Logic tests**:
+- [x] **Logic tests**:
   - `test_skip_rebuild_preserves_global_run_settings` —
     `WorkflowDocument(prompt="p", stages={"a": …}, agent="claude",
     env={"A": "1"})` + `apply_skip_stages(workflow, ["a"])` →
@@ -1115,13 +1115,13 @@ the docstring enumeration grows the two fields.
     `.stages["a"].skip`
   - edge: empty skip list returns the input object unchanged (the
     pre-existing law, still green)
-- [ ] **Debugging**: `.venv/bin/pytest tests/pipeline/test_apply_skip_stages.py
+- [x] **Debugging**: `.venv/bin/pytest tests/pipeline/test_apply_skip_stages.py
   tests/pipeline/test_card_run_skip_equivalence.py -x` — fix implementation
   until all pass
-- [ ] **Contract re-verification**: inputs unmutated; the routine stays
+- [x] **Contract re-verification**: inputs unmutated; the routine stays
   declarative (no stage deletion, no depends_on rewrite);
   `from goga.pipeline import apply_skip_stages` green
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/`
 
 ### Task 6: `run_pipeline` — effective global agent and launch env base (TDD)
