@@ -292,11 +292,13 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
         3. The launch feedback line to stderr — ``Build running with
            workflow "<w>" and profile "<p>"`` — ONLY when a workflow is in
            effect AND a profile resolved; every other run prints no line
-        4. Layering: a workflow ``build:`` block overlays the effective build
-           section via ``merge_workflow_build`` (config < workflow build: <
-           CLI); a build block over a configuration without a build section
-           is one clean error naming the requirement, exit 1, no events —
-           the layered configuration feeds every downstream step
+        4. Layering: whenever a workflow document is present, its global
+           agent/env and ``build:`` block overlay the effective build section
+           via ``merge_workflow_build`` (config < workflow global < workflow
+           build: < CLI; the globals apply with no build block too); a
+           workflow over a configuration without a build section is one clean
+           error naming the requirement, exit 1, no events — the layered
+           configuration feeds every downstream step
         5. Settings resolution via ``resolve_run_settings`` over the layered
            configuration
         6. Review-config validation
@@ -389,12 +391,14 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
         workflow_name = cli_options.get("workflow") or workflow_env
         print(f'Build running with workflow "{workflow_name}" and profile "{loaded.profile.name}"', file=sys.stderr)
 
-    # Step 4: layer the workflow build block onto the effective build
-    # section. The D2 guard: a build invocation requires a build section to
-    # layer onto — one clean error instead of the raw attribute failure,
-    # with or without a workflow in effect (the host launcher guards the
-    # section host-side, so only a direct in-container invocation reaches
-    # this guard).
+    # Step 4: layer the workflow run settings onto the effective build
+    # section — the global agent/env as the middle layer with the build
+    # block above them; the layering runs whenever a document is present
+    # (the globals apply with no build block too). The D2 guard: a build
+    # invocation requires a build section to layer onto — one clean error
+    # instead of the raw attribute failure, with or without a workflow in
+    # effect (the host launcher guards the section host-side, so only a
+    # direct in-container invocation reaches this guard).
     build_config = config.build
 
     if build_config is None:
@@ -404,8 +408,13 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
         )
         return 1
 
-    if loaded is not None and loaded.document.build is not None:
-        build_config = merge_workflow_build(build_config, loaded.document.build)
+    if loaded is not None:
+        build_config = merge_workflow_build(
+            build_config,
+            loaded.document.build,
+            loaded.document.agent,
+            loaded.document.env,
+        )
 
     settings = _prepare_run_settings(build_config, cli_options)
 

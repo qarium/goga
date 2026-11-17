@@ -187,6 +187,11 @@ def _wrapper_run_base(tmp_path: Path) -> Path:
     return tmp_path / "goga-build-env" / f"run-{os.getpid()}"
 
 
+def _merge_spy():
+    """A wrapping spy over the orchestrator's layering-merge import point."""
+    return mock.patch.object(build_module, "merge_workflow_build", wraps=build_module.merge_workflow_build)
+
+
 def _recording_call(name: str, real, order: list[str]):
     """A delegating wrapper recording ``name`` before every call of ``real``."""
 
@@ -1517,6 +1522,132 @@ class TestWorkflowOrchestration:
         assert "external_review_tool = custom" in config_text
         assert f"custom_review_script = {wrapper_base / 'additional.sh'}" in config_text
         assert "codex_enabled" not in config_text
+
+
+class TestWorkflowGlobalLayering:
+    """Step 4 with the workflow globals: the layering runs whenever a workflow
+    document is present — the global agent/env apply with no build block too,
+    and the merge call carries all four arguments."""
+
+    def test_build_layering_call_carries_document_globals_four_arguments(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """Contract: with a workflow document present, merge_workflow_build is
+        called once with four arguments — the effective build section, the
+        document's build block (None is legal), its global agent, its global
+        env."""
+        pin_package_environment({})
+        _clear_goga_engine_env(monkeypatch)
+        _write_workflow_files(tmp_path, workflow_text='agent: g\nenv:\n  E: "2"\n')
+        config = _make_config()
+
+        with (
+            mock.patch.object(build_module, "run_build_pass", return_value=0),
+            _merge_spy() as merge_spy,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={**_FULL_CLI_OPTIONS, "workflow": "hard"},
+            )
+
+        assert result == 0
+        merge_spy.assert_called_once()
+        args = merge_spy.call_args.args
+        assert args[0] is config.build
+        assert args[1] is None
+        assert args[2] == "g"
+        assert args[3] == {"E": "2"}
+
+    def test_build_layers_globals_without_build_block(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """A workflow carrying only the globals (no build: block) still layers:
+        the resolved composition runs under the workflow agent with the
+        workflow env entry exported, and the exit path proceeds as with a
+        normal two-pass run."""
+        pin_package_environment({})
+        _clear_goga_engine_env(monkeypatch)
+        _write_workflow_files(tmp_path, workflow_text='agent: g\nenv:\n  E: "2"\n')
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=_make_config(),
+                cli_options={**_FULL_CLI_OPTIONS, "workflow": "hard"},
+            )
+
+        assert result == 0
+        assert mock_pass.call_count == 2
+        wrapper_base = _wrapper_run_base(tmp_path)
+        tasks_text = (wrapper_base / "tasks.sh").read_text()
+        assert "export E=2" in tasks_text
+        assert tasks_text.endswith('exec /home/goga/bin/g-as-claude.sh "$@"\n')
+        # The review pass inherits the layered root agent.
+        assert (wrapper_base / "review.sh").read_text().endswith('exec /home/goga/bin/g-as-claude.sh "$@"\n')
+
+    def test_build_workflow_build_block_still_layers_over_globals(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """Regression: a workflow with a build: block layers exactly as before
+        — through the four-argument form, with the block agent and env winning
+        over the globals of the same workflow."""
+        pin_package_environment({})
+        _clear_goga_engine_env(monkeypatch)
+        _write_workflow_files(
+            tmp_path,
+            workflow_text='agent: g\nenv:\n  E: "2"\nbuild:\n  agent: blk\n  env:\n    W: "1"\n',
+        )
+
+        with (
+            mock.patch.object(build_module, "run_build_pass", return_value=0),
+            _merge_spy() as merge_spy,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                cli_options={**_FULL_CLI_OPTIONS, "workflow": "hard"},
+            )
+
+        assert result == 0
+        block = merge_spy.call_args.args[1]
+        assert block is not None
+        assert block.agent == "blk"
+        tasks_text = (_wrapper_run_base(tmp_path) / "tasks.sh").read_text()
+        assert "export W=1" in tasks_text
+        assert "export E=2" in tasks_text
+        assert tasks_text.endswith('exec /home/goga/bin/blk-as-claude.sh "$@"\n')
+
+    def test_build_without_workflow_makes_no_layering_call(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """Regression: no workflow in effect — the loaded-is-None branch makes
+        no layering call at all (the layering is workflow-driven only)."""
+        pin_package_environment({})
+        _clear_goga_engine_env(monkeypatch)
+
+        with (
+            mock.patch.object(build_module, "run_build_pass", return_value=0),
+            _merge_spy() as merge_spy,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
+
+        assert result == 0
+        merge_spy.assert_not_called()
 
 
 # --- Pass delegation and env boundaries ---

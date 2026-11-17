@@ -1328,24 +1328,24 @@ change).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail): in `tests/build/test_build.py`
+- [x] **Contract tests** (expected to fail): in `tests/build/test_build.py`
   — `build` signature unchanged; the step-4 call form: with a workflow
   document present, `merge_workflow_build` is called with four arguments
   (the document's build block — None legal — its agent, its env)
-- [ ] **Code**: replace the condition with `if loaded is not None:` and the
+- [x] **Code**: replace the condition with `if loaded is not None:` and the
   call with `build_config = merge_workflow_build(build_config,
   loaded.document.build, loaded.document.agent, loaded.document.env)`;
   update the surrounding comment (the layering runs whenever a document is
   present — the globals apply with no build block too)
-- [ ] **Code**: `run_settings.py` — extend the `resolve_run_settings`
+- [x] **Code**: `run_settings.py` — extend the `resolve_run_settings`
   docstring opening note: "The `config` parameter is the LAYERED effective
   build configuration: when a workflow is in effect, the caller has already
   overlaid its global run settings and build block via
   `merge_workflow_build`; this routine consumes the layered value and
   applies no layering itself" (no algorithm change)
-- [ ] **Interface verification**: `.venv/bin/pytest tests/build/test_build.py
+- [x] **Interface verification**: `.venv/bin/pytest tests/build/test_build.py
   tests/build/test_run_settings.py -v` — all pass
-- [ ] **Logic tests**:
+- [x] **Logic tests**:
   - `test_build_layers_globals_without_build_block` — config with a build
     section, `review=None`; workflow file `agent: g\nenv: {E: "2"}\n` (no
     `build:` block); `build(plan, config, cli_options)` with the pass
@@ -1356,13 +1356,13 @@ change).
     before (the block path through the new signature)
   - regression: no workflow in effect → no layering call at all (the
     `loaded is None` branch unchanged)
-- [ ] **Debugging**: `.venv/bin/pytest tests/build/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/build/ -x` — fix
   implementation code until all pass
-- [ ] **Contract re-verification**: the no-build-section guard is unchanged
+- [x] **Contract re-verification**: the no-build-section guard is unchanged
   and still fires before any layering; the guard reads the layered
   effective configuration; `from goga.build import build,
   resolve_run_settings` green
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/`
 
 ### Task 9: Integration tests — cross-entity and chain scenarios

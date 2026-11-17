@@ -71,9 +71,14 @@ class RunSettings:
 def resolve_run_settings(config: BuildConfig, cli_options: dict) -> RunSettings:
     """Resolve the run settings of one build from the two-part configuration and the CLI options — a pure function.
 
+    The ``config`` parameter is the LAYERED effective build configuration:
+    when a workflow is in effect, the caller has already overlaid its global
+    run settings and build block via ``merge_workflow_build``; this routine
+    consumes the layered value and applies no layering itself.
+
     Args:
-        config: The LAYERED effective build configuration in the two-part form
-            (the workflow ``build:`` overlay, when any, already applied by the
+        config: The layered effective build configuration in the two-part
+            form (the workflow layers, when any, already applied by the
             caller — no layering logic here); a None review part resolves as
             fully unset with the root values inherited.
         cli_options: In-container CLI options; the keys read here are
