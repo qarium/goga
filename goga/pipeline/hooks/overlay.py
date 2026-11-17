@@ -566,7 +566,12 @@ def merge_workflow_overlay(
         committed-tool provenance; empty ``contributions`` is the passthrough
         (the passed workflow object itself returns with empty provenance),
         and ``provenance`` lists the contributing tools in enumeration order.
-        The rebuilt document carries the base ``profile``/``build`` verbatim;
+        The rebuilt document carries the base ``profile``/``build``/``agent``/
+        ``env`` verbatim (exactly as memory survives the rebuild — the global
+        run settings included: a rebuild that drops them would silently revert
+        a tool-amended run to configuration-level globals, and a tool-supplied
+        global never reaches the final document, the merge reading the globals
+        of the base only);
         the stage merge covers the complete :class:`WorkflowStage` field set
         (including ``env`` — authored entries unbeatable, tools fill the
         unset keys). The collaboration arms: the catalog merge composes an
@@ -612,8 +617,8 @@ def merge_workflow_overlay(
 
     # Steps 2-5 — the authored-wins merge per slot: prompt, memory, stages,
     # extend. Each helper is pure; the composed document is a new instance.
-    # Step 8 — the workflow-level fields of the base (profile, build) carry
-    # verbatim, exactly as memory survives the rebuild.
+    # Step 8 — the workflow-level fields of the base (profile, build, agent,
+    # env) carry verbatim, exactly as memory survives the rebuild.
     # Step 6 — provenance: the contributing tools in enumeration order.
     return WorkflowOverlay(
         workflow=WorkflowDocument(
@@ -627,6 +632,8 @@ def merge_workflow_overlay(
             delegation=delegation,
             repeat=repeat,
             gates=gates,
+            agent=base.agent if base is not None else None,
+            env=base.env if base is not None else None,
         ),
         provenance=[contribution.tool for contribution in contributions],
     )

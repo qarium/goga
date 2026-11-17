@@ -1044,19 +1044,19 @@ the final-assembly carriage.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail): in
+- [x] **Contract tests** (expected to fail): in
   `tests/pipeline/hooks/test_overlay.py` — `merge_workflow_overlay`
   signature unchanged; the rebuilt document is a `WorkflowDocument`
   carrying the base globals
-- [ ] **Code**: in the final assembly, add the two kwargs after `gates`:
+- [x] **Code**: in the final assembly, add the two kwargs after `gates`:
   `agent=base.agent if base is not None else None` and
   `env=base.env if base is not None else None` (same objects — verbatim,
   never rebuilt; exactly as profile/build/memory)
-- [ ] **Code**: extend the `merge_workflow_overlay` docstring's verbatim-set
+- [x] **Code**: extend the `merge_workflow_overlay` docstring's verbatim-set
   note with the two globals (the CODEMANIFEST step 8 wording)
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/pipeline/hooks/test_overlay.py -v` — all pass
-- [ ] **Logic tests**:
+- [x] **Logic tests**:
   - `test_overlay_preserves_global_run_settings_verbatim` — base =
     `WorkflowDocument(prompt="p", agent="claude", env={"A": "1"})`; one
     contribution whose document sets `agent="tool-agent"`,
@@ -1067,14 +1067,14 @@ the final-assembly carriage.
     otherwise works)
   - edge: empty base + contributions → the contributed document's globals
     are still not read (the workflow-level assembly reads only `base`)
-- [ ] **Debugging**: `.venv/bin/pytest tests/pipeline/hooks/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/pipeline/hooks/ -x` — fix
   implementation code until all pass
-- [ ] **Contract re-verification**: no merge helper reads a contribution's
+- [x] **Contract re-verification**: no merge helper reads a contribution's
   `agent`/`env`; purity holds (inputs unmutated, new document);
   `from goga.pipeline.hooks import merge_workflow_overlay` green
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/`
-- [ ] Verify `goga/pipeline/hooks/.usages/checkpoints.md` stays truthful
+- [x] Verify `goga/pipeline/hooks/.usages/checkpoints.md` stays truthful
   (the verbatim-globals bullet); report drift
 
 ### Task 5: `apply_skip_stages` — skip rebuild carriage (TDD)
