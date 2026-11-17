@@ -144,7 +144,9 @@ def _resolve_exec_target(
         extend_agent: The extend-entry agent of the same workflow stage name —
             the compiler's per-field default (an explicit stages-block agent
             wins over it), the middle fallback.
-        global_agent: The effective global pipeline agent — the last fallback.
+        global_agent: The effective global agent — the workflow global agent
+            of the effective workflow when it carries one, otherwise the
+            effective pipeline agent; the last fallback.
         stage_id: The claimed stage id (used in the error message).
 
     Returns:
@@ -492,10 +494,12 @@ def apply_stage_env_wrappers(
         stages: The compiled flow stages.
         workflow: The effective workflow document (its stages map carries
             the env instructions), or ``None`` (no stage is wrapped).
-        global_agent: The effective global pipeline agent — the fallback
-            exec target when a claimed agent stage resolved neither its own
-            agent nor an extend-entry agent of the same name (a script stage
-            resolves no exec target at all).
+        global_agent: The effective global agent — the workflow global agent
+            of the effective workflow when it carries one, otherwise the
+            effective pipeline agent; the fallback exec target when a
+            claimed agent stage resolved neither its own agent nor an
+            extend-entry agent of the same name (a script stage resolves no
+            exec target at all).
         flow_path: The path of the flow-file written by ``compile_flow`` —
             the target of the post-compile script/command patch.
 

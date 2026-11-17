@@ -1156,44 +1156,44 @@ the law.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail): in
+- [x] **Contract tests** (expected to fail): in
   `tests/pipeline/test_run_pipeline_contract.py` — `run_pipeline` signature
   unchanged; the source-level threading pins (any pin of
   `config.pipeline.agent` reaching the seams stays valid — the fallback is
   unchanged; add the workflow-global call form rather than rewriting
   existing pins)
-- [ ] **Code — step 14** (after `compile_flow`, before the wrapper
+- [x] **Code — step 14** (after `compile_flow`, before the wrapper
   applications): `workflow_agent = overlay.workflow.agent if
   overlay.workflow is not None else None`; `effective_agent =
   workflow_agent if workflow_agent is not None else config.pipeline.agent`
   (single site; None-safe; exactly three consumers)
-- [ ] **Code — consumers**: the wrapper call becomes
+- [x] **Code — consumers**: the wrapper call becomes
   `apply_stage_env_wrappers(flow_doc.stages, overlay.workflow,
   effective_agent, flow_path)`; the config call becomes
   `write_afm_config(effective_agent, flow_doc, overlay.workflow)`
-- [ ] **Code — step 20**: `workflow_env = overlay.workflow.env if
+- [x] **Code — step 20**: `workflow_env = overlay.workflow.env if
   overlay.workflow is not None else None`;
   `base = {**config.pipeline.env, **(workflow_env or {})}`;
   the launch layer comprehension composes `{**base, **payload}` under the
   unchanged `_ENGINE_ENV_KEYS` filter; `GOGA_PROFILE` still added afterwards
   from the resolved profile
-- [ ] **Code — renumbering**: renumber the step comments to the
+- [x] **Code — renumbering**: renumber the step comments to the
   CODEMANIFEST's 1..24 (current 14/14b → 15 wrappers; 15 → 16 prompts;
   16/16a → 17 afm home + skin; 17 → 18 composition; 18 → 19 statuses;
   19 → 20 launch layer; 20 → 21 run-creation facts; 21 → 22 launch;
   22–23 → 23 completion; return → 24) and update the two inline comments
   that said "effective pipeline agent"
-- [ ] **Code — docstring alignment** (no behavior): `afm_config.py` `agent`
+- [x] **Code — docstring alignment** (no behavior): `afm_config.py` `agent`
   parameter description → the effective global agent (workflow global when
   the effective workflow carries one, otherwise the authored pipeline.agent
   as amended; None when neither resolves); `stage_env_wrappers.py:147` and
   `:495` `global_agent` descriptions → the effective global agent (workflow
   global, else the effective pipeline agent)
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/pipeline/test_run_pipeline_contract.py
   tests/pipeline/test_afm_config.py
   tests/pipeline/test_stage_env_wrappers_contract.py -v` — all pass
-- [ ] **Logic tests** (in `tests/pipeline/test_run_pipeline.py`, via
+- [x] **Logic tests** (in `tests/pipeline/test_run_pipeline.py`, via
   `_patch_seams`):
   - `test_run_pipeline_workflow_global_agent_feeds_all_three_consumers` —
     config `pipeline=PipelineConfig(agent="codex", env={})`; workflow file
@@ -1215,15 +1215,15 @@ the law.
   - `test_run_pipeline_without_workflow_global_falls_back_to_pipeline_agent`
     — workflow WITHOUT `agent:`; `pipeline.agent="codex"`; the seams
     receive `"codex"` — behavior identical to today
-- [ ] **Debugging**: `.venv/bin/pytest tests/pipeline/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/pipeline/ -x` — fix
   implementation code until all pass
-- [ ] **Contract re-verification**: the environment reads stay exactly four
+- [x] **Contract re-verification**: the environment reads stay exactly four
   (AFM_DIR, the CLI entries payload, GOGA_PROFILE, GOGA_HOME_PROFILES); the
   effective agent feeds exactly the three consumption points and nothing
   else; no new error path; `from goga.pipeline import run_pipeline` green
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/`
-- [ ] Verify `goga/pipeline/.usages/run-pipeline.md` and
+- [x] Verify `goga/pipeline/.usages/run-pipeline.md` and
   `goga/pipeline/.usages/per-stage-env.md` stay truthful against the
   implemented law; report drift
 
