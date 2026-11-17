@@ -873,7 +873,7 @@ depends on this task). Facade unchanged — `WorkflowDocument` is already in
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in
+- [x] **Contract tests** (expected to fail at this stage): in
   `tests/pipeline/workflow/test_workflow_document_contract.py` —
   `WorkflowDocument()` carries `agent is None` and `env is None` defaults;
   `WorkflowDocument(agent="claude", env={"A": "1"})` carries the authored
@@ -882,31 +882,31 @@ depends on this task). Facade unchanged — `WorkflowDocument` is already in
   hard-failing field-order pin `test_workflow_document_field_order_fixed`
   (~line 64) to the 12-name list: `prompt, stages, extend, memory, profile,
   build, assistants, delegation, repeat, gates, agent, env`
-- [ ] **Code**: add the two fields after `gates` in
+- [x] **Code**: add the two fields after `gates` in
   `workflow_document.py`, in canonical order —
   `agent: str | None = None` and `env: dict[str, str] | None = None`
-- [ ] **Code**: extend the class `Args:` docstring with the two entries
+- [x] **Code**: extend the class `Args:` docstring with the two entries
   mirroring the CODEMANIFEST property annotations (agent: the
   workflow-global agent name — the global run-settings layer consumers
   resolve ahead of the configuration's pipeline agent; None when the key is
   absent or empty; env: the workflow-global environment layer; None when
   the key is absent — an empty map equals absence)
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/pipeline/workflow/test_workflow_document_contract.py -v` — all pass
-- [ ] **Logic tests**: in
+- [x] **Logic tests**: in
   `tests/pipeline/workflow/test_workflow_document_logic.py` — the authored
   values ride the document unchanged (identity: the same map object is
   carried, never rebuilt); defaults are None; the document with both None is
   constructible (the pre-change construction paths stay valid — every
   existing caller keeps working with zero changes)
-- [ ] **Debugging**: `.venv/bin/pytest tests/pipeline/workflow/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/pipeline/workflow/ -x` — fix
   implementation code until all pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade import
+- [x] **Contract re-verification**: facade import
   `from goga.pipeline.workflow import WorkflowDocument` green;
   `dataclasses.fields` order matches the contract; no other field moved
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — fix formatting if necessary
-- [ ] Verify `goga/pipeline/workflow/.usages/parse-workflow.md` stays
+- [x] Verify `goga/pipeline/workflow/.usages/parse-workflow.md` stays
   truthful for the model surface (no edit expected — the fields are
   documented; report any drift)
 

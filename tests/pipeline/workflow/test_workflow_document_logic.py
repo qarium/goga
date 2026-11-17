@@ -174,3 +174,32 @@ class TestWorkflowDocumentLogic:
         assert document.stages == {}
         assert document.extend == {}
         assert document.gates == WorkflowGates(max_iterations=2)
+
+    def test_workflow_document_global_run_settings_defaults_none(self) -> None:
+        """The default agent and env are None — no global keys were authored.
+
+        The two closing fields are additive: every pre-change construction
+        site (documents built from prompt/stages/extend alone) keeps both
+        globals at ``None`` with zero changes.
+        """
+        assert WorkflowDocument().agent is None
+        assert WorkflowDocument().env is None
+        assert WorkflowDocument(prompt="guidance").agent is None
+        assert WorkflowDocument(prompt="guidance").env is None
+        assert WorkflowDocument(stages={"x": WorkflowStage()}).agent is None
+        assert WorkflowDocument(extend={"y": WorkflowExtendStage(body={})}).env is None
+
+    def test_workflow_document_global_run_settings_stored_verbatim(self) -> None:
+        """The authored agent and env ride the document unchanged — never rebuilt."""
+        env = {"A": "1", "B": "2"}
+        document = WorkflowDocument(prompt="guidance", agent="claude", env=env)
+
+        assert document.agent == "claude"
+        assert document.env is env
+        assert document.env == {"A": "1", "B": "2"}
+
+    def test_workflow_document_with_both_globals_none_is_constructible(self) -> None:
+        """A document with both globals explicitly None matches the default construction."""
+        assert WorkflowDocument(agent=None, env=None) == WorkflowDocument()
+        assert WorkflowDocument(agent=None, env=None).agent is None
+        assert WorkflowDocument(agent=None, env=None).env is None

@@ -5,13 +5,13 @@ importability from the facade, the declared properties (``prompt``,
 ``stages``, ``extend``, ``memory``, ``profile``, ``build``, ``assistants``,
 and ``delegation``), the ``prompt=None`` / ``stages={}`` / ``extend={}`` /
 ``memory=None`` / ``profile=None`` / ``build=None`` / ``assistants={}`` /
-``delegation=None`` / ``repeat=None`` / ``gates=None`` defaults (the
-factories are applied at construction, so the default
-``stages``/``extend``/``assistants`` are empty dicts, not None),
-the fixed ten-field order with the collaboration fields followed by the
-tuning blocks last, and kw_only construction with explicit stages and
-extend maps. These tests pin the contract surface — behavior lives in the
-logic test module.
+``delegation=None`` / ``repeat=None`` / ``gates=None`` / ``agent=None`` /
+``env=None`` defaults (the factories are applied at construction, so the
+default ``stages``/``extend``/``assistants`` are empty dicts, not None),
+the fixed twelve-field order with the collaboration fields followed by the
+tuning blocks and the two global run-settings fields last, and kw_only
+construction with explicit stages and extend maps. These tests pin the
+contract surface — behavior lives in the logic test module.
 """
 
 from __future__ import annotations
@@ -29,6 +29,8 @@ from goga.pipeline.workflow import (
     WorkflowRepeat,
     WorkflowStage,
 )
+
+from tests.conftest import is_kw_only_dataclass
 
 
 class TestWorkflowDocumentContract:
@@ -62,11 +64,11 @@ class TestWorkflowDocumentContract:
         assert WorkflowDocument(build=build).build is build
 
     def test_workflow_document_field_order_fixed(self) -> None:
-        """Field order is fixed with the gates settings block trailing after ``repeat``.
+        """Field order is fixed with the two global run-settings fields closing after ``gates``.
 
         prompt, stages, extend, memory, profile, build, assistants,
-        delegation, repeat, gates — the canonical top-level key order of
-        the workflow-file.
+        delegation, repeat, gates, agent, env — the canonical top-level key
+        order of the workflow-file.
         """
         names = [field.name for field in dataclasses.fields(WorkflowDocument)]
 
@@ -81,6 +83,8 @@ class TestWorkflowDocumentContract:
             "delegation",
             "repeat",
             "gates",
+            "agent",
+            "env",
         ]
 
     def test_workflow_document_constructible_kw_only_with_profile_and_build(self) -> None:
@@ -219,9 +223,43 @@ class TestWorkflowDocumentContract:
         The property carries the workflow quality-gate settings block (a
         :class:`WorkflowGates` with authored values only) or ``None`` when
         the workflow-file carries no block or authors an empty block; it is
-        the LAST field of the fixed canonical order and is stored verbatim.
+        stored verbatim.
         """
         assert hasattr(WorkflowDocument(), "gates")
         assert WorkflowDocument().gates is None
         gates = WorkflowGates(max_iterations=1)
         assert WorkflowDocument(gates=gates).gates is gates
+
+    def test_workflow_document_has_agent_property(self) -> None:
+        """WorkflowDocument exposes an ``agent`` property defaulting to None.
+
+        The property carries the workflow-global agent name — the global
+        run-settings layer consumers resolve ahead of the configuration's
+        pipeline agent; ``None`` when the key is absent or empty.
+        """
+        assert hasattr(WorkflowDocument(), "agent")
+        assert WorkflowDocument().agent is None
+        assert WorkflowDocument(agent="claude").agent == "claude"
+
+    def test_workflow_document_has_env_property(self) -> None:
+        """WorkflowDocument exposes an ``env`` property defaulting to None.
+
+        The property carries the workflow-global environment layer (string
+        map); ``None`` when the key is absent (an empty map equals
+        absence).
+        """
+        assert hasattr(WorkflowDocument(), "env")
+        assert WorkflowDocument().env is None
+        assert WorkflowDocument(env={"A": "1"}).env == {"A": "1"}
+
+    def test_workflow_document_global_run_settings_stored_verbatim(self) -> None:
+        """The authored agent and env are carried identity-equal — the same objects."""
+        env = {"A": "1"}
+        document = WorkflowDocument(agent="claude", env=env)
+
+        assert document.agent == "claude"
+        assert document.env is env
+
+    def test_workflow_document_constructible_kw_only(self) -> None:
+        """Every field of the document is keyword-only (the kw_only dataclass law)."""
+        assert is_kw_only_dataclass(WorkflowDocument)

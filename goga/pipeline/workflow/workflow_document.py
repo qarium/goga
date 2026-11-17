@@ -58,6 +58,11 @@ class WorkflowDocument:
             :class:`WorkflowGates` carrying authored values only), or
             ``None`` when the workflow-file carries no block or authors an
             empty block. A workflow consisting of the block alone is valid.
+        agent: The workflow-global agent name — the global run-settings
+            layer consumers resolve ahead of the configuration's pipeline
+            agent; ``None`` when the key is absent or empty.
+        env: The workflow-global environment layer (string map); ``None``
+            when the key is absent (an empty map equals absence).
     """
 
     prompt: str | None = None
@@ -70,3 +75,5 @@ class WorkflowDocument:
     delegation: WorkflowDelegation | None = None
     repeat: WorkflowRepeat | None = None
     gates: WorkflowGates | None = None
+    agent: str | None = None
+    env: dict[str, str] | None = None
