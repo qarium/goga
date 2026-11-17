@@ -39,13 +39,17 @@ traversal via `..` or an absolute prefix is rejected.
 
 ## Document shape
 
-A workflow-file is a YAML mapping with up to ten top-level keys (the whole
+A workflow-file is a YAML mapping with up to twelve top-level keys (the whole
 file is first rendered as a Jinja2 template with the active profile's
 content as context — see [Profiles](#profiles)):
 
 ```yaml
 prompt: |
   Top-level prompt injected as the first directive of the compiled pipeline.
+
+agent: claude                 # optional run-wide agent (see Global run settings)
+env:                          # optional run-wide environment layer (str → str)
+  CURSOR_MODEL: pro
 
 stages:
   <stage-name>:
@@ -105,15 +109,64 @@ extend:
 | `delegation` | map | no*   | Delegation bounds — `depth` and `max_tasks` (see [Collaboration](#collaboration-assistants-delegation)). A `delegation:`-only workflow is valid. |
 | `repeat` | map | no*   | Run-cycle tuning for a repeatable pipeline — `max_cycles` / `keep_runs` (see [Run cycles](#run-cycles-repeat)). A `repeat:`-only workflow is valid. |
 | `gates` | map | no*   | Quality-gate retry tuning — `patience` / `max_iterations` / `fresh_correction` (see [Quality gates](#quality-gates-gates)). A `gates:`-only workflow is valid (and inert without gated stages). |
+| `agent` | string | no*  | Global run setting — the run's global CLI agent: the effective global agent (this value, else `pipeline.agent`) runs the afm client command, the per-stage `env` wrapper fallback, and the assistant fallback (see [Global run settings](#global-run-settings-agent-env)). An `agent:`-only workflow is valid (a blank value equals absence). |
+| `env` | map of str→str | no* | Global run setting — the run's global environment layer: merged key-wise above `pipeline.env` into the afm launch env (this map wins per key) and layered under every pass env of nested `goga build` runs (see [Global run settings](#global-run-settings-agent-env)). An `env:`-only workflow is valid (an empty map equals absence). |
 
 \* At least one of `prompt`, a non-empty `stages` block, a non-empty
 `extend` block, a `memory` block, a `build` block, an `assistants`
-block, a `delegation` block, a `repeat` block, or a `gates` block must
-be present; an empty workflow is rejected with a structural error.
+block, a `delegation` block, a `repeat` block, a `gates` block, the
+`agent` key (a blank value equals absence), or a non-empty `env` block
+must be present; an empty workflow is rejected with a structural error.
 `profile` does not count — a `profile:`-only workflow is invalid.
 
 Unknown top-level keys are rejected with
-`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat, gates`.
+`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat, gates, agent, env`.
+
+## Global run settings (`agent`, `env`)
+
+The two top-level run settings configure the run globally — no per-stage
+authoring required:
+
+```yaml
+agent: codex                  # the run's global CLI agent
+env:                          # the run's global environment layer (str → str)
+  CURSOR_MODEL: pro
+```
+
+`agent` names the **effective global agent** of the run: this value when
+the workflow carries one (an empty or whitespace-only value equals
+absence), else the configuration's `pipeline.agent`. The effective
+global agent runs exactly three things — the afm client command, the
+per-stage `env` wrapper fallback (see [Stage entries](#stage-entries)),
+and the `assistants` catalog fallback (an assistant without its own
+`agent` launches under it — see
+[Collaboration](#collaboration-assistants-delegation)). Gate AI-review
+steps keep their own strict `agent` requirement — the global agent is
+never their fallback. A non-string value is a structural error
+(`non-str value in workflow.agent`).
+
+`env` is the run's global environment layer, merged key-wise above
+`pipeline.env` into the afm launch env (this map wins per key;
+`-e KEY=VALUE` still wins above both, and the engine keys are dropped —
+see [Pipelines — Configuration](configuration.md)). It reaches every
+stage ambiently through the launch layer — a per-stage `env` closure
+exports only the stage's own values above it. The map must be str → str
+(`non-mapping env in workflow`, `non-str key in workflow.env`,
+`non-str value in workflow.env.<KEY>`); an empty map equals absence.
+
+Both keys ride the Jinja2 profile rendering like the rest of the file,
+and both are active only through the run's workflow — `--no-workflow`,
+a silent auto-match miss, or no workflow file changes nothing.
+
+### The build layering
+
+When a nested `goga build` runs with this workflow in effect, the two
+globals layer onto the build configuration as the middle layer of
+`config < workflow global < workflow build: < CLI` — with or without a
+`build:` block. Per pass (tasks, review, additional), the agent resolves
+build-block > global > configuration, and the env merges key-wise
+configuration < global < block (see the
+[build documentation](../build/configuration.md)).
 
 ## Stage entries
 
@@ -123,7 +176,7 @@ fields:
 | Field   | Type     | Default | Description                                                                                              |
 |---------|----------|---------|----------------------------------------------------------------------------------------------------------|
 | `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `cursor`, `opencode`, `qwen`). Selects which agent runs this stage; forbidden on a script stage — a structural error at compile time (`agent is forbidden on a script stage in workflow.<NAME>`), the same exclusivity family as `gates` and `assistants` on a script stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
-| `env`   | map of str→str | — | Per-stage environment variables, exported verbatim by a generated sh closure wrapping the stage's execution target — the entry's own `agent`, else the extend-entry agent of the same name, else the global pipeline agent. On an agent stage the closure replaces the stage's `command`; on a script stage the authored script becomes the closure's payload (the compiled `script:` field is patched to the wrapper, which re-executes the script inside the exported environment). Every `loop`-expanded copy gets its own closure carrying the same values; keys must be legal environment variable names and values are shell-quoted in the closure. An empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` (`env is forbidden in workflow.extend.<NAME>`). |
+| `env`   | map of str→str | — | Per-stage environment variables, exported verbatim by a generated sh closure wrapping the stage's execution target — the entry's own `agent`, else the extend-entry agent of the same name, else the effective global agent (the workflow's global `agent` when present, else `pipeline.agent`). On an agent stage the closure replaces the stage's `command`; on a script stage the authored script becomes the closure's payload (the compiled `script:` field is patched to the wrapper, which re-executes the script inside the exported environment). Every `loop`-expanded copy gets its own closure carrying the same values; keys must be legal environment variable names and values are shell-quoted in the closure. An empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` (`env is forbidden in workflow.extend.<NAME>`). |
 | `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt-context-not-command). |
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
@@ -214,10 +267,12 @@ time.
 
 When a stage does **not** specify an `agent` in the workflow, the pipeline
 falls back to the extend-entry agent of the same stage name (the inline
-default an `extend` entry may carry), and then to the pipeline's global
-default agent — typically `claude`. Setting `agent` per-stage overrides
-both fallbacks for the named stage only; other stages keep the global
-default.
+default an `extend` entry may carry), and then to the effective global
+agent — the workflow's global `agent` key (see
+[Global run settings](#global-run-settings-agent-env)) when the workflow
+carries one, else the pipeline's global default agent (typically
+`claude`). Setting `agent` per-stage overrides both fallbacks for the
+named stage only; other stages keep the global default.
 
 ### Workflow `prompt` — context, not command
 
@@ -490,7 +545,7 @@ older image predating the mechanism must be refreshed with `--update`.
 ```yaml
 assistants:                     # the catalog — run-level assistants (a name-keyed map)
   reviewer:
-    agent: claude               # optional; defaults to the global pipeline agent
+    agent: claude               # optional; defaults to the effective global agent
     delegate: true              # optional; may create child tasks
     skills: [code-audit]        # the assistant's own skills
     prompt: |
@@ -524,7 +579,7 @@ inline declaration. Each entry value accepts these keys:
 |-----|------|---------|-------------|
 | `prompt` | string | — | The assistant's instruction. Not required at parse time — see the effective-content rule below. |
 | `skills` | list of strings | — | The assistant's own skills. Not required at parse time — see the effective-content rule below. |
-| `agent` | string | global agent | A CLI agent name, resolved implicitly at delivery — no wrapper path is authored. |
+| `agent` | string | effective global agent | A CLI agent name, resolved implicitly at delivery — no wrapper path is authored. The fallback is the effective global agent (the workflow's global `agent` when present, else `pipeline.agent`). |
 | `delegate` | bool | not authored | Whether the assistant may create child tasks. Tri-state at parse time: unset inherits from a tool-delivered base in the [override merge](#assistant-overrides) and materializes `false` at delivery; an explicit `false` opts out. |
 | `env` | map of str→str | — | The assistant's environment variables, delivered through a generated closure that wraps the assistant's launch command (the same mechanism as per-stage `env`). An authored empty map (`env: {}`) is an explicit override that clears the field — not an absence. |
 

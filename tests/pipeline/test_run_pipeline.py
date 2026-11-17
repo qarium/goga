@@ -618,14 +618,19 @@ class TestRunPipelineStageEnvDelivery:
         stage env delivery then patches the claimed stage's ``script:`` line in
         the written flow-file and generates the closure under the redirected
         container-local base. No agent resolves on this path — the config's
-        ``pipeline`` section carries no agent.
+        ``pipeline`` section carries no agent. The workflow also declares a
+        global ``env`` key: it reaches the stage ambiently through the afm
+        launch layer, never through the stage closure — the closure exports
+        only the stage's own values.
         """
         import yaml
 
         afm_dir.mkdir(parents=True)
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)
-        (workflows_dir / "deploy.yml").write_text("stages:\n  build:\n    env:\n      FOO: bar\n")
+        (workflows_dir / "deploy.yml").write_text(
+            "env:\n  GLOBAL_KEY: gv\nstages:\n  build:\n    env:\n      FOO: bar\n"
+        )
 
         project_dir = tmp_path / "pipelines"
         project_dir.mkdir()
@@ -645,7 +650,11 @@ class TestRunPipelineStageEnvDelivery:
 
         assert stage["script"] == wrapper
         assert "command" not in stage
-        assert (stage_wrapper_base / "build").read_text() == "#!/bin/sh\nexport FOO=bar\npytest -q\n"
+        closure = (stage_wrapper_base / "build").read_text()
+        assert closure == "#!/bin/sh\nexport FOO=bar\npytest -q\n"
+        # The workflow's global env key stays out of the per-stage closure —
+        # it rides the afm launch layer, not the wrapper.
+        assert "GLOBAL_KEY" not in closure
 
     def test_run_pipeline_delivers_stage_and_gate_env_on_one_stage(
         self,

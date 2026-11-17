@@ -1591,8 +1591,14 @@ class TestWorkflowGlobalLayering:
         tasks_text = (wrapper_base / "tasks.sh").read_text()
         assert "export E=2" in tasks_text
         assert tasks_text.endswith('exec /home/goga/bin/g-as-claude.sh "$@"\n')
-        # The review pass inherits the layered root agent.
-        assert (wrapper_base / "review.sh").read_text().endswith('exec /home/goga/bin/g-as-claude.sh "$@"\n')
+        # The global env is a base under every pass env map — the review and
+        # additional closures export it alongside the layered root agent.
+        review_text = (wrapper_base / "review.sh").read_text()
+        assert "export E=2" in review_text
+        assert review_text.endswith('exec /home/goga/bin/g-as-claude.sh "$@"\n')
+        additional_text = (wrapper_base / "additional.sh").read_text()
+        assert "export E=2" in additional_text
+        assert additional_text.endswith('exec /home/goga/bin/g-as-claude.sh "$@"\n')
 
     def test_build_workflow_build_block_still_layers_over_globals(
         self,

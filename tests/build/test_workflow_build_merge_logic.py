@@ -266,10 +266,16 @@ class TestMergeWorkflowBuildGlobalLayering:
         assert merged.review.additional is not additional
 
         assert merged.env == {"A": "over", "C": "glob", "X": "glob"}
+        assert merged.agent == "g-global"
         assert merged.review is not None
         assert merged.review.env == {"C": "over", "A": "glob", "X": "glob"}
+        # The global agent beats the configuration agent on every pass —
+        # the block sets no agent field here, so the cascade is
+        # block(None) > global > config per pass.
+        assert merged.review.agent == "g-global"
         assert merged.review.additional is not None
         assert merged.review.additional.env == {"X": "over", "A": "glob", "C": "glob"}
+        assert merged.review.additional.agent == "g-global"
 
         assert config.env == {"A": "1"}
         assert review.env == {"C": "3"}
@@ -278,15 +284,27 @@ class TestMergeWorkflowBuildGlobalLayering:
         assert global_env == {"A": "glob", "C": "glob", "X": "glob"}
 
     def test_empty_string_block_agent_falls_through_to_global(self) -> None:
-        config = BuildConfig(agent="cfg-root")
+        config = BuildConfig(
+            agent="cfg-root",
+            review=ReviewConfig(agent="cfg-rev", additional=AdditionalReviewConfig(agent="cfg-add")),
+        )
+        block = WorkflowBuild(agent="", review_agent="", review_additional_agent="")
 
-        to_global = merge_workflow_build(config, WorkflowBuild(agent=""), "glob", None)
+        to_global = merge_workflow_build(config, block, "glob", None)
 
         assert to_global.agent == "glob"
+        assert to_global.review is not None
+        assert to_global.review.agent == "glob"
+        assert to_global.review.additional is not None
+        assert to_global.review.additional.agent == "glob"
 
-        to_config = merge_workflow_build(config, WorkflowBuild(agent=""), None, None)
+        to_config = merge_workflow_build(config, block, None, None)
 
         assert to_config.agent == "cfg-root"
+        assert to_config.review is not None
+        assert to_config.review.agent == "cfg-rev"
+        assert to_config.review.additional is not None
+        assert to_config.review.additional.agent == "cfg-add"
 
 
 class TestBuildCascadeIntegration:

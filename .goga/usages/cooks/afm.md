@@ -71,8 +71,9 @@ invoking user's home). The single field that matters for integration is `client.
 the absolute in-container path of the `*-as-claude.sh` wrapper afm will drive (e.g.
 `/home/goga/bin/codex-as-claude.sh`). In the goga integration the whole file is written
 by the in-container run coordination before the afm launch: `client.command` carries the
-wrapper resolved from the EFFECTIVE pipeline agent (the authored `pipeline.agent` as
-amended by the in-container `amend_config` delivery); a bare agent name is never written.
+wrapper resolved from the EFFECTIVE global agent (the workflow's global `agent` when the
+effective workflow carries one, else the authored `pipeline.agent` as amended by the
+in-container `amend_config` delivery); a bare agent name is never written.
 
 `config.yaml` fields (YAML tags surfaced by the binary):
 
@@ -537,7 +538,9 @@ The host does:
    <flow_path>`. The written file
    carries `client.command: /home/goga/bin/<agent>-as-claude.sh` (an absolute
    in-container wrapper path matching the `*-as-claude.sh` convention, resolved from
-   the EFFECTIVE pipeline agent; written only when an agent resolves — omitted
+   the EFFECTIVE global agent (the workflow's global `agent` when the effective
+   workflow carries one, else the effective `pipeline.agent`); written only when an
+   agent resolves — omitted
    otherwise so per-stage workflow agents or afm's own defaults cover the absent
    global default), plus five static constants —
    `open_browser: false` (the dashboard is reached via the host-printed
