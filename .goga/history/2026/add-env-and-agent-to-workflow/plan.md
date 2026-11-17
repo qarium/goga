@@ -931,7 +931,7 @@ slots; a `profile:`-only workflow still raises (profile never counts).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail): in
+- [x] **Contract tests** (expected to fail): in
   `tests/pipeline/workflow/test_parse_workflow_contract.py` — the public
   signature `parse_workflow(text: str) -> WorkflowDocument` is unchanged;
   the returned document type carries `agent`/`env` (the Task 2 fields); an
@@ -939,29 +939,29 @@ slots; a `profile:`-only workflow still raises (profile never counts).
   the existing substring assert at ~line 229 to the full fragment
   "valid keys: prompt, stages, extend, memory, profile, build, assistants,
   delegation, repeat, gates, agent, env" — recommended)
-- [ ] **Code**: add `_validate_top_level_agent(field_value: Any) ->
+- [x] **Code**: add `_validate_top_level_agent(field_value: Any) ->
   str | None` mirroring `_validate_top_level_profile`
   (`parse_workflow.py:427`): non-str raises
   `WorkflowSyntaxError("non-str value in workflow.agent")`;
   empty/whitespace-only returns None; otherwise the str. Google docstring
   with Args/Returns/Raises
-- [ ] **Code**: extend `_extract_top_level`'s per-key dispatch and its
+- [x] **Code**: extend `_extract_top_level`'s per-key dispatch and its
   return tuple with the two branches: `agent` →
   `_validate_top_level_agent(value)`; `env` →
   `_validate_stage_env("workflow", value)`; unpack the 12-tuple at the
   call site
-- [ ] **Code**: extend `_TOP_LEVEL_KEYS` (`parse_workflow.py:24`) with
+- [x] **Code**: extend `_TOP_LEVEL_KEYS` (`parse_workflow.py:24`) with
   `"agent", "env"` (12 keys — the tuple join feeds the unknown-key message
   verbatim)
-- [ ] **Code**: grow the empty-workflow condition with
+- [x] **Code**: grow the empty-workflow condition with
   `and agent is None and env is None` and the message with
   ", the agent key, or the env block"; pass `agent=agent, env=env` in the
   final `WorkflowDocument(...)` assembly (line ~281)
-- [ ] **Code**: extend the `parse_workflow` docstring's structural-error
+- [x] **Code**: extend the `parse_workflow` docstring's structural-error
   enumeration with the two new keys (the CODEMANIFEST step 4/5/7 wording)
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/pipeline/workflow/test_parse_workflow_contract.py -v` — all pass
-- [ ] **Logic tests — positive** (new, in the mirror suites):
+- [x] **Logic tests — positive** (new, in the mirror suites):
   - `test_agent_parses_into_document_field` — input
     `"stages:\n  build:\n    skip: true\nagent: claude\n"`:
     `document.agent == "claude"`, `document.env is None`,
@@ -972,7 +972,7 @@ slots; a `profile:`-only workflow still raises (profile never counts).
     `document.agent is None` (parse does NOT render/interpret values)
   - `test_agent_alone_and_env_alone_are_valid_workflows` — `"agent:
     claude\n"` and `"env:\n  A: b\n"` both parse; the carried values assert
-- [ ] **Logic tests — negative**:
+- [x] **Logic tests — negative**:
   - `test_non_str_agent_raises_structural_error` — parametrized table
     `"agent: 5"`, `"agent: [claude]"`, `"agent: {n: c}"`, `"agent:"`
     (YAML null — an empty key is NOT absence; the `profile:` law), each
@@ -991,7 +991,7 @@ slots; a `profile:`-only workflow still raises (profile never counts).
   - `test_empty_workflow_message_names_agent_and_env` —
     `"profile: default\n"` → exact new message ending "… the gates block,
     the agent key, or the env block"
-- [ ] **Logic tests — edge cases**:
+- [x] **Logic tests — edge cases**:
   - `test_blank_agent_normalizes_to_absence` —
     `"agent: '   '\nstages:\n  a:\n    skip: true\n"` →
     `document.agent is None`, valid document
@@ -1000,7 +1000,7 @@ slots; a `profile:`-only workflow still raises (profile never counts).
   - `test_empty_env_map_equals_absence` —
     `"prompt: hi\nenv: {}\n"` → `document.env is None` (NOT `{}` — the
     downstream `is not None` checks rely on it)
-- [ ] **Registry updates** (existing pins, same commit):
+- [x] **Registry updates** (existing pins, same commit):
   - HARD-FAILING (exact equality, must be updated or they fail):
     `tests/pipeline/workflow/test_parse_workflow_memory.py` ~378
     (`test_parse_workflow_empty_workflow_message_mentions_memory_block`),
@@ -1016,16 +1016,16 @@ slots; a `profile:`-only workflow still raises (profile never counts).
     `test_parse_workflow_memory.py` ~235, `test_parse_workflow_logic.py`
     ~581, `test_parse_workflow_contract.py` ~229 to the full 12-key
     fragment
-- [ ] **Debugging**: `.venv/bin/pytest tests/pipeline/workflow/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/pipeline/workflow/ -x` — fix
   implementation code until all pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the cell stays declarative (no wrapper
+- [x] **Contract re-verification**: the cell stays declarative (no wrapper
   resolution, no env merging, no launch anywhere); the five exact message
   texts match the CODEMANIFEST byte-for-byte; `from
   goga.pipeline.workflow import parse_workflow, WorkflowSyntaxError` green
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — fix formatting if
   necessary
-- [ ] Verify `goga/pipeline/workflow/.usages/parse-workflow.md` matches the
+- [x] Verify `goga/pipeline/workflow/.usages/parse-workflow.md` matches the
   implemented law (12-key list, the global-run-settings section, the
   empty-workflow rule text); report drift, do not silently rewrite
 

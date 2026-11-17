@@ -86,7 +86,7 @@ class TestParseWorkflowRepeatLogic:
             match=re.escape(
                 "empty workflow — provide at least prompt, one stage, one extend entry, "
                 "the memory block, the build block, the assistants block, the delegation block, "
-                "the repeat block, or the gates block"
+                "the repeat block, the gates block, the agent key, or the env block"
             ),
         ):
             parse_workflow("profile: dev\n")

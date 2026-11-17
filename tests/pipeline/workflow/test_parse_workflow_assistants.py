@@ -71,7 +71,10 @@ class TestAssistantCatalog:
 
         message = str(exc_info.value)
         assert "unknown key in workflow: unknown_key" in message
-        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat" in message
+        assert (
+            "valid keys: prompt, stages, extend, memory, profile, build, "
+            "assistants, delegation, repeat, gates, agent, env" in message
+        )
 
     def test_parse_workflow_extended_empty_message_fires_for_empty_mapping(self) -> None:
         """``{}`` raises the extended empty-workflow message naming the content blocks."""
@@ -81,7 +84,7 @@ class TestAssistantCatalog:
         assert str(exc_info.value) == (
             "empty workflow — provide at least prompt, one stage, one extend entry, "
             "the memory block, the build block, the assistants block, the delegation block, "
-            "the repeat block, or the gates block"
+            "the repeat block, the gates block, the agent key, or the env block"
         )
 
     def test_parse_assistant_catalog_map_form(self) -> None:
