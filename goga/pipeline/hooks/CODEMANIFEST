@@ -84,6 +84,12 @@ Annotations: |
   authored check-step list is an unbeatable ordinary stage field — an
   authored list is never overwritten, and an unset list takes the later
   contributing tool's entries.
+  The overlay merge preserves the global run settings of the workflow
+  model: the authored agent and env fields ride the rebuilt document
+  verbatim — in the verbatim-from-base set beside profile and build. The
+  merge reads the globals of the base only; a tool can neither supply
+  nor override them — global run settings belong to the workflow author
+  alone.
   Use the `per-tool-delivery` practice for the staged delivery loop of
   the amendment checkpoint — its loop skeleton, primitives, and
   tool-grouped commit apply as written.
@@ -381,12 +387,12 @@ Annotations: |
        contributions in enumeration order
     8. Return the `WorkflowOverlay` — the workflow None only when the
        base is None and no contribution committed; the final document
-       assembly carries the profile and build fields of `base` verbatim
-       (exactly as memory survives the rebuild), the assistants field of
-       the base together with the appended contributing entries, the
-       effective repeat, and the effective gates settings block riding
-       the rebuilt document verbatim — workflow-level instructions never
-       vanish in the overlay
+       assembly carries the profile, build, agent, and env fields of
+       `base` verbatim (exactly as memory survives the rebuild), the
+       assistants field of the base together with the appended
+       contributing entries, the effective repeat, and the effective
+       gates settings block riding the rebuilt document verbatim —
+       workflow-level instructions never vanish in the overlay
 
     Requirements:
     - Pure — the inputs stay unmutated; the result is a new document
@@ -415,6 +421,12 @@ Annotations: |
       settings block whole and every stage's authored check-step list; a
       rebuild that drops them would silently strip stage quality checks
       from tool-amended runs
+    - The rebuilt `WorkflowDocument` preserves the global run settings:
+      the agent and env fields of the base ride the rebuild verbatim —
+      a rebuild that drops them would silently revert a tool-amended
+      run to configuration-level globals; a tool-supplied global never
+      reaches the final document (the merge reads the globals of the
+      base only)
     - The override is field-presence based: an authored None means
       "not authored" (the base value flows), an authored empty
       skills/env means "clear" (the base value is replaced with the
@@ -435,6 +447,9 @@ Annotations: |
     - Do not interpret, validate, or rebuild the gates values — the block
       and the per-stage lists are carried whole; the merge unit is the
       field/block
+    - Do not read the agent or env fields of any contribution document
+      — the globals are author-territory; only the base carries them
+      into the overlay
     - Do not merge content fields partially — prompt
       and skills replace whole (no text concatenation, no list union); the
       field unit is the merge unit
@@ -834,6 +849,7 @@ Description: |
   hooks platform, and the bridged mid-run events with their passthrough
   contexts. The overlay merge preserves the full workflow model —
   per-stage `env` instructions, the workflow-level `profile` and `build`
-  fields, the run-cycle tuning (repeat block, gates settings block) with
+  fields, the global `agent` and `env` run settings, the run-cycle
+  tuning (repeat block, gates settings block) with
   the per-stage check-step lists, and the collaboration instructions
   (assistant catalog, delegation block, stage attachments).

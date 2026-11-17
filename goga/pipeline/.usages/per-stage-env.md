@@ -91,6 +91,11 @@ are ever required. Loop-expanded copies of an env-declaring stage all
 carry the env — each copy receives its own wrapper with the same
 values.
 
+The global env layers — `pipeline.env` and the workflow's global `env` —
+reach every stage ambiently through the afm launch layer; a stage wrapper
+exports only the stage's own values above them. Nothing about the
+per-stage delivery changes with a workflow global env in effect.
+
 ## What stays identical
 
 Stages without `env` are compiled and serialized without wrappers —

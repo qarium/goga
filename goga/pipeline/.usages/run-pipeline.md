@@ -33,16 +33,22 @@ skip=None, parallel=None, fail_on_error=False) -> exit_code
 
 The run coordination opens with the configuration load-and-amend: the authored `load_project_config`, then the
 `amend_config` delivery to the tool packages installed in the image, then the amendment summary lines to stderr.
-Everything downstream consumes the effective configuration — the afm configuration write reads the effective
-`pipeline.agent`, the launch layer reads the effective `pipeline.env`. The first failing tool stops the run with a
-clean error naming the tool and the action: afm never launches and no run events fire. Docker-level fields (image,
+Everything downstream consumes the effective configuration — the afm
+configuration write reads the effective `pipeline.agent`, the launch layer
+reads the effective `pipeline.env` — each overridable by the workflow's
+global `agent`/`env` keys (see Workflow-global run settings). The first
+failing tool stops the run with a clean error naming the tool and the
+action: afm never launches and no run events fire. Docker-level fields (image,
 proxy, hosts) of the effective configuration are applied-but-unconsumed here — silently.
 
 ## afm configuration
 
-Before the launch the coordination writes the whole afm configuration file via `write_afm_config`: the client command
-resolved from the effective `pipeline.agent` — written only when an agent resolves, so per-stage workflow agents or
-afm's own defaults cover the absent global default — plus the five static fields (open_browser, proxy.enabled,
+Before the launch the coordination writes the whole afm configuration file
+via `write_afm_config`: the client command resolved from the effective
+global agent (the workflow's global `agent` when the effective workflow
+carries one, else the effective `pipeline.agent`) — written only when an
+agent resolves, so per-stage workflow agents or afm's own defaults cover
+the absent global default — plus the five static fields (open_browser, proxy.enabled,
 prompts_dir, add_stage.enabled=false — the dashboard stage-addition is off for goga-managed runs — and
 skin_dir=/home/goga/.afm/skins/goga — the engine's custom skin directory, served wholesale as the
 active skin while it holds `index.css`; no `theme` is written, so the engine-builtin theme is the
@@ -149,6 +155,31 @@ layer active onto the empty base. With no tool packages installed the overlay is
 — every run composes exactly what was passed. The amendment is a hard action: the first failing
 tool stops the command with a clean error, and its whole contribution is discarded.
 
+## Workflow-global run settings
+
+A workflow-file may carry two global run settings — `agent` (a string) and
+`env` (a str→str map). When a workflow is in effect, its globals override
+the configuration's own pipeline globals:
+
+- The **effective global agent** is the workflow's `agent` when it carries
+  one, else the effective `pipeline.agent`. One resolved value feeds the
+  three global consumers: the afm client command of the configuration
+  write, the exec fallback of the per-stage env wrappers, and the
+  assistant fallback (an assistant declaration without its own agent
+  launches under the workflow's global agent).
+- The **effective launch env base** is `pipeline.env` key-wise merged with
+  the workflow's `env` — a workflow key overrides the same-named config
+  key, untouched config keys survive. CLI entries (`-e` /
+  `GOGA_EXTRA_ENV`) stay above the base; engine-variable keys drop
+  silently, as ever.
+
+The globals are ambient: stages, gate steps, and assistants inherit the
+global env through the afm launch layer exactly as they inherit
+`pipeline.env`. Activation is workflow-scoped — with `--no-workflow`, a
+silent auto-match miss, or no workflow-file, the configuration values
+feed the same points and nothing changes. Gate AI-review steps still
+require their own `agent` — the global agent is not their fallback.
+
 ## Run events
 
 `run_created` fires immediately before the runner launch — after compilation, prompt
@@ -166,14 +197,16 @@ The environment reads are exactly four: `AFM_DIR` (the in-container afm state di
 CLI entries payload variable `GOGA_EXTRA_ENV`, `GOGA_PROFILE`, and `GOGA_HOME_PROFILES`
 (decoded once; a damaged bundle is one clean pre-run error, no events). The afm launch
 environment composes as the ladder
-requires: the container's process environment stays untouched, and the composed layer — the
-effective task env layer (`pipeline.env`) with the decoded CLI entries applied above it, plus
-`GOGA_PROFILE=<effective profile name>` when a profile resolved — passes to `run_flow` as its
-`env` parameter, applying to the afm
+requires: the container's process environment stays untouched, and the
+composed layer — the effective launch env base (`pipeline.env`
+key-wise merged with the workflow's global `env`) with the decoded CLI
+entries applied above it, plus `GOGA_PROFILE=<effective profile name>`
+when a profile resolved — passes to `run_flow` as its `env` parameter,
+applying to the afm
 subprocess only. The `GOGA_PROFILE` export makes the effective profile inheritable: pipeline
 stages and any build invoked inside the runtime pick the same profile up through its env
 channel with no additional options (the workflow travels via `GOGA_WORKFLOW` of the launch
-environment). Keys of `pipeline.env` and the CLI entries colliding with the engine set —
+environment). Keys of the composed base and the CLI entries colliding with the engine set —
 `GOGA_PROFILE`, `GOGA_WORKFLOW`, `GOGA_HOME_PROFILES`, `GOGA_EXTRA_ENV`, `AFM_DIR`,
 `AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` — are dropped silently
 from the layer; the inherited launch values stand. Run options (the workflow decision, the

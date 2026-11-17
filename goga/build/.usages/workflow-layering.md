@@ -3,8 +3,9 @@
 ## Domain
 
 How a workflow-file drives build settings on top of .goga/config.yml:
-the six-field `build:` block, the key-wise env merge, and the
-config < workflow < CLI order. Target audience: configuration authors
+the two global run settings (`agent`, `env`), the six-field `build:`
+block, the key-wise env merge, and the config < workflow global <
+workflow build: < CLI order. Target audience: configuration authors
 (deciding what lives in config vs workflow) and contributors inheriting
 a workflow inside a pipeline runtime.
 
@@ -19,14 +20,27 @@ launcher never reads workflow files.
 
 ## Layering order
 
-    .goga/config.yml  <  workflow build:  <  CLI flags
+    .goga/config.yml  <  workflow global (agent/env)  <  workflow build:  <  CLI flags
 
-- Absent block fields never override the configuration.
-- Agent fields override when set (root, review, additional — each
-  independently).
-- Env maps merge KEY-WISE: a workflow key overrides the same-named
-  config key; every other config env entry survives. Example: the
-  workflow sets one model variable, the config keeps the rest.
+The workflow-file may carry two global run settings — top-level
+`agent` (a string) and top-level `env` (a str→str map) — that apply
+whenever a workflow is in effect, with or without a `build:` block:
+
+- Agent: each pass (root, review, additional) resolves the
+  `build:`-block field, else the global `agent`, else the config
+  field. The config's inheritance cascade (review inherits root,
+  additional inherits review) then fills the still-unset fields from
+  the effective, post-override root.
+- Env: each pass env merges key-wise — config < workflow global <
+  `build:` block < CLI. The global env is a base under the review and
+  external-review env layers too; the config's own fields still never
+  inherit into each other (config root env stays tasks-only).
+- Absent values at any layer never override; an empty global env map
+  equals absence.
+
+Example: the workflow sets one global model variable — every pass
+(task, review, external review) receives it above its own config env,
+and a `build.env` key can still win per key.
 
 ## Workflow selection
 

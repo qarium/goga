@@ -14,7 +14,8 @@ Annotations: |
   workflow-file (the reading step lives in `load_workflow`; `parse_workflow`
   accepts the rendered text), validates its structure (known top-level keys
   prompt / stages / extend /
-  memory / profile / build / assistants / delegation / repeat / gates, field types,
+  memory / profile / build / assistants / delegation / repeat / gates /
+  agent / env, field types,
   loop counts, extend-entry positioning, and the inline agent/loop/approve fields of
   an extend-entry), and returns a
   `WorkflowDocument` carrying declarative instructions for the compiler. It performs no I/O beyond the path it receives, performs
@@ -186,6 +187,25 @@ Annotations: |
   This cell performs NO gate logic — it composes no commands, materializes no
   settings defaults, and decides no emission form; the consumers consume the
   extracted values. The import graph stays one-directional.
+
+  agent and env are declarative workflow-global run settings — the two
+  top-level keys every consumer resolves as the global layer ahead of the
+  project configuration's own globals: agent (a single string naming the
+  run's global agent) and env (a str→str map of the run's global
+  environment layer). This cell validates both keys structurally and
+  extracts them into the document model; it resolves no wrappers, merges
+  no layers, and launches nothing — the consumers own every resolution
+  law. agent follows the empty-to-absence normalization of a scalar: a
+  non-str value is a structural error, an empty or whitespace-only value
+  normalizes to absence. env follows the string-map law: a non-mapping
+  value, a non-str key, or a non-str value is a structural error; an
+  empty map equals absence — the assistant explicit-clear discipline does
+  not apply to this key. Both keys count as content for the empty-workflow
+  rule: a workflow consisting of agent alone (or env alone) is valid;
+  profile never counts. Both keys ride the whole-file contributor-profile
+  rendering like the rest of the document, and the profile peek reads the
+  raw text — a value materializing only through rendering activates
+  nothing.
 
 ---
 
@@ -748,7 +768,7 @@ Annotations: |
       The step's environment instruction (string map), valid on both step
       kinds; None when not authored (an empty map equals absence).
 
-"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None, memory: WorkflowMemory | None = None, profile: str | None = None, build: WorkflowBuild | None = None, assistants: dict[str, WorkflowAssistant] | None = None, delegation: WorkflowDelegation | None = None, repeat: WorkflowRepeat | None = None, gates: WorkflowGates | None = None)":
+"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None, memory: WorkflowMemory | None = None, profile: str | None = None, build: WorkflowBuild | None = None, assistants: dict[str, WorkflowAssistant] | None = None, delegation: WorkflowDelegation | None = None, repeat: WorkflowRepeat | None = None, gates: WorkflowGates | None = None, agent: str | None = None, env: dict[str, str] | None = None)":
   location: workflow_document.py
   annotations: |
     Aggregated workflow-file document — the parsed representation of a
@@ -800,6 +820,12 @@ Annotations: |
     `gates`: the quality-gate settings block, or None when the workflow-file
              carries no block or authors an empty block. A workflow
              consisting of the block alone is valid
+    `agent`: the workflow-global agent name — the global run-settings
+             layer every consumer resolves ahead of the configuration's
+             pipeline agent, or None when the key is absent or empty
+    `env`: the workflow-global environment layer (string map, literal
+           and/or rendered), or None when the key is absent (an empty
+           map equals absence)
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -818,20 +844,24 @@ Annotations: |
       representation, the actual default factory is applied at construction
     - memory defaults to None; profile defaults to None; build defaults to
       None; delegation defaults to None; repeat defaults to None; gates
-      defaults to None; field
+      defaults to None; agent defaults to None; env defaults to None (an
+      empty map equals absence — normalized by `parse_workflow`); field
       order is fixed: prompt, stages, extend, memory, profile, build,
-      assistants, delegation, repeat, gates
-    - The empty-workflow rule counts the block: a workflow is empty only when
-      prompt is None AND stages is empty AND extend is empty AND memory is
-      None AND build is None AND assistants is empty AND delegation is None
-      AND repeat is None AND gates is None — the gates block counts as
-      content; `profile` never counts (activation is not
-      content: a profile-only workflow is still empty)
-    - A workflow-file with none of a top-level `prompt`, any stage entries,
-      any extend entries, the memory block, the build block, the assistants
-      block, the delegation block, the repeat block, or the gates block is
-      rejected by `parse_workflow` with a structural error before this
-      dataclass is built — at least one must be present
+      assistants, delegation, repeat, gates, agent, env — the two global
+      run-settings fields close the canonical order
+    - The empty-workflow rule counts the new keys: a workflow is empty
+      only when prompt is None AND stages is empty AND extend is empty
+      AND memory is None AND build is None AND assistants is empty AND
+      delegation is None AND repeat is None AND gates is None AND agent
+      is None AND env is None — the global keys count as content;
+      `profile` never counts (activation is not content: a profile-only
+      workflow is still empty)
+    - A workflow-file with none of a top-level `prompt`, any stage
+      entries, any extend entries, the memory block, the build block, the
+      assistants block, the delegation block, the repeat block, the gates
+      block, the agent key, or the env block is rejected by
+      `parse_workflow` with a structural error before this dataclass is
+      built — at least one must be present
 
     Constraints:
     - Do not validate stage-name keys against any pipeline — the compiler
@@ -874,6 +904,13 @@ Annotations: |
     "gates -> WorkflowGates | None": |
       The quality-gate settings block, or None when the workflow-file carries
       no block or authors an empty block.
+    "agent -> str | None": |
+      The workflow-global agent name — the global run-settings layer
+      consumers resolve ahead of the configuration's pipeline agent;
+      None when the key is absent or empty.
+    "env -> dict[str, str] | None": |
+      The workflow-global environment layer (string map); None when
+      the key is absent (an empty map equals absence).
 
 "parse_workflow(text: str) -> workflow: WorkflowDocument":
   location: parse_workflow.py
@@ -920,9 +957,18 @@ Annotations: |
          error "non-mapping repeat block in workflow"
        - gates: if present, must be a dict; otherwise raise a structural
          error "non-mapping gates block in workflow"
+       - agent: if present, must be a str; otherwise raise a structural
+         error "non-str value in workflow.agent". An empty or
+         whitespace-only value normalizes to None
+       - env: if present, must be a dict of str→str; a non-dict value
+         raises a structural error "non-mapping env in workflow"; a
+         non-str key raises "non-str key in workflow.env"; a non-str
+         value raises "non-str value in workflow.env.KEY". An empty map
+         equals absence — build with env=None
     5. For every other top-level key — raise a structural error
        "unknown key in workflow: KEY; valid keys: prompt, stages, extend,
-       memory, profile, build, assistants, delegation, repeat, gates"
+       memory, profile, build, assistants, delegation, repeat, gates,
+       agent, env"
     6.0. For the memory block (when present), validate each key and value:
        - an unknown key raises "unknown key in workflow.memory: KEY; valid
          keys: method, path, max_rules, commit, mode"
@@ -1201,24 +1247,26 @@ Annotations: |
         authored in the stages block by the new stage's name
     7. If prompt is None AND stages is empty (no entries) AND extend is
        empty (no entries) AND memory is None AND build is None AND
-       assistants is empty AND delegation is None AND repeat is None AND
-       gates is None
+       assistants is empty AND delegation is None AND repeat is None
+       AND gates is None AND agent is None AND env is None
        — raise a structural error "empty workflow — provide at least
        prompt, one stage, one extend entry, the memory block, the build
        block, the assistants block, the delegation block, the repeat
-       block, or the gates block" (profile never rescues a workflow from
-       emptiness — activation is not content)
+       block, the gates block, the agent key, or the env block"
+       (profile never rescues a workflow from emptiness — activation
+       is not content)
     8. Return `WorkflowDocument` from the parsed prompt, stages, extend,
-       memory, profile, build, assistants, delegation, repeat, and gates
-       (the built `WorkflowGates`, or None)
+       memory, profile, build, assistants, delegation, repeat, gates,
+       and the two global keys (the authored agent, or None; the
+       authored env map, or None)
 
     Apply `convention` for code style, exception message formatting, and
     docstring style.
 
     Requirements:
     - Top-level unknown keys are a structural error — only prompt, stages,
-      extend, memory, profile, build, assistants, delegation, repeat, and
-      gates are accepted
+      extend, memory, profile, build, assistants, delegation, repeat,
+      gates, agent, and env are accepted
     - extend-entry depends_on is a structural error; before/after (when
       present) must be list[str]; at least one of before/after is required
     - extend-entry names are NOT validated against any pipeline here —
@@ -1283,8 +1331,18 @@ Annotations: |
       warning+skip) — split or prune such workflows
     - A workflow-file with none of a prompt, any stage entries, any extend
       entries, the memory block, the build block, the assistants block, the
-      delegation block, the repeat block, or the gates block is rejected —
-      at least one must be present
+      delegation block, the repeat block, the gates block, the agent key,
+      or the env block is rejected — at least one must be present
+    - agent (when present) must be a str; a non-str value raises
+      "non-str value in workflow.agent"; an empty or whitespace-only
+      value normalizes to None (absence)
+    - env (when present) must be a dict of str→str; a non-dict value
+      raises "non-mapping env in workflow"; a non-str key raises
+      "non-str key in workflow.env"; a non-str value raises "non-str
+      value in workflow.env.KEY"; an empty map equals absence
+      (env=None)
+    - A workflow consisting of the agent key alone or the env block
+      alone is valid — both keys count as content
     - A workflow consisting of the build block alone is valid
     - The assistants catalog grammar: a name-keyed mapping; each entry value
       carries the key set prompt, skills, agent, delegate, env; delegate is
@@ -1378,6 +1436,9 @@ Annotations: |
     - Do not resolve attachment references or derive profile ids here — the
       compiler resolves a reference against the assistant names of the
       effective document and the delivery materializes the profile
+    - Do not resolve agent to a wrapper path, merge env with any other
+      layer, or apply either global anywhere here — the consumers own
+      every resolution law
 
 "WorkflowSyntaxError(message: str)":
   location: parse_workflow.py
@@ -1692,8 +1753,9 @@ Description: |
   extend a pipeline at compilation time — the per-stage overrides, the
   extend-stages, the memory configuration, the run-cycle tuning, the
   collaboration instructions (assistant catalog, delegation bounds, stage
-  attachments), and the stage quality-gate instructions (the retry
-  settings block and the per-stage check steps). Additionally owns the
+  attachments), the stage quality-gate instructions (the retry
+  settings block and the per-stage check steps), and the two global run
+  settings (agent and env). Additionally owns the
   contributor-profile zone of the
   workflow path: profile resolution, strict profile-name validation,
   activation precedence resolution, and whole-file Jinja rendering of

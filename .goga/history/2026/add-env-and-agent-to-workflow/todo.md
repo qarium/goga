@@ -1,0 +1,1 @@
+Add env and agent globally to the workflow. These settings should override the main configuration settings and provide global settings for the pipeline and build.

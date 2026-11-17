@@ -119,12 +119,18 @@ Annotations: |
   Run git external commands via subprocess (the manifest pre-check and the
   branch resolution) — never at a checkpoint moment.
 
-  Workflow layering: build settings compose config < workflow build: <
-  CLI at the resolution point — the six-field workflow block overlays
-  the effective build configuration before the settings resolution;
-  env maps merge key-wise (a workflow key overrides the same-named
-  config key, the rest of the config env survives). Use `load-workflow`
-  for the loading chain and `profiles` for the activation rules.
+  Workflow layering: build settings compose config < workflow global <
+  workflow build: < CLI at the resolution point. The workflow's two
+  global run settings ride the same layering: the global agent fills
+  every pass-agent field the build block leaves unset — overriding the
+  configuration field when one is set — and the global env merges
+  key-wise under every
+  pass env (a workflow key overrides the same-named configuration key,
+  untouched configuration keys survive; the build-block env wins per key
+  above the global). The layering applies whenever a workflow is in
+  effect — a document without a build: block still carries its globals.
+  Use `load-workflow` for the loading chain and `profiles` for the
+  activation rules.
 
   Per-role closure wrappers: every build pass executor (tasks, review,
   additional) runs through a generated closure wrapper — one uniform,
@@ -180,15 +186,18 @@ Annotations: |
     3. Print the feedback line to stderr when a workflow is in effect AND
        the loaded profile is not None — Build running with workflow "<w>"
        and profile "<p>"; every other run prints no line
-    4. Layer the build settings when the loaded document carries a build
-       block: `merge_workflow_build` of the effective config.build with
-       the document build block — the layered BuildConfig feeds every
-       downstream step; a build invocation whose configuration has no
-       build section is one clean logged error naming the requirement
-       (exit 1, no events, nothing written) before any layering — with
-       or without a workflow in effect, reachable only via a direct
-       in-container invocation (the host launcher guards the section
-       host-side)
+    4. Layer the build settings when a workflow is in effect:
+       `merge_workflow_build` of the effective config.build with the
+       document's build block (None when the document carries no
+       block) and the document's global agent and env — the layered
+       BuildConfig feeds every downstream step; the layering runs
+       whenever the loaded document is present (the globals apply with
+       no build block too). A build invocation whose configuration has
+       no build section is one clean logged error naming the
+       requirement (exit 1, no events, nothing written) before any
+       layering — with or without a workflow in effect, reachable only
+       via a direct in-container invocation (the host launcher guards
+       the section host-side)
     5. Resolve the run settings via `resolve_run_settings` — the two parts
        with root inheritance, the tri-state skip, the strategy default
        medium — over the layered configuration
@@ -282,9 +291,9 @@ Annotations: |
       through the wrappers
     - GOGA_WORKFLOW is never written by the build path — it is
       interpreted only (written solely by the pipeline-run launcher)
-    - Workflow layering composes config < workflow build: < CLI at the
-      resolution point; an absent block field never overrides; env maps
-      merge key-wise
+    - Workflow layering composes config < workflow global < workflow
+      build: < CLI at the resolution point; an absent value at every
+      layer never overrides; env maps merge key-wise
     - On dry-run: fire the identical event structure with the dry_run fact,
       print the commands of both passes without env layers, relocate nothing
     - Pre-launch failures (steps 0-7) fire no events — the moment never
@@ -389,51 +398,74 @@ Annotations: |
       parameters
     - Do not render or parse here — the loading chain owns both
 
-"merge_workflow_build(config: BuildConfig, build_block: WorkflowBuild) -> config: BuildConfig":
+"merge_workflow_build(config: BuildConfig, build_block: WorkflowBuild | None, global_agent: str | None = None, global_env: dict[str, str] | None = None) -> config: BuildConfig":
   location: workflow_build.py
   annotations: |
-    Overlay the six-field workflow build block onto the effective build
-    configuration: a NEW BuildConfig where absent block fields never
-    override, agent fields override when set, and env maps merge
-    key-wise.
+    Overlay the workflow layers onto the effective build configuration:
+    the two global run settings as the middle layer and the six-field
+    build block above them — producing a NEW BuildConfig where each pass
+    agent resolves build-block > global > configuration, each pass env
+    merges key-wise configuration < global < block, and absent values at
+    every layer never override.
 
     `config`: the effective build configuration (the base layer)
-    `build_block`: the workflow build block model
+    `build_block`: the workflow build block model, or None when the
+                   workflow carries no block (the globals still layer)
+    `global_agent`: the workflow's global agent, or None
+    `global_env`: the workflow's global env map, or None
     `config`: the layered build configuration (a new value; inputs
               unmutated)
 
     Algorithm:
-    1. Agent fields: root agent = build_block.agent when set, otherwise
-       the config value; review agent and additional agent the same way
-    2. Env maps, key-wise with the block winning per key: tasks env =
-       config env overlaid with block env; review env = config review
-       env overlaid with block review env; additional env = config
-       additional env overlaid with block additional env (the rest of
-       each config env survives — the override-one-variable use case)
+    1. Agent fields, per pass (root, review, additional): the
+       build-block field when set, else `global_agent` when set, else
+       the configuration field; None only when all three sources are
+       unset
+    2. Env maps, key-wise with the later layer winning per key: each
+       pass env (tasks, review, additional) = the configuration pass
+       env overlaid with `global_env`, then with the block pass env —
+       the rest of each underlying env survives. The global env is a
+       base under the review and additional env layers alike; the
+       configuration's own fields still never inherit into each other
+       (the configuration root env stays the tasks-pass layer only)
     3. Every other field of BuildConfig and its nested models passes
        through verbatim (session knobs, iteration caps, skip, roles,
        base_ref, strategy, finalize, patience, prompts_dir, agents_dir,
        proxy, hosts)
+    4. The agent-inheritance cascade of the settings resolution runs
+       over the layered values — an unset layered review agent
+       inherits the layered root (block agent, else global, else
+       configuration agent); an unset layered additional agent
+       inherits the layered review agent
 
     Requirements:
     - Pure — new BuildConfig and new nested models; inputs unmutated
-    - An absent block field (None) never overrides the configuration
-    - `config` is always a non-None `BuildConfig` — the workflow block
-      layers ONLY onto an existing build section; a build invocation
-      with no build section in .goga/config.yml raises one strict
-      error naming the requirement (reachable only via a direct
+    - An absent value at any layer (None block field, None global,
+      None config field) never overrides
+    - `config` is always a non-None `BuildConfig` — the workflow
+      layers overlay ONLY onto an existing build section; a build
+      invocation with no build section in .goga/config.yml raises one
+      strict error naming the requirement (reachable only via a direct
       in-container invocation — the host launcher guards the section
       host-side) instead of the raw attribute failure
-    - When config.review is None and the block sets any review field:
-      construct a NEW `ReviewConfig` (the set fields, every other
-      field None / empty; a NEW `AdditionalReviewConfig` when
-      additional fields are set) so `resolve_run_settings` receives a
-      well-formed layered configuration
+    - When config.review is None and any review-sourced value would be
+      set (a block review field, or a global reaching the review
+      pass): construct a NEW `ReviewConfig` (the layered set fields,
+      every other field None / empty; a NEW
+      `AdditionalReviewConfig` when additional-sourced values are set)
+      so `resolve_run_settings` receives a well-formed layered
+      configuration
+    - With `global_agent` and `global_env` both None the layering
+      matches the block-only overlay exactly
 
     Constraints:
     - Do not apply CLI values here — CLI applies at the settings
-      resolution, preserving config < workflow build: < CLI
+      resolution, preserving config < workflow global < workflow
+      build: < CLI
     - Do not resolve wrappers or validate agents here
+    - Do not inherit configuration env between passes here — the
+      global env is the only cross-pass base; the pass env layers stay
+      otherwise independent
 
 "resolve_run_settings(config: BuildConfig, cli_options: dict) -> settings: RunSettings":
   location: run_settings.py
@@ -442,7 +474,8 @@ Annotations: |
     and the CLI options — root inheritance applied, tri-state skip resolved,
     strategy defaulted. The `config` parameter is the LAYERED effective
     build configuration: when a workflow is in effect, the caller has
-    already overlaid its build block via `merge_workflow_build`; this
+    already overlaid its global run settings and build block via
+    `merge_workflow_build`; this
     routine consumes the layered value and applies no layering itself.
 
     `config`: the layered build configuration (`BuildConfig`) in the
@@ -858,5 +891,5 @@ Description: |
   settings resolution with root inheritance, the validation gate, the four
   notifications, the external-review surface, finalize materialization, and
   plan relocation. Workflow-driven build-settings layering (config <
-  workflow build: < CLI) and per-role closure wrappers delivering each
-  executor's environment.
+  workflow global < workflow build: < CLI) and per-role closure wrappers
+  delivering each executor's environment.
