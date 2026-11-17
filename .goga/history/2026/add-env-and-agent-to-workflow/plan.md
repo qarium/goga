@@ -841,19 +841,21 @@ no `.venv` and the system interpreter has no pytest/ruff (verified).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create the virtualenv: `python3 -m venv .venv` (Python 3.12.16 system
+- [x] Create the virtualenv: `python3 -m venv .venv` (Python 3.12.16 system
   interpreter; 3.10+ required by the convention)
-- [ ] Install the project with the test extras:
+- [x] Install the project with the test extras:
   `.venv/bin/pip install -e ".[test]"` (pytest, pytest-cov, ruff)
-- [ ] Verify the baseline test battery:
-  `.venv/bin/pytest tests/ -x` — green BEFORE any change
-- [ ] Verify the baseline lint gates: `.venv/bin/ruff check goga/ tests/` and
+- [x] Verify the baseline test battery:
+  `.venv/bin/pytest tests/ -x` — green BEFORE any change (8298 passed, 8
+  skipped)
+- [x] Verify the baseline lint gates: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — zero findings
-- [ ] Verify the cell-level lint: `goga lint` — 93 cells, 0 errors
-- [ ] Verify the facade imports of every touched cell:
+- [x] Verify the cell-level lint: `goga lint` — 93 cells, 0 errors
+- [x] Verify the facade imports of every touched cell:
   `.venv/bin/python -c "from goga.pipeline.workflow import WorkflowDocument, parse_workflow; from goga.pipeline import run_pipeline, write_afm_config, apply_stage_env_wrappers, apply_skip_stages; from goga.pipeline.hooks import merge_workflow_overlay; from goga.build import merge_workflow_build, build, resolve_run_settings"`
-- [ ] Record the baseline results; a red baseline is reported, not silently
-  absorbed
+- [x] Record the baseline results; a red baseline is reported, not silently
+  absorbed (baseline green — recorded in
+  /workspace/.ralphex/progress/progress-plan.txt)
 
 ### Task 2: `WorkflowDocument` — the two closing global fields (TDD)
 
