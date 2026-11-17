@@ -1246,7 +1246,7 @@ pure (frozen models — inputs unmutated, always a new result).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail): in
+- [x] **Contract tests** (expected to fail): in
   `tests/build/test_workflow_build_merge_contract.py` — UPDATE the signature
   pin (~line 26) to the 4-parameter form
   `["config", "build_block", "global_agent", "global_env"]` with
@@ -1254,7 +1254,7 @@ pure (frozen models — inputs unmutated, always a new result).
   `global_agent`/`global_env` defaulted; annotations
   `BuildConfig` / `WorkflowBuild | None` / `str | None` /
   `dict[str, str] | None`; return `BuildConfig`
-- [ ] **Code**: rewrite `merge_workflow_build` per the design algorithm
+- [x] **Code**: rewrite `merge_workflow_build` per the design algorithm
   (see Context — the verbatim algorithm block): `pass_agent(block_value,
   config_value) = block_value or global_agent or config_value`; root agent
   and env; review and additional layers; the construction triggers
@@ -1262,16 +1262,16 @@ pure (frozen models — inputs unmutated, always a new result).
   new `ReviewConfig`; `additional is None` AND any of the four
   additional-sourced values set → new `AdditionalReviewConfig`); every
   other field verbatim
-- [ ] **Code**: extend `_merge_env` to the variadic form
+- [x] **Code**: extend `_merge_env` to the variadic form
   (`_merge_env(base, *overlays)` — later layers win per key, None overlays
   are skips) and thread the global env through `_merge_review` /
   `_merge_additional`
-- [ ] **Code**: Google docstrings for the new signature and helpers (the
+- [x] **Code**: Google docstrings for the new signature and helpers (the
   CODEMANIFEST parameter descriptions are the source text; document the
   truthiness cascade and the empty-string block-agent fall-through)
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/build/test_workflow_build_merge_contract.py -v` — all pass
-- [ ] **Logic tests** (in `tests/build/test_workflow_build_merge_logic.py`):
+- [x] **Logic tests** (in `tests/build/test_workflow_build_merge_logic.py`):
   - `test_merge_workflow_build_four_layer_agent_precedence` — config
     root/review/additional agents set; block `review_agent="blk-rev"`;
     globals `("g-global", None)` → root agent `"g-global"` (global
@@ -1300,15 +1300,15 @@ pure (frozen models — inputs unmutated, always a new result).
   - edge: `build: {agent: ""}` — an authored empty-string block agent
     falls through to the global, else the config (the non-normalized
     boundary; the `block or config` parity)
-- [ ] **Debugging**: `.venv/bin/pytest tests/build/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/build/ -x` — fix
   implementation code until all pass
-- [ ] **Contract re-verification**: pure (new `BuildConfig`, new nested
+- [x] **Contract re-verification**: pure (new `BuildConfig`, new nested
   models, inputs unmutated); absent values never override; no CLI values
   applied here; no wrapper resolution; the global env is the only
   cross-pass base; `from goga.build import merge_workflow_build` green
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/`
-- [ ] Verify `goga/build/.usages/workflow-layering.md` stays truthful (the
+- [x] Verify `goga/build/.usages/workflow-layering.md` stays truthful (the
   4-layer order; block > global > config); report drift
 
 ### Task 8: `build` step 4 and `resolve_run_settings` note (TDD)
