@@ -148,8 +148,8 @@ def merge_workflow_build(
 
     Args:
         config: The effective build configuration — the base layer; always a
-            non-``None`` :class:`BuildConfig` (the no-build-section guard
-            lives in the caller).
+            non-``None`` :class:`BuildConfig` (the absent-section empty
+            default lives in the caller).
         build_block: The workflow build block model, or ``None`` when the
             workflow carries no block (the globals still layer).
         global_agent: The workflow's global agent, or ``None``.

@@ -332,10 +332,11 @@ class TestHostBuildGuardSplitAndLadder:
         assert lines[-1] == payload
         assert decode_extra_env(payload.partition("=")[2]) == {"KEY": "V", "HTTP_PROXY": "user-proxy"}
 
-    def test_build_host_structural_guard_still_fires(self, tmp_path: Path, monkeypatch) -> None:
-        """The structural build-section guard stays host-side on the
-        host-effective configuration: a build-less config is a clean
-        ClickException (exit 1) with no docker run."""
+    def test_build_host_normalizes_absent_build_section(self, tmp_path: Path, monkeypatch) -> None:
+        """The absent build section normalizes host-side on the host-effective
+        configuration: a build-less config launches the container (the build
+        run settings may come from the workflow globals/block, resolved
+        in-container)."""
         (tmp_path / ".goga").mkdir()
         (tmp_path / ".goga" / "config.yml").write_text(
             yaml.dump(
@@ -350,13 +351,15 @@ class TestHostBuildGuardSplitAndLadder:
 
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "_write_env_file"),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
         ):
+            mock_runner.return_value.run.return_value = 0
             result = CliRunner().invoke(build_cmd, ["plan.md"])
 
-        assert result.exit_code == 1
-        assert "build section is required in .goga/config.yml to run 'goga build'" in result.output
-        mock_runner.return_value.run.assert_not_called()
+        assert result.exit_code == 0, result.output
+        mock_runner.return_value.run.assert_called_once()
 
 
 # --- Logic tests (positive) ---

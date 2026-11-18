@@ -299,7 +299,9 @@ Annotations: |
   when the effective workflow carries one, is the global agent of the
   run — the single value feeding the afm client command, the per-stage
   wrapper exec fallback, and the assistant fallback; with no workflow
-  global the effective pipeline agent holds the role. The effective
+  global the effective pipeline agent holds the role (the pipeline
+  section is optional — an absent section resolves to the empty
+  default: agent None, env empty). The effective
   launch env base is the key-wise merge of the effective pipeline.env
   with the workflow's global env — a workflow key overrides the
   same-named configuration key, untouched configuration keys survive;
@@ -902,7 +904,10 @@ Annotations: |
         structural errors propagate unchanged
     14. Resolve the effective global agent: the agent field of the
         overlay workflow document when it carries one, otherwise the
-        effective configuration's pipeline.agent. The resolved value
+        effective configuration's pipeline.agent (an absent pipeline
+        section resolves to the empty default before any read — the
+        section is optional, the workflow globals hold the run
+        settings). The resolved value
         feeds the per-stage wrapper generation (its exec fallback), the
         afm configuration write (the client command and the assistant
         fallback), and nothing else
@@ -1009,7 +1014,9 @@ Annotations: |
       workflow document's agent field, falling back to the effective
       pipeline.agent; it feeds exactly the three consumption points
       and nothing else; with the workflow layer off or no workflow
-      resolved the effective pipeline.agent holds the role
+      resolved the effective pipeline.agent holds the role; the
+      pipeline section is optional — an absent section normalizes to
+      the empty PipelineConfig right after the config overlay
     - The launch env base is the key-wise merge of pipeline.env with
       the workflow global env (workflow wins per key, config keys
       survive); CLI entries stay above; engine-variable keys still

@@ -49,8 +49,9 @@ def write_minimal_config(tmp_path: Path, *, with_pipeline: bool = True) -> Path:
     Args:
         tmp_path: Project root used as the working directory for the test.
         with_pipeline: When ``False`` the ``pipeline:`` block is omitted,
-            producing a schema error (``pipeline`` section required) that the
-            command surfaces as a ``click.ClickException``.
+            modelling a config whose pipeline run settings come from the
+            workflow globals instead (the command normalizes the absent
+            section to the empty default and proceeds).
 
     Returns:
         ``tmp_path`` (the project root).

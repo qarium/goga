@@ -36,7 +36,10 @@ The run coordination opens with the configuration load-and-amend: the authored `
 Everything downstream consumes the effective configuration — the afm
 configuration write reads the effective `pipeline.agent`, the launch layer
 reads the effective `pipeline.env` — each overridable by the workflow's
-global `agent`/`env` keys (see Workflow-global run settings). The first
+global `agent`/`env` keys (see Workflow-global run settings). The
+`pipeline:` section of `.goga/config.yml` is optional: an absent
+section resolves to the empty default (agent unset, env empty), so the
+workflow globals can hold the whole pipeline run settings. The first
 failing tool stops the run with a clean error naming the tool and the
 action: afm never launches and no run events fire. Docker-level fields (image,
 proxy, hosts) of the effective configuration are applied-but-unconsumed here — silently.
@@ -177,7 +180,9 @@ The globals are ambient: stages, gate steps, and assistants inherit the
 global env through the afm launch layer exactly as they inherit
 `pipeline.env`. Activation is workflow-scoped — with `--no-workflow`, a
 silent auto-match miss, or no workflow-file, the configuration values
-feed the same points and nothing changes. Gate AI-review steps still
+feed the same points and nothing changes. The `pipeline:` section is
+optional throughout: an absent section is the empty default, so the
+workflow globals alone carry the run settings. Gate AI-review steps still
 require their own `agent` — the global agent is not their fallback.
 
 ## Run events

@@ -1646,6 +1646,42 @@ class TestRunPipelineConfigAndLaunchLayer:
         workflows_dir.mkdir(parents=True, exist_ok=True)
         (workflows_dir / "deploy.yml").write_text(text)
 
+    def test_run_pipeline_without_pipeline_section_runs_on_workflow_globals(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A configuration without a pipeline section runs on the workflow globals.
+
+        The pipeline section is optional — the workflow-global agent/env are
+        the global run settings: the absent section resolves to the empty
+        default (never an AttributeError), the afm configuration write
+        receives the workflow agent, and the launch layer is the workflow
+        global env alone (the empty configuration base contributes nothing).
+        """
+        order: list[str] = []
+        self._patch_seams(
+            monkeypatch,
+            order,
+            ProjectConfig(language="python", image=None, dockerfile=None, build=None, pipeline=None),
+        )
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+        monkeypatch.chdir(tmp_path)
+        self._write_global_workflow(tmp_path, "prompt: hi\nagent: claude\nenv:\n  B: '2'\n")
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        write_spy = _run_pipeline_module.write_afm_config.side_effect
+        assert isinstance(write_spy, _WriteAfmConfigSpy)
+        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["claude"]
+        assert mock_run_flow.call_args.kwargs["env"] == {"B": "2"}
+
     def test_run_pipeline_workflow_global_agent_feeds_all_three_consumers(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

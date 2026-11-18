@@ -192,12 +192,12 @@ Annotations: |
        block) and the document's global agent and env — the layered
        BuildConfig feeds every downstream step; the layering runs
        whenever the loaded document is present (the globals apply with
-       no build block too). A build invocation whose configuration has
-       no build section is one clean logged error naming the
-       requirement (exit 1, no events, nothing written) before any
-       layering — with or without a workflow in effect, reachable only
-       via a direct in-container invocation (the host launcher guards
-       the section host-side)
+       no build block too). The build section is optional — a
+       configuration with no build section resolves to the empty
+       `BuildConfig` default before the layering (the workflow
+       globals/block then hold the whole layer); the host launcher
+       normalizes the section host-side too, and a direct in-container
+       invocation resolves the same default here
     5. Resolve the run settings via `resolve_run_settings` — the two parts
        with root inheritance, the tri-state skip, the strategy default
        medium — over the layered configuration
@@ -443,11 +443,11 @@ Annotations: |
     - An absent value at any layer (None block field, None global,
       None config field) never overrides
     - `config` is always a non-None `BuildConfig` — the workflow
-      layers overlay ONLY onto an existing build section; a build
-      invocation with no build section in .goga/config.yml raises one
-      strict error naming the requirement (reachable only via a direct
-      in-container invocation — the host launcher guards the section
-      host-side) instead of the raw attribute failure
+      layers overlay onto the effective build section; a build
+      invocation with no build section in .goga/config.yml resolves
+      the empty-default `BuildConfig` in the caller (the host launcher
+      normalizes host-side; a direct in-container invocation resolves
+      the same default), never the raw attribute failure
     - When config.review is None and any review-sourced value would be
       set (a block review field, or a global reaching the review
       pass): construct a NEW `ReviewConfig` (the layered set fields,

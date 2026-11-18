@@ -10,13 +10,14 @@ import stat
 import subprocess
 import sys
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import click
 import yaml
 
-from ...config import HomeConfig, load_home_config, load_project_config
+from ...config import BuildConfig, HomeConfig, load_home_config, load_project_config
 from ...config.hooks import ConfigHooks
 from ...docker import (
     DockerRunner,
@@ -472,18 +473,17 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # is unchanged code reading the effective object.
     config = overlay.config
 
-    # Step 2.1 — host-side structural None-guard: the build section is optional
-    # at the loader level (load_project_config returns config.build=None when
-    # absent), but `goga build` cannot run without it. Raise a clean
-    # ClickException BEFORE any config.build.* access and BEFORE the secret
-    # env-file write (step 9), so a build-less config surfaces as a clean
-    # message + exit 1 rather than an AttributeError, and the in-container
-    # goga.build never starts (no docker run, no secret env-file leak on disk).
-    # The agent VALUE guard stays in-container (goga/build): the effective agent
-    # may arrive as a container-side amendment, so a host check would reject a
-    # run an amendment could have satisfied.
+    # Step 2.1 — host-side section normalization: the build section is
+    # OPTIONAL — the workflow-global agent/env and the workflow ``build:``
+    # block are the build run settings, so a build-less config resolves to
+    # the empty default (agent None, env/proxy/hosts empty, no review part)
+    # BEFORE any config.build.* access and BEFORE the secret env-file write
+    # (step 9). The agent VALUE guard stays in-container (goga/build): the
+    # effective agent may arrive as a container-side amendment or a workflow
+    # layer, so a host check would reject a run an amendment could have
+    # satisfied.
     if config.build is None:
-        raise click.ClickException("build section is required in .goga/config.yml to run 'goga build'")
+        config = replace(config, build=BuildConfig())
 
     # Step 3.1 — argv parsability of the two new channels. Click consumes any
     # next token as an option value, so `-w "-x"` parses on the host with the

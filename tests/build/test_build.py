@@ -1180,7 +1180,7 @@ def _write_workflow_files(
 
 class TestWorkflowOrchestration:
     """Steps 1-4 of the 17-step cycle: the double payload decode, the workflow
-    resolution, the stderr feedback line, and the D2 layering guard."""
+    resolution, the stderr feedback line, and the section normalization."""
 
     def test_build_damaged_bundle_one_clean_error_before_events(
         self,
@@ -1206,19 +1206,21 @@ class TestWorkflowOrchestration:
         assert recorded == []
         assert "GOGA_HOME_PROFILES" in caplog.text
 
-    def test_build_workflow_build_block_without_config_build_section(
+    def test_build_workflow_layers_over_config_without_build_section(
         self,
         tmp_path: Path,
         monkeypatch,
-        caplog,
         pin_package_environment,
     ) -> None:
-        """The D2 guard: a workflow build block over a configuration without a
-        build section is one clean logged error naming the requirement — exit
-        1, no AttributeError traceback, no events, nothing written."""
+        """The build section is optional: a workflow carrying the run settings
+        over a configuration without a build section runs the whole cycle —
+        the workflow global agent and build block hold the layer."""
         pin_package_environment({})
         _clear_goga_engine_env(monkeypatch)
-        _write_workflow_files(tmp_path, workflow_text='build:\n  env:\n    W: "1"\n')
+        _write_workflow_files(
+            tmp_path,
+            workflow_text='agent: g\nenv:\n  E: "2"\nbuild:\n  env:\n    W: "1"\n',
+        )
 
         config = ProjectConfig(
             language="python",
@@ -1236,10 +1238,12 @@ class TestWorkflowOrchestration:
                 cli_options={**_FULL_CLI_OPTIONS, "workflow": "hard"},
             )
 
-        assert result == 1
-        mock_pass.assert_not_called()
-        assert "build section" in caplog.text
-        assert not (tmp_path / ".ralphex").exists()
+        assert result == 0
+        assert mock_pass.call_count == 2
+        tasks_text = (_wrapper_run_base(tmp_path) / "tasks.sh").read_text()
+        assert "export W=1" in tasks_text
+        assert "export E=2" in tasks_text
+        assert tasks_text.endswith('exec /home/goga/bin/g-as-claude.sh "$@"\n')
 
     def test_build_no_workflow_without_config_build_section(
         self,
@@ -1248,10 +1252,10 @@ class TestWorkflowOrchestration:
         caplog,
         pin_package_environment,
     ) -> None:
-        """The D2 guard covers the no-workflow path too: a direct in-container
-        invocation with no workflow in effect and no build section is one clean
-        logged error naming the requirement — exit 1, never the raw
-        AttributeError of resolve_run_settings(None)."""
+        """The no-workflow path with no build section resolves the empty
+        default; with no agent at any layer the review validation is one clean
+        logged error naming the workflow remedies — exit 1, no pass, nothing
+        written, never the raw AttributeError of resolve_run_settings(None)."""
         pin_package_environment({})
         _clear_goga_engine_env(monkeypatch)
 
@@ -1273,7 +1277,8 @@ class TestWorkflowOrchestration:
 
         assert result == 1
         mock_pass.assert_not_called()
-        assert "build section" in caplog.text
+        details = [str(getattr(record, "detail", "")) for record in caplog.records]
+        assert any("no review agent resolved" in detail for detail in details)
         assert not (tmp_path / ".ralphex").exists()
 
     def test_build_no_workflow_ignores_activation_entirely(

@@ -37,6 +37,9 @@ whenever a workflow is in effect, with or without a `build:` block:
   inherit into each other (config root env stays tasks-only).
 - Absent values at any layer never override; an empty global env map
   equals absence.
+- The `.goga/config.yml` `build:` section is optional: an absent
+  section resolves to the empty default, so the workflow globals and
+  the `build:` block can hold the whole build configuration.
 
 Example: the workflow sets one global model variable — every pass
 (task, review, external review) receives it above its own config env,

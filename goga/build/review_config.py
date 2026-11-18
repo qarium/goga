@@ -42,7 +42,9 @@ def validate_review_config(settings: RunSettings) -> None:
         raise ValueError("review env requires a review agent: set build.review.agent")
 
     if review.agent is None:
-        raise ValueError("no review agent resolved: set build.agent or build.review.agent")
+        raise ValueError(
+            "no review agent resolved: set build.agent, build.review.agent, or the workflow global agent / build block",
+        )
 
     wrapper = resolve_wrapper_path(review.agent)
 

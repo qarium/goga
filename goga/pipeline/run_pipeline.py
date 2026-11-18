@@ -4,13 +4,14 @@ import logging
 import os
 import shutil
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 
 from ..afm import run_flow
-from ..config import load_project_config, resolve_project_name
+from ..config import PipelineConfig, load_project_config, resolve_project_name
 from ..config.hooks import ConfigHooks
 from ..docker import decode_extra_env, decode_home_profiles
 from ..history import (
@@ -345,6 +346,15 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 24-s
 
     config = overlay.config
 
+    # The pipeline section is OPTIONAL — the workflow-global agent/env are
+    # the global run settings, so a configuration without the section
+    # resolves to the empty default (agent None, env/proxy/hosts empty).
+    # Normalized once here, right after the overlay, so every downstream
+    # read (the global-agent fallback tier, the launch-env base, the docker
+    # carriage fields) addresses a present section.
+    if config.pipeline is None:
+        config = replace(config, pipeline=PipelineConfig())
+
     # Steps 3-5 — discover the entry and build the absolute pipeline path.
     entries = list_pipelines(project_dir, user_dir)
     match = next((entry for entry in entries if entry.name == name), None)
@@ -462,9 +472,10 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 24-s
     # Step 14: resolve the effective global agent — the workflow-global run
     # settings layer of the run: the agent field of the overlay workflow
     # document when it carries one, otherwise the effective configuration's
-    # pipeline.agent (the workflow layer off or no workflow resolved — the
-    # effective pipeline.agent holds the role, behavior byte-identical to
-    # the pre-layer law). The resolved value feeds exactly the three
+    # pipeline.agent (an empty default when the config carries no section;
+    # the workflow layer off or no workflow resolved — the effective
+    # pipeline.agent holds the role, behavior byte-identical to the
+    # pre-layer law). The resolved value feeds exactly the three
     # consumption points below — the per-stage wrapper generation (its exec
     # fallback tier), the afm configuration write (the client command and
     # the assistant fallback) — and nothing else.
@@ -546,7 +557,8 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 24-s
     # Step 20: compose the afm launch environment layer — the decoded CLI
     # entries applied ABOVE the effective launch env base, the key-wise
     # merge of the effective pipeline.env task env layer with the overlay
-    # workflow's global env (a workflow key overrides the same-named
+    # workflow's global env (an empty base when the config carries no
+    # section; a workflow key overrides the same-named
     # configuration key, untouched configuration keys survive; explicit CLI
     # input beats both global layers on key conflict), with the
     # engine-variable keys dropped silently so launch mechanics and the goga

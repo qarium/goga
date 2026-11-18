@@ -160,7 +160,11 @@ class TestValidateReviewConfigLogic:
 
         settings = _make_settings(agent=None, env={})
 
-        with pytest.raises(ValueError, match=r"no review agent resolved: set build\.agent or build\.review\.agent"):
+        with pytest.raises(
+            ValueError,
+            match=r"no review agent resolved: set build\.agent, build\.review\.agent,"
+            r" or the workflow global agent / build block",
+        ):
             validate_review_config(settings)
 
     def test_validate_review_config_env_gate_names_new_key(
