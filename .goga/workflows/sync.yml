@@ -4,6 +4,16 @@ prompt: |
   Answer (feedbacks, proposes, questions:`*.question.json` and etc) in {{ language }} language.
   Any content written to the project files is in English.
 
+{% if agent %}
+agent: {{ agent }}
+{% endif %}
+{% if env %}
+env:
+{% for k, v in env.items() %}
+  {{ k }}: "{{ v }}"
+{% endfor %}
+{% endif %}
+
 {% macro stage_config(stage_data) %}
 {% if stage_data["agent"] %}
     agent: {{ stage_data["agent"] }}

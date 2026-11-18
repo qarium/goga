@@ -1,92 +1,130 @@
 .agent: &default-agent claude
 
 .env: &default-env
-  GOGA_DEFAULT_PROFILE: "true"
+  ANTHROPIC_MODEL: opus
+  ANTHROPIC_BASE_URL: "https://api.z.ai/api/anthropic"
 
 language: Russian
+
+agent: *default-agent
+env:
+  <<: *default-env
+  ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
+
+build:
+  agent: *default-agent
+  env:
+    <<: *default-env
+    ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
+  review:
+    agent: *default-agent
+    env:
+      <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
 
 stages:
   define:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   discover:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   specify:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   hotfix:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   ad-hoc:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   prototype-architecture:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   architecture-review:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   apply-architecture:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   code-design:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   design-review:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   coding-plan:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   plan-review:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   commit-changes:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   accept-result:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   discovery-scope:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   code-review:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   contracts-review:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   documentation-review:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   testing:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   update-docs:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
   resolve:
     agent: *default-agent
     env:
       <<: *default-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
