@@ -122,14 +122,14 @@ class TestDataModelsContract:
             title="reviewer",
             instruction="Review.",
             mode="required",
-            trigger="on_completion",
+            trigger="pre_completion",
         )
 
         assert entry.profile == "goga-reviewer"
         assert entry.title == "reviewer"
         assert entry.instruction == "Review."
         assert entry.mode == "required"
-        assert entry.trigger == "on_completion"
+        assert entry.trigger == "pre_completion"
         assert not hasattr(entry, "skills")
 
     @pytest.mark.parametrize(

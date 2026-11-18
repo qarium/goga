@@ -383,7 +383,12 @@ Annotations: |
   always written
   explicitly, the engine's one_shot default is never relied upon), title
   from the authored name, instruction from the
-  authored prompt (the empty string when none). A reference takes its
+  authored prompt (the empty string when none). A gated finish — gate true
+  with when finish — overrides the trigger row to pre_completion: the
+  engine's pre-completion review round runs after the stage agent's turn
+  and before the stage completes, so the required verdict can block the
+  stage from finishing; an ungated finish keeps on_completion, the final
+  turn after the result is ready. A reference takes its
   declaration fields from the named namespace entry and its own gate and
   when overrides. The stage entry carries NO skills key — the engine
   strict-parses stages[].assistants and rejects unknown fields ("unknown
@@ -1063,10 +1068,12 @@ Annotations: |
     `mode`: the gate mapping — "required" when the effective gate is
             true, "advisory" otherwise
     `trigger`: the engagement mapping — "one_shot" from start,
-               "checkpoints" from checkpoints, "on_completion" from
-               finish, "on_message" from message (the resting engagement —
-               no initial request; each message is one turn and the helper
-               stays attached)
+               "checkpoints" from checkpoints, "pre_completion" from a
+               gated finish (gate true — the pre-completion review that
+               can block the stage from finishing), "on_completion" from
+               an ungated finish, "on_message" from message (the resting
+               engagement — no initial request; each message is one turn
+               and the helper stays attached)
 
     The entry carries NO skills field: the engine strict-parses
     stages[].assistants entries and rejects any key outside the five
@@ -1101,7 +1108,8 @@ Annotations: |
     "mode -> str": |
       required when the effective gate is true, advisory otherwise.
     "trigger -> str": |
-      one_shot, checkpoints, on_completion, or on_message — mapped from when.
+      one_shot, checkpoints, on_completion, pre_completion (a gated
+      finish), or on_message — mapped from the gate/when pair.
 
 "FlowVerifyStep(name: str, run: str | None = None, command: str | None = None, timeout: str | None = None, prompt: str | None = None)":
   location: flow_verify_step.py
@@ -2377,7 +2385,8 @@ Annotations: |
     - The content-check error names the assistant AND its authoring
       site through the existing structural-error channel
     - Every emitted collaboration entry materializes its defaults: mode
-      from gate, trigger from when (always written explicitly — when is
+      from gate, trigger from the gate/when pair (a gated finish maps to
+      pre_completion; always written explicitly — when is
       authored on every attachment; the engine's one_shot default is never
       relied upon), title from the authored name, instruction from the
       authored prompt (the empty string when none), skills from the

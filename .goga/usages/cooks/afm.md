@@ -136,7 +136,8 @@ command works.
 
 Accepts a bare profile name, one object, or a mixed list (list order preserved).
 Object keys: `profile` (required) plus optional `title`, `instruction`, `mode`
-(`advisory` | `required`), `trigger` (`one_shot` | `checkpoints` | `on_completion`).
+(`advisory` | `required`), `trigger` (`one_shot` | `checkpoints` | `on_completion`
+| `pre_completion` | `on_message`).
 Omitted `mode`/`trigger` default to `advisory`/`one_shot`. Helpers attach when the
 stage enters execution (after plan approval when planned). Valid on execution stages
 (including `[auto]`), NOT on `script:` or planning-only stages; each profile may
@@ -160,7 +161,14 @@ attempts yields `protocol_error`.
 
 `one_shot` — runs once. `checkpoints` — observes the stage agent's output and can
 run again at each checkpoint. `on_completion` — may run early, gets a final turn
-when the result is ready. A helper attached while its stage is `pending` stays in
+when the result is ready. `pre_completion` — the pre-completion review: runs
+after the stage agent finishes its turn, before verify; a required one blocks
+stage completion until its verdict passes (the stage enters
+`awaiting_pre_completion`); requires an execution stage (planning-only and
+script stages have no completion to review); its rounds, not messages, are its
+requests. `on_message` — the resting engagement: no initial request, one turn
+per message, the helper stays attached. A helper attached while its stage is
+`pending` stays in
 `waiting_parent` (does not start; a required one in that state can block stage
 completion).
 
