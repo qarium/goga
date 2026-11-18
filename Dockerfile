@@ -24,7 +24,7 @@ FROM python:${PYTHON_VERSION}-slim-bookworm
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    git jq ripgrep fzf openssh-client bash make gcc g++ curl ca-certificates \
+    git jq ripgrep fzf openssh-client bash make gcc g++ curl ca-certificates sudo \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
@@ -40,9 +40,19 @@ COPY --from=builder /usr/local/bin/goga /opt/goga/bin/goga
 RUN useradd -m -s /bin/bash goga && \
     python3 -m venv /opt/goga && \
     sed -i "s|/usr/local|/opt/goga|" /opt/goga/bin/goga && \
-    chown -R goga:goga /opt/goga && \
     mkdir -p /home/goga/bin /home/goga/.codex /home/goga/pipeline /home/goga/.afm /home/goga/.local && \
     chown goga:goga /home/goga/bin /home/goga/.codex /home/goga/pipeline /home/goga/.afm /home/goga/.local
+
+# Root-owned venv: tool installs go through `goga install --sudo` — goga may run
+# only pip install/uninstall as root, HOME preserved so pip cache and downstream
+# discovery stay on /home/goga.
+RUN printf '%s\n' \
+      'Cmnd_Alias GOGA_PIP = /opt/goga/bin/python -m pip install *, /opt/goga/bin/python3 -m pip install *, /opt/goga/bin/python3.12 -m pip install *, /usr/local/bin/python3.12 -m pip install *, /opt/goga/bin/python -m pip uninstall -y *, /opt/goga/bin/python3 -m pip uninstall -y *, /opt/goga/bin/python3.12 -m pip uninstall -y *, /usr/local/bin/python3.12 -m pip uninstall -y *' \
+      'goga ALL=(root) NOPASSWD: GOGA_PIP' \
+      'Defaults:goga env_keep += "HOME"' \
+      > /etc/sudoers.d/goga && \
+    chmod 0440 /etc/sudoers.d/goga && \
+    visudo -cf /etc/sudoers.d/goga
 
 COPY scripts/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
 COPY scripts/claude-as-claude.sh /home/goga/bin/claude-as-claude.sh

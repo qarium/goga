@@ -37,6 +37,8 @@ This is the supported way to move to a new goga release: because `goga connect` 
 
 pip is always invoked via the `<python> -m pip` form (never the bare `pip` executable) to guarantee the correct interpreter.
 
+In the goga Docker image `/opt/goga` is root-owned: upgrade there with `goga upgrade --sudo`. The image's sudoers rule permits exactly this `<python> -m pip install` command as root; the post-upgrade re-sync still runs as the `goga` user with `$HOME` preserved.
+
 ## Relative version lines (--patch / --minor)
 
 By default `goga upgrade` installs the latest released goga (`pip install goga -U`). The line flags constrain that upgrade to stay within the line of the currently installed version:

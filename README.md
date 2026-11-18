@@ -460,7 +460,7 @@ After a successful pip, `goga install` runs each freshly installed tool's option
 goga connect <agent>
 ```
 
-Pass `goga install --no-connect` to opt out of the post-install agent re-sync (CI/Docker escape-hatch; the post-install hooks still run). Pass `goga install --sudo` for system-Python installs requiring root.
+Pass `goga install --no-connect` to opt out of the post-install agent re-sync (CI/Docker escape-hatch; the post-install hooks still run). Pass `goga install --sudo` for system-Python installs requiring root — inside the goga Docker image it is always required: the `/opt/goga` venv is root-owned, a passwordless sudoers rule lets the `goga` user run exactly `pip install`/`pip uninstall` as root (with `HOME` preserved), and hooks/agent activation still run as `goga`, so skills keep landing in `/home/goga` instead of `/root`.
 
 See [`goga install`](https://qarium.github.io/goga/features/install/cli/) for the full version-grammar rules and single/bulk/empty/local semantics.
 
