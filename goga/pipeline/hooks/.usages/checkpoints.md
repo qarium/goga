@@ -49,7 +49,9 @@ compile_flow(overlay.workflow, ...)
   wins per slot — the prompt appends, the memory block is whole, the repeat
   block is whole, the gates settings block is whole, stage fields fill only
   what the author left unset (an authored per-stage check-step list is
-  never overwritten), extend entries add; the assistant catalog merges
+  never overwritten), extend entries add; the workflow-global run settings
+  (`agent`, `env`) ride the authored workflow verbatim — a tool can
+  neither supply nor override them; the assistant catalog merges
   with field-level overrides —
   the winning tool-delivered entry of a name is the base and the authored
   entry replaces exactly the fields it specifies (agent, env, delegate,

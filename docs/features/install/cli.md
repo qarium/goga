@@ -34,7 +34,9 @@ goga install foo --version 1.x
 goga install foo --version latest
 
 # Install with sudo (system-Python installs requiring root); activation runs
-# without sudo against the preserved $HOME
+# without sudo against the preserved $HOME. Inside the goga Docker image the
+# venv (/opt/goga) is root-owned — a plain install fails with pip permission
+# errors, so --sudo is always required there
 goga install foo --sudo
 
 # Install only — skip activation (escape-hatch for CI/Docker)
@@ -161,7 +163,7 @@ With `--no-connect`, pip's returncode is the exit code once pip and the post-ins
 ## Notes
 
 - The current interpreter (`sys.executable`) must be the one where goga is installed.
-- The caller needs write access to the site-packages directory (or pass `--sudo`) and, for activation, to `~/.goga/`.
+- The caller needs write access to the site-packages directory (or pass `--sudo`) and, for activation, to `~/.goga/`. In the goga Docker image the venv is root-owned: a plain `goga install` fails with pip permission errors — always pass `--sudo` there. The image's sudoers rule allows the `goga` user to run exactly `<python> -m pip install/uninstall` as root (with `HOME` preserved); hooks and activation still run as `goga`, so skills keep landing in `/home/goga`.
 - For bulk mode, `.goga/config.yml` must exist and contain a `tools` section (otherwise empty mode runs — a no-op, not an error).
 - On Windows, `--sudo` is unavailable (sudo is Unix-only).
 - Do not bypass this command and call `pip` with `sudo` directly without `--preserve-env=HOME`: post-install activation depends on reading the caller's `$HOME`.

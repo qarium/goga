@@ -61,7 +61,8 @@ goga never touches.
 The profile's command resolves exactly like a stage agent command:
 
 1. the assistant's authored `agent` → its wrapper path;
-2. else the effective global pipeline agent → its wrapper path;
+2. else the effective global agent (the workflow's global `agent` when the
+   effective workflow carries one, else `pipeline.agent`) → its wrapper path;
 3. else the launch fails strictly before the run with an error naming the
    assistant and its authoring site (the catalog or the stage whose
    attachment declares it).

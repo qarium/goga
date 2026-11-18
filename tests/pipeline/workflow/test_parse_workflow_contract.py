@@ -164,12 +164,13 @@ class TestParseWorkflowContract:
         )
 
     def test_parse_workflow_top_level_keys_includes_profile_and_build(self) -> None:
-        """The internal ``_TOP_LEVEL_KEYS`` tuple carries the ten accepted keys (contract surface).
+        """The internal ``_TOP_LEVEL_KEYS`` tuple carries the twelve accepted keys (contract surface).
 
         Pins the contract: the unknown top-level key message is generated from
         ``_TOP_LEVEL_KEYS`` and therefore lists ``profile`` and ``build`` after
         the four original keys, then ``assistants``, ``delegation``,
-        ``repeat``, and ``gates`` last.
+        ``repeat``, ``gates``, and the two global run-settings keys ``agent``
+        and ``env`` last.
         """
         from goga.pipeline.workflow.parse_workflow import _TOP_LEVEL_KEYS
 
@@ -184,6 +185,8 @@ class TestParseWorkflowContract:
             "delegation",
             "repeat",
             "gates",
+            "agent",
+            "env",
         )
 
     def test_parse_workflow_manual_is_accepted_stage_key(self) -> None:
@@ -215,18 +218,38 @@ class TestParseWorkflowContract:
         assert "valid keys: agent, env, prompt, loop, skills, skip, approve, manual, notes" in message
 
     def test_parse_workflow_unknown_top_level_key_message_lists_profile_and_build(self) -> None:
-        """The unknown top-level key error message lists all nine valid keys.
+        """The unknown top-level key error message lists all twelve valid keys.
 
         Pins the contract: ``profile`` and ``build`` are accepted top-level keys,
-        so the unknown-key message's valid-keys fragment enumerates all nine —
-        including ``assistants``, ``delegation``, and ``repeat`` last.
+        so the unknown-key message's valid-keys fragment enumerates all twelve —
+        including ``assistants``, ``delegation``, ``repeat``, ``gates``, and the
+        two global run-settings keys ``agent``/``env`` last.
         """
         with pytest.raises(WorkflowSyntaxError) as exc_info:
             parse_workflow("unknown_key: value\nprompt: hello\n")
 
         message = str(exc_info.value)
         assert "unknown key in workflow: unknown_key" in message
-        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat" in message
+        assert (
+            "valid keys: prompt, stages, extend, memory, profile, build, "
+            "assistants, delegation, repeat, gates, agent, env" in message
+        )
+
+    def test_parse_workflow_global_run_settings_surface_on_document(self) -> None:
+        """The two global run-settings keys parse into the document's ``agent``/``env`` fields.
+
+        Pins the contract: a workflow carrying the top-level ``agent`` and
+        ``env`` keys parses successfully and both values surface on the
+        ``WorkflowDocument`` model — the extraction is structural only (no
+        resolution, no merging).
+        """
+        document = parse_workflow(
+            "stages:\n  build:\n    skip: true\nagent: claude\nenv:\n  GOGA_LOG_LEVEL: info\n",
+        )
+
+        assert isinstance(document, WorkflowDocument)
+        assert document.agent == "claude"
+        assert document.env == {"GOGA_LOG_LEVEL": "info"}
 
     def test_parse_workflow_build_block_surfaces_on_document(self) -> None:
         """A workflow ``build:`` block parses into the document's ``build`` field (contract surface).

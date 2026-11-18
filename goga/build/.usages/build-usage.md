@@ -22,9 +22,14 @@ Every non-skipped run is exactly two ralphex invocations: a tasks pass
 strategy). A skipped review yields exactly one tasks pass. The combined full
 pass does not exist.
 
-The executor agent comes from `.goga/config.yml`: the `build.agent` root key
-for the tasks pass, `build.review.agent` for the review pass (inheriting the
-root agent when unset). The agent name is resolved at runtime to the absolute
+The executor agent comes from `.goga/config.yml` and the workflow: the
+`build.agent` root key for the tasks pass, `build.review.agent` for the
+review pass (inheriting the root agent when unset), with the
+workflow-global `agent` and the workflow `build:` block layering above
+the config fields (see `workflow-layering`). The `build:` section of
+`.goga/config.yml` is optional — an absent section resolves to the
+empty default and the workflow layers hold the whole configuration.
+The agent name is resolved at runtime to the absolute
 in-container path of its `*-as-claude.sh` wrapper; every pass executor runs
 through a generated per-role closure wrapper and that wrapper path is written
 into `.ralphex/config` `claude_command`.
@@ -180,9 +185,11 @@ profile resolved; every other run prints no line.
 ## Agent guard
 
 The tasks agent is required: when the resolved tasks agent of the effective
-configuration is None, the run stops with one clean error before any state
-write — `.ralphex/` is never touched, no events fire. A container-side
-amendment supplying `build.agent` satisfies the guard.
+layered configuration is None (no config `build.agent`, no workflow global
+agent, no workflow `build:`-block agent), the run stops with one clean error
+before any state write — `.ralphex/` is never touched, no events fire. A
+container-side amendment or a workflow layer supplying the agent satisfies
+the guard.
 
 ## Review-pass environment
 

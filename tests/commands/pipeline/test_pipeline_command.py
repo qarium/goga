@@ -199,34 +199,35 @@ class TestPipelineCommandContract:
         assert mock_run.call_args.kwargs["extra_env"] == ("FOO=bar", "BAZ=qux")
         assert mock_run.call_args.kwargs["name"] == "deploy"
 
-    def test_pipeline_without_section_raises_click_exception(
+    def test_pipeline_without_section_dispatches(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A config missing the ``pipeline`` block surfaces as the command None-guard ClickException."""
+        """A config missing the ``pipeline`` block proceeds — the section is optional."""
         _write_config(tmp_path, with_pipeline=False)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        # standalone_mode=False propagates the ClickException as result.exception
-        # instead of Click converting it to SystemExit during CLI handling.
-        result = runner.invoke(pipeline, ["deploy"], standalone_mode=False)
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy"])
 
-        assert result.exit_code != 0
-        assert isinstance(result.exception, click.ClickException)
-        assert "pipeline section is required" in str(result.exception)
-
-
-# --- Pipeline section None-guard (D4, step 1b) tests ---
+        assert result.exit_code == 0
+        # The section is optional — the workflow globals hold the run settings,
+        # so the launcher must not short-circuit.
+        mock_run.assert_called_once()
 
 
-class TestPipelineSectionGuard:
-    """D4 — host-side None-guard: ClickException when the pipeline section is absent.
+# --- Pipeline section normalization (D4, step 1.1) tests ---
 
-    The guard (Algorithm step 1b) runs right after ``load_project_config()`` and before
-    any ``config.pipeline.*`` access or dispatch into a launcher, so a
-    pipeline-less config produces a clean user-facing error + exit 1 in EVERY
-    form (no AttributeError, no docker run). The same guard covers both
-    launchers transitively: they are only reachable through this command, so a
-    single check here is sufficient.
+
+class TestPipelineSectionNormalization:
+    """D4 — host-side section normalization: the empty default when the pipeline section is absent.
+
+    The normalization (Algorithm step 1.1) runs right after ``load_project_config()``
+    and before any ``config.pipeline.*`` access or dispatch into a launcher, so a
+    pipeline-less config resolves to the empty ``PipelineConfig`` and proceeds in
+    EVERY form (no AttributeError, no early exit): the workflow-global agent/env
+    of the active workflow are the global run settings. The same normalization
+    covers both launchers transitively: they are only reachable through this
+    command, so a single resolution here is sufficient.
     """
 
     @staticmethod
@@ -242,10 +243,10 @@ class TestPipelineSectionGuard:
         ]
         (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
 
-    def test_pipeline_command_raises_click_exception_when_pipeline_section_absent(
+    def test_pipeline_command_proceeds_in_flat_list_when_pipeline_section_absent(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Flat list on a pipeline-less config surfaces as a ClickException (step 1b)."""
+        """Flat list on a pipeline-less config proceeds (step 1.1 normalizes the section)."""
         self._write_config_without_pipeline(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
@@ -255,16 +256,15 @@ class TestPipelineSectionGuard:
         ):
             result = runner.invoke(pipeline, ["--list"])
 
-        assert result.exit_code == 1
-        assert "pipeline section is required" in result.output
-        # Neither launcher ever starts on a pipeline-less config.
+        assert result.exit_code == 0
+        # The launcher IS reached — the section is optional.
+        mock_info.assert_called_once()
         mock_run.assert_not_called()
-        mock_info.assert_not_called()
 
-    def test_pipeline_command_run_mode_raises_when_pipeline_section_absent(
+    def test_pipeline_command_run_mode_proceeds_when_pipeline_section_absent(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Run mode on a pipeline-less config also surfaces as a ClickException (step 1b)."""
+        """Run mode on a pipeline-less config also proceeds (step 1.1 normalizes the section)."""
         self._write_config_without_pipeline(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
@@ -274,10 +274,9 @@ class TestPipelineSectionGuard:
         ):
             result = runner.invoke(pipeline, ["deploy"])
 
-        assert result.exit_code == 1
-        assert "pipeline section is required" in result.output
-        # Step 1b runs before dispatch, so no launcher is ever reached.
-        mock_run.assert_not_called()
+        assert result.exit_code == 0
+        # The launcher IS reached — the workflow globals hold the run settings.
+        mock_run.assert_called_once()
         mock_info.assert_not_called()
 
 

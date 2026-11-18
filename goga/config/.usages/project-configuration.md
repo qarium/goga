@@ -41,16 +41,17 @@ config = load_project_config()
 - `.goga/config.yml` is mandatory — raises `FileNotFoundError` if missing or empty
 - Root YAML element must be a mapping — raises `ValueError` otherwise
 - Required top-level field: `language`. All other top-level fields (`image`, `pipeline`, `build`, `commands`, `codemanifest`, `dockerfile`) are optional
-- Optional sections `pipeline` and `build` may be absent — `config.pipeline` and `config.build` are then `None`. Consumers that need them (the `pipeline` and `build` commands) guard the `None` case and raise `ClickException` before any field access
-- When `pipeline` is present: it must be a mapping; `pipeline.agent` is OPTIONAL — absent/null/empty/whitespace resolves to `None`, and `goga pipeline` raises `ClickException` when it needs an agent
+- Optional sections `pipeline` and `build` may be absent — `config.pipeline` and `config.build` are then `None`. The sections are optional end-to-end: the consuming commands (`goga pipeline`, `goga build`) normalize the `None` case to the empty default (`PipelineConfig()` / `BuildConfig()` — agent unset, env/proxy/hosts empty) before any field access; the workflow-global agent/env and the workflow `build:` block may hold the whole run settings
+- When `pipeline` is present: it must be a mapping; `pipeline.agent` is OPTIONAL — absent/null/empty/whitespace resolves to `None`; an absent agent is a valid state — the workflow globals, per-stage workflow agents, or afm's own defaults cover it
 - When `build` is present: it must be a mapping. The build section is
   two-part: the `build` root carries the tasks-pass settings (agent, env,
   max_iterations, session_timeout, idle_timeout, wait, prompts_dir,
   agents_dir, proxy, hosts); the optional `build.review` key carries the
   review-pass settings (skip, agent, env, roles, base_ref, strategy,
   finalize, additional, max_iterations, and the session knobs). `build.agent` is OPTIONAL —
-  absent/null/empty/whitespace resolves to `None`, and `goga build` raises
-  `ClickException` when it needs an agent. The loader extracts known fields
+  absent/null/empty/whitespace resolves to `None`; an agent absent at every
+  layer (config, workflow, amendment) fails the in-container run with one
+  clean error before any state write. The loader extracts known fields
   only — unknown keys are silently ignored (not extracted, not stored).
   Values are exposed verbatim with no default merging — inheritance (review
   from root, additional.agent from review.agent) belongs to the consuming
@@ -134,8 +135,9 @@ Minimal valid configuration (only `language` is required at the loader level):
 language: python
 ```
 
-Minimal configuration for `goga pipeline` (the pipeline command requires the
-`pipeline` section — absent section → ClickException):
+Minimal configuration for `goga pipeline` (the `pipeline` section is optional —
+an absent section resolves to the empty default; the section only authors
+config-level settings, the workflow globals may hold the rest):
 
 ```yaml
 language: python
@@ -144,8 +146,9 @@ pipeline:
   agent: claude
 ```
 
-Minimal configuration for `goga build` (the build command requires the `build`
-section — absent section → ClickException):
+Minimal configuration for `goga build` (the `build` section is optional — an
+absent section resolves to the empty default; the agent may come from the
+workflow):
 
 ```yaml
 language: python
@@ -237,18 +240,19 @@ topics:                          # optional topics section
 |-----------------------------|---------|---------------------------------------------------------------------|
 | `language`                  | str     | Project programming language                                        |
 
-### Conditionally required fields
+### Optional run-setting sections
 
-These fields are optional at the loader level but required by their consuming
-command. When the consuming command is invoked on a config that lacks the
-section, the command raises `ClickException` before any field access.
+These fields are optional at every level: the loader, the consuming command,
+and the run. The consuming command normalizes an absent section to the empty
+default before any field access, and the workflow layers (the global
+agent/env, the workflow `build:` block) may hold the whole run settings.
 
-| Field                       | Required by           | Notes                                                                          |
+| Field                       | Consumed by           | Notes                                                                          |
 |-----------------------------|-----------------------|--------------------------------------------------------------------------------|
-| `pipeline`                  | `goga pipeline`       | Must be a mapping when present.                                                |
-| `pipeline.agent`            | `goga pipeline`       | Optional at the loader level (absent/empty → `None`); required to actually run `goga pipeline`, which raises `ClickException` otherwise. Resolved into the in-container `*-as-claude.sh` wrapper path. |
-| `build`                     | `goga build`          | Must be a mapping when present. Two-part: the root tasks-pass fields plus the optional `build.review` sub-mapping. |
-| `build.agent`               | `goga build`          | Optional at the loader level (absent/empty → `None`); required to actually run `goga build`, which raises `ClickException` otherwise. Resolved into the in-container `*-as-claude.sh` wrapper path. |
+| `pipeline`                  | `goga pipeline`       | Must be a mapping when present. An absent section resolves to the empty `PipelineConfig` default (agent unset, env/proxy/hosts empty). |
+| `pipeline.agent`            | `goga pipeline`       | Optional at the loader level (absent/empty → `None`); the workflow globals, per-stage workflow agents, or afm's own defaults cover an absent agent. Resolved into the in-container `*-as-claude.sh` wrapper path. |
+| `build`                     | `goga build`          | Must be a mapping when present. Two-part: the root tasks-pass fields plus the optional `build.review` sub-mapping. An absent section resolves to the empty `BuildConfig` default (no review part). |
+| `build.agent`               | `goga build`          | Optional at the loader level (absent/empty → `None`); an agent absent at every layer fails the in-container run with one clean error (`no build agent resolved` / `no review agent resolved`) before any state write. Resolved into the in-container `*-as-claude.sh` wrapper path. |
 
 #### Agent name semantics
 
@@ -266,11 +270,11 @@ afm) that consume these fields.
 | `image`                     | str     | None                   | Top-level Docker image shared by build and pipeline     |
 | `dockerfile`                | str     | None                   | Top-level path to a project Dockerfile                  |
 | `commands`                  | mapping | `{}`                   | Prompt customization hooks (reserved)                   |
-| `pipeline`                  | mapping | None                   | Pipeline configuration block (conditionally required by `goga pipeline`)  |
+| `pipeline`                  | mapping | None                   | Pipeline configuration block (optional — empty default when absent)  |
 | `pipeline.env`              | mapping | `{}`                   | Environment variables for pipeline runs (`{str: str}`)  |
 | `pipeline.proxy`            | str     | None                   | HTTP/HTTPS proxy URL for the pipeline container         |
 | `pipeline.hosts`            | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (pipeline)  |
-| `build`                     | mapping | None                   | Build configuration block, two-part (conditionally required by `goga build`)  |
+| `build`                     | mapping | None                   | Build configuration block, two-part (optional — empty default when absent)  |
 | `build.agent`               | str     | None                   | Tasks-pass executor agent name (resolved by the consumer) |
 | `build.env`                 | mapping | `{}`                   | Tasks-pass environment variables for builds (`{str: str}`); never inherited by the review pass |
 | `build.proxy`               | str     | None                   | HTTP/HTTPS proxy URL for the build container            |
@@ -330,26 +334,25 @@ config.commands  # dict — custom command hooks
 config.dockerfile  # str | None — path to a project Dockerfile
 config.usages  # dict[str, dict[str, DepConfig]] | None — usages-sync declarations (None when absent)
 
-# Section accessors require a None-guard in the consuming command. The loader
-# does not enforce presence of `pipeline` or `build`; the consuming command is
-# responsible for raising a user-facing error (ClickException) before any field
-# access:
+# The sections are optional: the loader returns None for an absent section,
+# and the consuming command normalizes None to the empty default before any
+# field access (dataclasses.replace):
 
 if config.pipeline is None:
-    raise ClickException("pipeline section is required in .goga/config.yml ...")
+    config = replace(config, pipeline=PipelineConfig())
 # now safe to read config.pipeline.agent / env / proxy / hosts
 
 if config.build is None:
-    raise ClickException("build section is required in .goga/config.yml ...")
+    config = replace(config, build=BuildConfig())
 # now safe to read config.build.agent / env / review / proxy / hosts / ...
 
-# PipelineConfig fields (after the None-guard)
+# PipelineConfig fields (after the normalization)
 config.pipeline.agent  # str | None — afm client.command inside the container; None when not configured
 config.pipeline.env  # dict — {str: str}
 config.pipeline.proxy  # str | None — HTTP/HTTPS proxy URL for the pipeline container
 config.pipeline.hosts  # dict[str, str] — docker run --add-host entries
 
-# BuildConfig fields (after the None-guard) — the root is the tasks-pass part
+# BuildConfig fields (after the normalization) — the root is the tasks-pass part
 config.build.agent  # str | None — tasks-pass executor agent, None when not configured
 config.build.env  # dict[str, str] — tasks-pass env layer, empty when absent
 config.build.max_iterations  # int | None — tasks-pass iteration cap

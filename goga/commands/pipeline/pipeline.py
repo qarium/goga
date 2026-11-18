@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import click
 import yaml
 
-from ...config import load_project_config
+from ...config import PipelineConfig, load_project_config
 from ...config.hooks import ConfigHooks
 from ...docker import is_in_docker
 from ...pipeline.workflow import load_home_profiles
@@ -196,26 +197,28 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     # Every downstream read addresses the effective configuration.
     config = overlay.config
 
-    # Step 1.1 — host-side None-guard: the pipeline section is optional at the
-    # loader level (load_project_config returns config.pipeline=None when absent), but
-    # `goga pipeline` cannot run without it. Raise a clean ClickException BEFORE
-    # any config.pipeline.* access and BEFORE dispatch into either launcher, so a
-    # pipeline-less config surfaces as a clean message + exit 1 in every form
-    # rather than an AttributeError. This also covers both launchers
-    # transitively — they are only reachable through this command, so a single
-    # check here is enough.
+    # Step 1.1 — host-side section normalization: the pipeline section is
+    # OPTIONAL — the workflow-global agent/env of the active workflow are the
+    # global run settings, so a pipeline-less config resolves to the empty
+    # default (agent None, env/proxy/hosts empty) BEFORE any config.pipeline.*
+    # access and BEFORE dispatch into either launcher. This also covers both
+    # launchers transitively — they are only reachable through this command,
+    # so a single normalization here is enough.
     if config.pipeline is None:
-        raise click.ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")
+        config = replace(config, pipeline=PipelineConfig())
 
     # pipeline.agent is OPTIONAL: it is None at the loader level when absent/
-    # empty, and that is a valid state — the agent may be supplied per-stage by
-    # the workflow (composed into each stage's `command:` override by the
-    # compiler; afm ≥0.4.15 honors per-stage commands over the global
+    # empty (and the whole section may be absent — the empty default above),
+    # and that is a valid state — the agent may be supplied by the workflow,
+    # globally (the workflow-global agent resolves into the afm client
+    # command) or per-stage (composed into each stage's `command:` override
+    # by the compiler; afm ≥0.4.15 honors per-stage commands over the global
     # `client.command`). No host-side guard here, and no behavioral read of
     # pipeline.agent or pipeline.env anywhere in this cell: the in-container
     # run coordination resolves the agent into the afm configuration file it
     # authors and applies pipeline.env as the afm launch env layer, letting
-    # per-stage workflow agents (or afm's own defaults) cover an absent agent.
+    # the workflow globals, per-stage workflow agents, or afm's own defaults
+    # cover an absent agent.
 
     # Step 1a — resolve the execution substrate once; on the direct path
     # (inside the goga image, the GOGA_DOCKER marker) reject every host-only

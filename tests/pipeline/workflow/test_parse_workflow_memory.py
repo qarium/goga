@@ -232,7 +232,10 @@ class TestParseWorkflowMemoryBlockRejections:
 
         message = str(exc_info.value)
         assert "unknown key in workflow: bogus" in message
-        assert "valid keys: prompt, stages, extend, memory, profile, build" in message
+        assert (
+            "valid keys: prompt, stages, extend, memory, profile, build, "
+            "assistants, delegation, repeat, gates, agent, env" in message
+        )
 
     def test_parse_workflow_unknown_stage_key_message_lists_reflect_and_memory(
         self,
@@ -377,5 +380,5 @@ class TestParseWorkflowMethodInstructionMismatch:
         assert str(exc_info.value) == (
             "empty workflow — provide at least prompt, one stage, one extend entry, "
             "the memory block, the build block, the assistants block, the delegation block, "
-            "the repeat block, or the gates block"
+            "the repeat block, the gates block, the agent key, or the env block"
         )

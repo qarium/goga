@@ -10,7 +10,7 @@ all of that is the compiler's job.
 ## Accepted structure
 
 Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
-`assistants`, `delegation`, `repeat`, `gates`.
+`assistants`, `delegation`, `repeat`, `gates`, `agent`, `env`.
 
 - `profile` — optional top-level string default naming the workflow's default
   contributor profile (`profile: default`); a non-str value is a structural
@@ -18,6 +18,8 @@ Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
   normalizes to None. Activation reads this default from the RAW text via the
   load-time peek — a value that materializes only through template rendering
   does not participate in activation.
+- `agent` — the workflow-global run agent (a single string; see below).
+- `env` — the workflow-global environment layer (a str→str map; see below).
 - `build` — the strict six-field build block (see below).
 - `assistants` — the name-keyed catalog map of run-level helpers; the
   per-stage attachments (`stages.<name>.assistants`) are a name-keyed map
@@ -25,6 +27,37 @@ Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
   inline declaration (the catalog field set plus `gate`/`when`).
 - `delegation` — the delegation-bounds block (`depth`, `max_tasks`).
 - `repeat` — the run-cycle tuning block (`max_cycles`, `keep_runs`; below).
+
+## The global run settings (workflow.agent / workflow.env)
+
+`agent` and `env` are the workflow-global run settings — the layer every
+consumer resolves ahead of the project configuration's own globals:
+
+```yaml
+agent: claude
+env:
+  ANTHROPIC_MODEL: '{{ profile.model }}'
+  GOGA_LOG_LEVEL: info
+```
+
+Structural validation (parse time):
+
+- `agent`: a non-str value → structural error "non-str value in
+  workflow.agent"; an empty or whitespace-only value normalizes to None
+  (absence). The value names an agent — it is not validated against a
+  known agent set; a missing wrapper surfaces at invocation time.
+- `env`: a non-mapping value → structural error "non-mapping env in
+  workflow"; a non-str key → "non-str key in workflow.env"; a non-str
+  value → "non-str value in workflow.env.<key>". An empty map (`env: {}`)
+  equals absence. Env key shapes are not validated here — illegal keys
+  surface as strict pre-run errors at the delivery points.
+
+Both keys count as content for the empty-workflow rule: a workflow
+consisting of `agent:` alone (or `env:` alone) is valid. Both ride the
+whole-file contributor-profile rendering — profile data may drive the
+values like anywhere else in the file. This cell does NOT act on either
+key: no wrapper resolution, no layer merging, no launch — the pipeline
+run and the build own the layering laws of the globals.
 
 ## The build block (workflow.build)
 
@@ -199,12 +232,13 @@ there is nothing to cancel.
 
 ## Empty-workflow rule
 
-A workflow is empty only when `prompt`, `stages`, `extend`, `memory`, `build`,
-`assistants`, `delegation`, `repeat`, AND `gates` are ALL absent — `profile` never
-counts (activation is not content). The structural error "empty workflow"
-names the content options. A workflow consisting of the `build:` block alone
-is valid; a workflow consisting of the `repeat:` block alone is valid; a
-workflow carrying only `profile: name` is not.
+A workflow is empty only when `prompt`, `stages`, `extend`, `memory`,
+`build`, `assistants`, `delegation`, `repeat`, `gates`, `agent`, AND `env`
+are ALL absent — `profile` never counts (activation is not content). The
+structural error "empty workflow" names the content options. A workflow
+consisting of the `build:` block alone is valid; a workflow consisting of
+the `repeat:` block alone is valid; a workflow consisting of `agent:`
+alone is valid; a workflow carrying only `profile: name` is not.
 
 ## The approve field
 

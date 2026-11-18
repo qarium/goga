@@ -210,7 +210,7 @@ A running pipeline executes inside a Docker container, where its flows, run-stat
 
 ### Workflows — configure and extend a pipeline
 
-A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Fifteen levers, each with a short example.
+A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Sixteen levers, each with a short example.
 
 **`agent` — hire a different agent per stage.** Authoring on `codex`, reviews on `claude`, no pipeline duplication:
 
@@ -290,6 +290,14 @@ stages:
       ANTHROPIC_MODEL: opus
 ```
 
+**`agent` / `env` (top level) — global run settings.** Two top-level keys setting the run's globals: the agent (else `pipeline.agent`) runs the afm client command, the per-stage `env` wrapper fallback, and the assistant fallback; the env merges key-wise above `pipeline.env` into the launch layer and layers under every pass of a nested `goga build` (config < workflow global < workflow `build:` < CLI):
+
+```yaml
+agent: codex
+env:
+  CURSOR_MODEL: pro
+```
+
 **`assistants` — collaborate with helper agents.** A top-level name-keyed catalog declares named helpers (prompt, skills, agent, delegate, env) and the per-stage `assistants` map attaches them (`gate`, `when` — `when` required on every attachment); each catalog entry also joins the run-level team. An entry naming an assistant a tool delivered overrides it field by field (authored fields win whole, the rest flows from the delivery). Requires afm 2.0+ (the shipped image carries it):
 
 ```yaml
@@ -323,7 +331,7 @@ stages:
     agent: codex
 ```
 
-**`build` — configure the nested `goga build`.** A top-level block layered onto the build configuration (config < workflow `build:` < CLI) for the in-stage builds a pipeline launches:
+**`build` — configure the nested `goga build`.** A top-level block layered onto the build configuration (config < workflow global < workflow `build:` < CLI) for the in-stage builds a pipeline launches:
 
 ```yaml
 build:
@@ -413,7 +421,7 @@ The build configuration in `.goga/config.yml` is two-part: the `build` root carr
 - Stop the external review after N unchanged rounds (`review.additional.patience: 3`, or `--review-patience`);
 - Give the external reviewer its own environment layer (`review.additional.env: {CURSOR_MODEL: x}` — an independent `{str: str}` map, default `{}`; it never inherits `review.env`, and the tasks pass never sees it).
 
-A workflow `build:` block (see [Workflows](#workflows--configure-and-extend-a-pipeline)) layers onto this configuration — config < workflow `build:` < CLI — and requires a `build` section to exist in `.goga/config.yml`. When a workflow is in effect and a profile resolved, the in-container process prints `Build running with workflow "<name>" and profile "<profile>"` to stderr before anything else.
+A workflow in effect (see [Workflows](#workflows--configure-and-extend-a-pipeline)) layers onto this configuration — config < workflow global < workflow `build:` < CLI — and requires a `build` section to exist in `.goga/config.yml`; the workflow's top-level `agent` / `env` globals layer even without a `build:` block. When a workflow is in effect and a profile resolved, the in-container process prints `Build running with workflow "<name>" and profile "<profile>"` to stderr before anything else.
 
 Before the first pass a validation gate runs: tools subscribed to `build/validate_build` read the resolved run facts and may veto the run (see [Tools](#tools) below). After a successful run the plan file itself moves to `completed/` inside its own topic directory (`.goga/history/<year>/<topic>/completed/`).
 
@@ -452,7 +460,7 @@ After a successful pip, `goga install` runs each freshly installed tool's option
 goga connect <agent>
 ```
 
-Pass `goga install --no-connect` to opt out of the post-install agent re-sync (CI/Docker escape-hatch; the post-install hooks still run). Pass `goga install --sudo` for system-Python installs requiring root.
+Pass `goga install --no-connect` to opt out of the post-install agent re-sync (CI/Docker escape-hatch; the post-install hooks still run). Pass `goga install --sudo` for system-Python installs requiring root — inside the goga Docker image it is always required: the `/opt/goga` venv is root-owned, a passwordless sudoers rule lets the `goga` user run exactly `pip install`/`pip uninstall` as root (with `HOME` preserved), and hooks/agent activation still run as `goga`, so skills keep landing in `/home/goga` instead of `/root`.
 
 See [`goga install`](https://qarium.github.io/goga/features/install/cli/) for the full version-grammar rules and single/bulk/empty/local semantics.
 

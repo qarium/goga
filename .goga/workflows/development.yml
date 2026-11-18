@@ -8,6 +8,16 @@ memory:
   max_rules: 15
   commit: true
 
+{% if agent %}
+agent: {{ agent }}
+{% endif %}
+{% if env %}
+env:
+{% for k, v in env.items() %}
+  {{ k }}: "{{ v }}"
+{% endfor %}
+{% endif %}
+
 {% macro stage_config(stage_data) %}
 {% if stage_data["agent"] %}
     agent: {{ stage_data["agent"] }}
@@ -19,6 +29,23 @@ memory:
 {% endfor %}
 {% endif %}
 {% endmacro %}
+
+build:
+  agent: {{ build.agent }}
+  {% if build.env %}
+  env:
+  {% for k, v in build.env.items() %}
+    {{ k }}: "{{ v }}"
+  {% endfor %}
+  {% endif %}
+  review:
+    agent: {{ build.review.agent }}
+    {% if build.review.env %}
+    env:
+    {% for k, v in build.review.env.items() %}
+      {{ k }}: "{{ v }}"
+    {% endfor %}
+    {% endif %}
 
 stages:
   prototype-architecture:

@@ -50,8 +50,11 @@ The pipelines layer is split into two authoring surfaces:
   per-stage `gates` check-step lists (see
   [Workflows — Quality gates](workflows.md#quality-gates-gates)),
   profile-driven rendering (one file adapting per
-  contributor — see [Workflows — Profiles](workflows.md#profiles)), and a
-  `build:` block configuring nested `goga build` runs.
+  contributor — see [Workflows — Profiles](workflows.md#profiles)), a
+  `build:` block configuring nested `goga build` runs, and global run
+  settings via the top-level `agent` / `env` keys — the run's effective
+  global agent and launch env layer (see
+  [Workflows — Global run settings](workflows.md#global-run-settings-agent-env)).
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers

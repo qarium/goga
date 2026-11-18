@@ -312,15 +312,17 @@ Annotations: |
        ImportError a broken tool package facade — wraps into the
        same user-facing ClickException, never a raw traceback. The home
        configuration load stays authored-only
-    2.1. When config.build is None → raise ClickException(
-        "build section is required in .goga/config.yml to run 'goga build'").
-        Host-side structural guard — runs BEFORE any config.build access and
-        BEFORE the docker command is assembled, on the host-effective
-        configuration, so the in-container goga.build never starts on a
-        build-less config (no docker run). The agent value guard lives
-        in-container: the effective agent may arrive as a container-side
-        amendment, so a host check on the authored value would reject a run
-        an amendment could have satisfied
+    2.1. When config.build is None → normalize the effective configuration
+        to the empty BuildConfig (agent None, env/proxy/hosts empty, no
+        review part). Host-side section normalization — runs BEFORE any
+        config.build access and BEFORE the docker command is assembled, on
+        the host-effective configuration: the build section is optional —
+        the workflow-global agent/env and the workflow build block are the
+        build run settings, resolved in-container. The agent value guard
+        lives in-container: the effective agent may arrive as a
+        container-side amendment or a workflow layer, so a host check on
+        the authored value would reject a run an amendment could have
+        satisfied
     3. Collect cli_flags from click parameters; forward the review pair:
        skip_review True → --skip-review; False → --no-skip-review; None →
        neither flag (the tri-state survives to the container); forward

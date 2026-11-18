@@ -320,10 +320,14 @@ Annotations: |
        `checkpoints` practice via the `ConfigHooks` checkpoint surface —
        amend_config(config=...) — and treat the effective configuration
        of the `ConfigOverlay` as
-       the launch's configuration: the missing-pipeline-section guard and
-       every downstream read of host-owned launch fields (image,
-       dockerfile, proxy, hosts) address the effective configuration; a
-       missing pipeline section is a clean error. Amendments into
+       the launch's configuration: the pipeline-section normalization
+       and every downstream read of host-owned launch fields (image,
+       dockerfile, proxy, hosts) address the effective configuration;
+       a missing pipeline section resolves to the empty PipelineConfig
+       default (agent None, env/proxy/hosts empty) BEFORE any
+       config.pipeline access — the section is optional, the
+       workflow-global agent/env of the active workflow are the global
+       run settings. Amendments into
        run-parameter fields (pipeline.env, pipeline.agent) stay
        applied-but-unconsumed — the host consumes them nowhere, silently,
        no warning. A load or checkpoint

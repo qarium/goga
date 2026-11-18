@@ -97,6 +97,25 @@ class TestOverlayContract:
         assert overlay.workflow.profile == "mixa"
         assert overlay.workflow.build is build  # verbatim — the same object
 
+    def test_merge_rebuilt_document_carries_base_global_run_settings(self) -> None:
+        """The rebuilt document carries the base ``agent``/``env`` verbatim —
+        the same objects, never rebuilt (the verbatim-from-base set beside
+        profile and build)."""
+        env = {"A": "1"}
+        base = WorkflowDocument(prompt="p", agent="claude", env=env)
+        contributions = [
+            ToolContribution(
+                tool="t1",
+                document=WorkflowDocument(prompt="one", agent="tool-agent", env={"B": "2"}),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.agent == "claude"
+        assert overlay.workflow.env is env  # the SAME object — verbatim carriage
+
 
 # --- Logic tests (the design's scenarios, verbatim) ---
 
@@ -376,6 +395,44 @@ class TestMergeWorkflowOverlay:
         assert overlay.workflow is not None
         assert overlay.workflow.stages["fresh"].agent == "t1-agent"
         assert overlay.workflow.stages["fresh"].env == {"N": "9"}
+
+    def test_overlay_preserves_global_run_settings_verbatim(self) -> None:
+        """The base's global run settings ride the rebuild; the contribution's
+        globals are discarded; the contribution's stage field still merges."""
+        base = WorkflowDocument(prompt="p", agent="claude", env={"A": "1"})
+        contributions = [
+            ToolContribution(
+                tool="t1",
+                document=WorkflowDocument(
+                    agent="tool-agent",
+                    env={"B": "2"},
+                    stages={"s": WorkflowStage(loop=3)},
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.agent == "claude"  # the base global survives
+        assert overlay.workflow.env == {"A": "1"}  # the contribution's globals are discarded
+        assert overlay.workflow.stages["s"].loop == 3  # the merge otherwise works
+        assert base.agent == "claude"  # purity — the inputs untouched
+        assert base.env == {"A": "1"}
+
+    def test_overlay_empty_base_contributed_globals_still_not_read(self) -> None:
+        """A ``None`` base builds the document from the contributions — but the
+        workflow-level assembly reads only ``base``, so a contributed global
+        never reaches the final document (the globals are author-territory)."""
+        overlay = merge_workflow_overlay(
+            None,
+            [ToolContribution(tool="t1", document=WorkflowDocument(prompt="one", agent="tool-agent", env={"B": "2"}))],
+        )
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.prompt == "one"  # the contribution content still arrives
+        assert overlay.workflow.agent is None  # the contribution's global is not read
+        assert overlay.workflow.env is None
 
     def test_merge_preserves_base_profile_and_build_verbatim(self) -> None:
         """The rebuilt document carries the base ``profile``/``build`` (the same build

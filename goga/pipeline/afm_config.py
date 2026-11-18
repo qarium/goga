@@ -151,8 +151,10 @@ def _resolve_profiles(
     """Resolve every referenced assistant in memory — no file is touched here.
 
     Args:
-        agent: The effective global pipeline agent — the fallback tier when a
-            declaration carries no agent of its own.
+        agent: The effective global agent — the workflow global agent of the
+            effective workflow when it carries one, otherwise the effective
+            pipeline agent; the fallback tier when a declaration carries no
+            agent of its own.
         flow: The compiled flow document (the referenced names source).
         namespace: The name → (declaration, site) map of the workflow.
 
@@ -244,8 +246,10 @@ def _collaboration_section(
     """Materialize the collaboration plumbing — profiles and the task budget.
 
     Args:
-        agent: The effective global pipeline agent — the command fallback
-            tier of every generated profile.
+        agent: The effective global agent — the workflow global agent of the
+            effective workflow when it carries one, otherwise the effective
+            pipeline agent; the command fallback tier of every generated
+            profile.
         flow: The compiled flow document — the single source of truth for
             which profile ids exist (a profile is materialized exactly for
             the ids the flow references; an attachment removed by a stage
@@ -319,8 +323,11 @@ def write_afm_config(
     """Write the whole afm configuration file at the fixed in-container home path.
 
     Args:
-        agent: The effective pipeline agent as amended by the config delivery
-            (e.g. "codex"); ``None`` omits the whole ``client`` block.
+        agent: The effective global agent — the workflow global agent of the
+            effective workflow when it carries one, otherwise the authored
+            pipeline.agent as amended by the config delivery; ``None`` when
+            neither resolves — and ``None`` omits the whole ``client``
+            block.
         flow: The compiled flow document — the source of the generated
             profile ids (the binding of every team member and of every stage
             attachment the flow carries); ``None`` (with a ``workflow`` given

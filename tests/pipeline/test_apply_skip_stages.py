@@ -205,6 +205,35 @@ class TestApplySkipStagesContract:
         assert skip_only is not None
         assert skip_only.gates is None
 
+    def test_apply_skip_stages_carries_global_run_settings(self) -> None:
+        """The rebuild carries the input's global run settings (agent, env) verbatim.
+
+        The SAME agent string and env map objects (not rebuilds) ride into the
+        returned document — a rebuild that dropped them would silently revert
+        a skip-driven run to configuration-level globals. The rebuilt document
+        is a ``WorkflowDocument`` whose ``agent``/``env`` fields carry the
+        input's values; a None workflow with non-empty skip synthesizes the
+        document with ``agent=None`` and ``env=None``.
+        """
+        env = {"A": "1"}
+        workflow = WorkflowDocument(
+            stages={"build": WorkflowStage()},
+            agent="claude",
+            env=env,
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert isinstance(result, WorkflowDocument)
+        assert result.agent == "claude"
+        assert result.env is env
+        # The skip-only document over a None workflow carries no globals.
+        skip_only = apply_skip_stages(None, ["build"])
+
+        assert skip_only is not None
+        assert skip_only.agent is None
+        assert skip_only.env is None
+
     def test_apply_skip_stages_carries_skipped_stage_declarations(self) -> None:
         """A skipped stage's replacement carries its attachments — declarations stay resolvable.
 
@@ -468,3 +497,42 @@ class TestApplySkipStagesLogic:
         result = apply_skip_stages(workflow, ["a"])
 
         assert result.stages["b"].notes == {"y": "2"}
+
+    def test_skip_rebuild_preserves_global_run_settings(self) -> None:
+        """The authored global agent and env map survive the skip rebuild.
+
+        ``agent='claude'`` and ``env={'A': '1'}`` ride the rebuilt document
+        verbatim — a rebuild that dropped them would silently revert a
+        skip-driven run to configuration-level globals. The skipped stage is
+        still replaced with ``skip=True``, and an empty skip list returns the
+        input object unchanged (the pre-existing law).
+        """
+        workflow = WorkflowDocument(
+            prompt="p",
+            stages={"a": WorkflowStage(prompt="do")},
+            agent="claude",
+            env={"A": "1"},
+        )
+
+        result = apply_skip_stages(workflow, ["a"])
+
+        assert result is not None
+        assert result.agent == "claude"
+        assert result.env == {"A": "1"}
+        assert result.stages["a"].skip is True
+        # Empty skip list returns the input object unchanged.
+        assert apply_skip_stages(workflow, []) is workflow
+
+    def test_skip_synthesis_with_none_workflow_carries_agent_env_none(self) -> None:
+        """A None workflow with non-empty skip synthesizes agent/env None.
+
+        The synthesized skip-only document carries ``agent=None`` and
+        ``env=None`` — there is no authored workflow, so no global run
+        settings exist to carry.
+        """
+        result = apply_skip_stages(None, ["a"])
+
+        assert result is not None
+        assert result.agent is None
+        assert result.env is None
+        assert result.stages["a"].skip is True

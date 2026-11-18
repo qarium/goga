@@ -69,7 +69,7 @@ The committed contributions merge onto the authored workflow **authored-wins, pe
 
 - `prompt` — the non-empty texts joined with a single blank line, authored first, then the tools in enumeration order.
 - Stage fields — an authored-set field never yields; an unset field takes the later contributing tool's value; a stage the author never named is fully tool-defined. `manual` is three-state (`True` and `False` are both authored intent); `skip: false` overrides nothing. The one keyed exception is stage `env`: it merges per key — authored entries are unbeatable per key, and a contributing tool fills only the keys the author left unset (a later tool wins per key over an earlier fill).
-- `profile` / `build` — never merged: the base workflow's values carry verbatim, and a contribution's `profile` or `build` fields never participate (a document contributing only them counts as empty — no prompt, stages, extend, memory, assistants, delegation, repeat, or gates — and is discarded per the `contribute(document)` rule above).
+- `profile` / `build` / `agent` / `env` — never merged: the base workflow's values carry verbatim, and a contribution's `profile`, `build`, `agent`, or `env` fields never participate (a document contributing only them counts as empty — no prompt, stages, extend, memory, assistants, delegation, repeat, or gates — and is discarded per the `contribute(document)` rule above). Global run settings are workflow-author territory alone.
 - `extend` — authored names win; among tools the later entry wins per name.
 - `memory` — whole-block: the authored block is unbeatable; otherwise the later tool's block wins.
 - `delegation` — whole-block like `memory`: the authored block is unbeatable; otherwise the later tool's block wins.
@@ -157,7 +157,7 @@ With no tool packages installed the registry builds empty and the overlay is the
 | `CompositionStage` | `id`, `title` |
 | `RunIdentity` | `run_id`, `run_dir`, `root_dir`, `resumed` — the run facts carried by every bridged mid-run event |
 | `StageTransition` | `id`, `name`, `from_status`, `to_status`, `phase` — the transition of one stage |
-| `WorkflowDocument` | `prompt`, `stages`, `extend`, `memory`, `profile`, `build`, `assistants`, `delegation`, `repeat`, `gates` — the contribute vocabulary, covered in [Pipeline File](pipeline-file.md); a tool's `profile` / `build` contributions never merge (the base values ride verbatim) |
+| `WorkflowDocument` | `prompt`, `stages`, `extend`, `memory`, `profile`, `build`, `assistants`, `delegation`, `repeat`, `gates`, `agent`, `env` — the contribute vocabulary, covered in [Pipeline File](pipeline-file.md); a tool's `profile` / `build` / `agent` / `env` contributions never merge (the base values ride verbatim) |
 
 `name` is the discovered file stem; `display_name`/`description` are the authored header values. `workflow_name` is present for `explicit` and `auto-match`. `branch` is the literal `unknown` when git resolves none; `slug`/`year` belong to the hosting topic when the branch hosts one.
 

@@ -96,7 +96,7 @@ def _prepare_run_settings(build_config: BuildConfig, cli_options: dict) -> RunSe
     if settings.tasks.agent is None:
         logger.error(
             "no build agent resolved",
-            extra={"remedy": "set build.agent in .goga/config.yml"},
+            extra={"remedy": "set build.agent in .goga/config.yml or the workflow global agent / build block"},
         )
         return None
 
@@ -273,7 +273,7 @@ def _completion_statuses(work: WorkIdentity) -> list[str]:
     return []
 
 
-def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: C901, PLR0911, PLR0915 — the 17-step CODEMANIFEST algorithm owns its guard branches
+def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: C901, PLR0911 — the 17-step CODEMANIFEST algorithm owns its guard branches
     """Execute the stable two-pass build cycle for a plan through ralphex — a skipped review yields one tasks pass.
 
     Algorithm:
@@ -292,11 +292,13 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
         3. The launch feedback line to stderr — ``Build running with
            workflow "<w>" and profile "<p>"`` — ONLY when a workflow is in
            effect AND a profile resolved; every other run prints no line
-        4. Layering: a workflow ``build:`` block overlays the effective build
-           section via ``merge_workflow_build`` (config < workflow build: <
-           CLI); a build block over a configuration without a build section
-           is one clean error naming the requirement, exit 1, no events —
-           the layered configuration feeds every downstream step
+        4. Layering: whenever a workflow document is present, its global
+           agent/env and ``build:`` block overlay the effective build section
+           via ``merge_workflow_build`` (config < workflow global < workflow
+           build: < CLI; the globals apply with no build block too); the
+           build section is optional — an absent section resolves to the
+           empty default, so the workflow globals/block hold the whole
+           layer — the layered configuration feeds every downstream step
         5. Settings resolution via ``resolve_run_settings`` over the layered
            configuration
         6. Review-config validation
@@ -389,23 +391,23 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
         workflow_name = cli_options.get("workflow") or workflow_env
         print(f'Build running with workflow "{workflow_name}" and profile "{loaded.profile.name}"', file=sys.stderr)
 
-    # Step 4: layer the workflow build block onto the effective build
-    # section. The D2 guard: a build invocation requires a build section to
-    # layer onto — one clean error instead of the raw attribute failure,
-    # with or without a workflow in effect (the host launcher guards the
-    # section host-side, so only a direct in-container invocation reaches
-    # this guard).
-    build_config = config.build
+    # Step 4: layer the workflow run settings onto the effective build
+    # section — the global agent/env as the middle layer with the build
+    # block above them; the layering runs whenever a document is present
+    # (the globals apply with no build block too). The build section is
+    # OPTIONAL: an absent section resolves to the empty default, so the
+    # workflow globals/block hold the whole layer (the host launcher
+    # normalizes the section host-side too; a direct in-container
+    # invocation resolves the same default here).
+    build_config = config.build if config.build is not None else BuildConfig()
 
-    if build_config is None:
-        logger.error(
-            "build invocation requires a build section",
-            extra={"remedy": "set the build section in .goga/config.yml"},
+    if loaded is not None:
+        build_config = merge_workflow_build(
+            build_config,
+            loaded.document.build,
+            loaded.document.agent,
+            loaded.document.env,
         )
-        return 1
-
-    if loaded is not None and loaded.document.build is not None:
-        build_config = merge_workflow_build(build_config, loaded.document.build)
 
     settings = _prepare_run_settings(build_config, cli_options)
 

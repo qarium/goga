@@ -319,7 +319,7 @@ class TestPipelineBoundary:
         assert "from ...pipeline import" not in source
         assert "from goga.pipeline import" not in source
         # The only goga imports are config + the two intra-cell launchers.
-        assert "from ...config import load_project_config" in source
+        assert "from ...config import PipelineConfig, load_project_config" in source
         assert "from .run_pipeline_container import run_pipeline_container" in source
         assert "from .run_pipeline_info_container import run_pipeline_info_container" in source
 

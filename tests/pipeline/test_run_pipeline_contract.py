@@ -194,13 +194,13 @@ class TestRunPipelineDelegatesWorkflowResolution:
 
 
 class TestRunPipelineActivationSurfaceContract:
-    """Contract: the profile activation context of the 23-step algorithm.
+    """Contract: the profile activation context of the 24-step algorithm.
 
     Step 8 decodes the ``GOGA_HOME_PROFILES`` bundle (``decode_home_profiles``
     from the docker facade) and reads ``GOGA_PROFILE`` once, feeding both into
-    the workflow resolution together with the ``profile`` parameter; step 14
+    the workflow resolution together with the ``profile`` parameter; step 15
     applies the per-stage env wrappers (``apply_stage_env_wrappers``) after the
-    compilation; step 19 composes the launch layer over the WIDENED engine set
+    compilation; step 20 composes the launch layer over the WIDENED engine set
     (the five launch-mechanics keys plus the four goga carriage keys) and adds
     ``GOGA_PROFILE=<effective>`` when a profile resolved. The environment
     reads of the whole path are exactly four.
@@ -296,7 +296,7 @@ class TestRunPipelineFailOnErrorContract:
     (after ``parallel``) defaulting to ``False`` — the in-container
     ``--fail-on-error`` decision arrives as an explicit parameter, never
     from the environment, and forwards to ``run_flow`` as its
-    ``exit_on_fail`` argument (step 21).
+    ``exit_on_fail`` argument (step 22).
     """
 
     def test_run_pipeline_signature_has_fail_on_error_last(self) -> None:
@@ -444,26 +444,67 @@ class TestRunPipelineConfigSurfaceContract:
     def test_run_pipeline_module_references_the_launch_layer_surface(self) -> None:
         """The run module imports decode_extra_env and write_afm_config.
 
-        Step 14 consumes ``write_afm_config``; step 17 consumes
+        Step 17 consumes ``write_afm_config``; step 20 consumes
         ``decode_extra_env`` — both must be part of the module surface.
         """
         assert hasattr(_run_pipeline_module, "decode_extra_env")
         assert hasattr(_run_pipeline_module, "write_afm_config")
 
     def test_run_pipeline_source_consumes_the_effective_configuration(self) -> None:
-        """Steps 14 and 17 read the EFFECTIVE configuration of the overlay.
+        """Steps 15 and 17 read the EFFECTIVE configuration of the overlay.
 
         The pipeline agent and the pipeline task env travel through
         ``config.pipeline`` — the effective configuration variable the
         load-and-amend produces — never a bare ``authored`` read. The
-        step-16 config write threads the effective agent, the compiled flow
-        document, and the overlay workflow (the collaboration plumbing's two
-        artifacts).
+        agent reaches the seams through the step-14 resolution (the
+        workflow-global value first, the effective ``pipeline.agent`` as the
+        fallback), and the step-17 config write threads the resolved
+        effective agent, the compiled flow document, and the overlay
+        workflow (the collaboration plumbing's two artifacts).
         """
         source = Path(_run_pipeline_module.__file__).read_text()
 
-        assert "write_afm_config(config.pipeline.agent, flow_doc, overlay.workflow)" in source
+        assert "write_afm_config(effective_agent, flow_doc, overlay.workflow)" in source
+        assert "workflow_agent if workflow_agent is not None else config.pipeline.agent" in source
         assert "config.pipeline.env" in source
+
+
+class TestRunPipelineGlobalRunSettingsContract:
+    """Contract: step 14 resolves the effective global agent; step 20 composes the launch env base.
+
+    The effective global agent resolves ONCE per run from the overlay
+    workflow document's ``agent`` field, falling back to the effective
+    ``pipeline.agent``; it feeds exactly the wrapper generation and the afm
+    configuration write (and, inside them, the per-stage exec fallback, the
+    client command, and the assistant fallback) and nothing else. The launch
+    env base is the key-wise merge of ``pipeline.env`` with the overlay
+    workflow's global ``env`` — a workflow key overrides the same-named
+    configuration key, untouched configuration keys survive, CLI entries
+    stay above, and engine-variable keys still drop silently.
+    """
+
+    def test_run_pipeline_resolves_workflow_global_agent_first(self) -> None:
+        """The source resolves the overlay workflow's agent before config.pipeline.agent."""
+        source = Path(_run_pipeline_module.__file__).read_text()
+
+        assert "overlay.workflow.agent if overlay.workflow is not None else None" in source
+        assert "workflow_agent if workflow_agent is not None else config.pipeline.agent" in source
+
+    def test_run_pipeline_consumers_receive_effective_agent(self) -> None:
+        """The wrapper generation and the afm config write threads receive effective_agent."""
+        source = Path(_run_pipeline_module.__file__).read_text()
+
+        assert "apply_stage_env_wrappers(flow_doc.stages, overlay.workflow, effective_agent, flow_path)" in source
+        assert "write_afm_config(effective_agent, flow_doc, overlay.workflow)" in source
+        assert "write_afm_config(config.pipeline.agent" not in source
+        assert "apply_stage_env_wrappers(flow_doc.stages, overlay.workflow, config.pipeline.agent" not in source
+
+    def test_run_pipeline_launch_base_merges_workflow_global_env(self) -> None:
+        """Step 20 composes the base as pipeline.env merged with the workflow global env."""
+        source = Path(_run_pipeline_module.__file__).read_text()
+
+        assert "overlay.workflow.env if overlay.workflow is not None else None" in source
+        assert "{**config.pipeline.env, **(workflow_env or {})}" in source
 
 
 class TestRunPipelineImportsResolveProjectNameFromConfig:

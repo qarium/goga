@@ -289,12 +289,15 @@ class TestParseWorkflowGatesRejections:
             parse_workflow(workflow_text)
 
     def test_parse_unknown_top_level_key_enumeration_includes_gates(self) -> None:
-        """The unknown top-level key message enumerates the ten valid keys ending with ``gates``."""
+        """The unknown top-level key message enumerates the twelve valid keys ending with ``agent``/``env``."""
         with pytest.raises(WorkflowSyntaxError) as excinfo:
             parse_workflow("gatess: {}\n")
 
         message = str(excinfo.value)
-        expected = "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat, gates"
+        expected = (
+            "valid keys: prompt, stages, extend, memory, profile, build, "
+            "assistants, delegation, repeat, gates, agent, env"
+        )
         assert expected in message
 
     def test_parse_unknown_stage_key_enumeration_includes_gates(self) -> None:

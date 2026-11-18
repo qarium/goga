@@ -23,10 +23,12 @@ class TestContract:
 
         signature = inspect.signature(merge_workflow_build)
 
-        assert list(signature.parameters) == ["config", "build_block"]
+        assert list(signature.parameters) == ["config", "build_block", "global_agent", "global_env"]
 
         assert signature.parameters["config"].default is inspect.Parameter.empty
         assert signature.parameters["build_block"].default is inspect.Parameter.empty
+        assert signature.parameters["global_agent"].default is None
+        assert signature.parameters["global_env"].default is None
 
     def test_parameter_annotations_match_contract(self) -> None:
         from goga.build import merge_workflow_build
@@ -34,7 +36,9 @@ class TestContract:
         signature = inspect.signature(merge_workflow_build)
 
         assert signature.parameters["config"].annotation == "BuildConfig"
-        assert signature.parameters["build_block"].annotation == "WorkflowBuild"
+        assert signature.parameters["build_block"].annotation == "WorkflowBuild | None"
+        assert signature.parameters["global_agent"].annotation == "str | None"
+        assert signature.parameters["global_env"].annotation == "dict[str, str] | None"
 
     def test_return_annotation_matches_contract(self) -> None:
         from goga.build import merge_workflow_build

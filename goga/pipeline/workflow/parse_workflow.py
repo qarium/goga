@@ -32,6 +32,8 @@ _TOP_LEVEL_KEYS = (
     "delegation",
     "repeat",
     "gates",
+    "agent",
+    "env",
 )
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
@@ -177,7 +179,12 @@ def parse_workflow(text: str) -> WorkflowDocument:
             ``memory``, an invalid path shape, a missing ``reflect.file``, a
             ``mode`` authored under ``method: reflect``, a ``reflect``
             instruction under ``alignment``, or a ``memory`` instruction under
-            ``reflect``), the ``profile`` key is not a str, the ``build``
+            ``reflect``), the ``profile`` key is not a str, the ``agent`` key
+            is not a str ("non-str value in workflow.agent"; an empty or
+            whitespace-only value normalizes to None), the ``env`` key is not
+            a dict of str→str (a non-dict value, a non-str key, or a non-str
+            value is a structural error; an empty map equals absence), the
+            ``build``
             block is malformed (non-mapping block, an unknown key anywhere in
             the six-field set, a non-str agent, or a non-mapping/non-str-value
             env map), an extend-entry
@@ -220,7 +227,8 @@ def parse_workflow(text: str) -> WorkflowDocument:
             or the workflow provides neither a top-level
             prompt, any stage entry, any extend entry, the memory block, the
             profile key, the build block, the assistants block, nor the
-            delegation block, nor the repeat block, nor the gates block.
+            delegation block, nor the repeat block, nor the gates block, nor
+            the agent key, nor the env block.
     """
     try:
         loaded = yaml.safe_load(text)
@@ -243,6 +251,8 @@ def parse_workflow(text: str) -> WorkflowDocument:
         delegation_raw,
         repeat_raw,
         gates_raw,
+        agent,
+        env,
     ) = _extract_top_level(loaded)
 
     memory = _build_memory(memory_raw)
@@ -258,9 +268,10 @@ def parse_workflow(text: str) -> WorkflowDocument:
 
     # The empty-workflow rule counts CONTENT — prompt, stages, extend, memory,
     # the build block, the assistants catalog, the delegation block, the
-    # repeat block, or the gates block. ``profile`` never rescues a workflow
-    # from emptiness: activation is not content, so a ``profile:``-only
-    # workflow raises here while a ``gates:``-only workflow is valid.
+    # repeat block, the gates block, the agent key, or the env block.
+    # ``profile`` never rescues a workflow from emptiness: activation is not
+    # content, so a ``profile:``-only workflow raises here while an
+    # ``agent:``-only workflow is valid.
     if (
         prompt is None
         and not stages
@@ -271,11 +282,13 @@ def parse_workflow(text: str) -> WorkflowDocument:
         and delegation is None
         and repeat is None
         and gates is None
+        and agent is None
+        and env is None
     ):
         raise WorkflowSyntaxError(
             "empty workflow — provide at least prompt, one stage, one extend entry, "
             "the memory block, the build block, the assistants block, the delegation block, "
-            "the repeat block, or the gates block"
+            "the repeat block, the gates block, the agent key, or the env block"
         )
 
     return WorkflowDocument(
@@ -289,10 +302,12 @@ def parse_workflow(text: str) -> WorkflowDocument:
         delegation=delegation,
         repeat=repeat,
         gates=gates,
+        agent=agent,
+        env=env,
     )
 
 
-def _extract_top_level(  # noqa: C901 — one direct branch per validated top-level block
+def _extract_top_level(  # noqa: C901, PLR0912 — one direct branch per validated top-level block
     loaded: dict[str, Any],
 ) -> tuple[
     str | None,
@@ -305,16 +320,18 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
     dict[str, Any] | None,
     dict[str, Any] | None,
     dict[str, Any] | None,
+    str | None,
+    dict[str, str] | None,
 ]:
-    """Validate the top-level mapping and split out the ten top-level blocks.
+    """Validate the top-level mapping and split out the twelve top-level blocks.
 
     Args:
         loaded: The YAML-parsed top-level mapping.
 
     Returns:
-        A 10-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
-        build_raw, assistants_raw, delegation_raw, repeat_raw, gates_raw)``
-        where ``prompt`` is the
+        A 12-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
+        build_raw, assistants_raw, delegation_raw, repeat_raw, gates_raw,
+        agent, env)`` where ``prompt`` is the
         validated top-level prompt (``None`` when absent), ``stages_raw`` is
         the raw stages mapping (``None`` when absent), ``extend_raw`` is the
         raw extend mapping (``None`` when absent), ``memory_raw`` is the raw
@@ -324,16 +341,20 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
         ``assistants_raw`` is the raw assistants catalog map (``None`` when
         absent), ``delegation_raw`` is the raw delegation block (``None``
         when absent), ``repeat_raw`` is the raw repeat block (``None`` when
-        absent), and ``gates_raw`` is the raw gates settings block (``None``
-        when absent).
+        absent), ``gates_raw`` is the raw gates settings block (``None``
+        when absent), ``agent`` is the validated workflow-global agent name
+        (``None`` when absent or empty/whitespace-only), and ``env`` is the
+        validated workflow-global env map (``None`` when absent — an empty
+        map equals absence).
 
     Raises:
         WorkflowSyntaxError: If a top-level key is unknown, ``prompt`` is not a
             str, ``stages`` is not a mapping, ``extend`` is not a mapping,
             ``memory`` is not a mapping, ``profile`` is not a str, ``build``
             is not a mapping, ``assistants`` is not a mapping, ``delegation``
-            is not a mapping, ``repeat`` is not a mapping, or ``gates`` is
-            not a mapping.
+            is not a mapping, ``repeat`` is not a mapping, ``gates`` is not
+            a mapping, ``agent`` is not a str, or ``env`` is not a dict of
+            str→str.
     """
     prompt: str | None = None
     stages_raw: dict[str, Any] | None = None
@@ -345,6 +366,8 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
     delegation_raw: dict[str, Any] | None = None
     repeat_raw: dict[str, Any] | None = None
     gates_raw: dict[str, Any] | None = None
+    agent: str | None = None
+    env: dict[str, str] | None = None
 
     for key, value in loaded.items():
         if key == "prompt":
@@ -369,6 +392,10 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
             repeat_raw = _validate_top_level_mapping("non-mapping repeat block in workflow", value)
         elif key == "gates":
             gates_raw = _validate_top_level_mapping("non-mapping gates block in workflow", value)
+        elif key == "agent":
+            agent = _validate_top_level_agent(value)
+        elif key == "env":
+            env = _validate_stage_env("workflow", value)
         else:
             raise WorkflowSyntaxError(f"unknown key in workflow: {key}; valid keys: {', '.join(_TOP_LEVEL_KEYS)}")
 
@@ -383,6 +410,8 @@ def _extract_top_level(  # noqa: C901 — one direct branch per validated top-le
         delegation_raw,
         repeat_raw,
         gates_raw,
+        agent,
+        env,
     )
 
 
@@ -440,6 +469,26 @@ def _validate_top_level_profile(field_value: Any) -> str | None:
     """
     if not isinstance(field_value, str):
         raise WorkflowSyntaxError("non-str value in workflow.profile")
+
+    return field_value if field_value.strip() else None
+
+
+def _validate_top_level_agent(field_value: Any) -> str | None:
+    """Validate the top-level ``agent`` value and return the confirmed global agent name.
+
+    Args:
+        field_value: The raw ``agent`` value to validate.
+
+    Returns:
+        The validated global agent name, or ``None`` when the value is empty
+        or whitespace-only (absence — the global agent is a NAME, never blank
+        space; the scalar law of the ``profile`` key).
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``str``.
+    """
+    if not isinstance(field_value, str):
+        raise WorkflowSyntaxError("non-str value in workflow.agent")
 
     return field_value if field_value.strip() else None
 

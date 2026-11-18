@@ -19,8 +19,13 @@ from goga.pipeline.compiler import (
     PipelineRoles,
     StructuralError,
 )
-from goga.pipeline.hooks import WorkflowOverlay
-from goga.pipeline.workflow import WorkflowAssistant, WorkflowDelegation, WorkflowDocument
+from goga.pipeline.hooks import ToolContribution, WorkflowOverlay, merge_workflow_overlay
+from goga.pipeline.workflow import (
+    WorkflowAssistant,
+    WorkflowDelegation,
+    WorkflowDocument,
+    WorkflowStage,
+)
 
 from tests.pipeline.conftest import (
     PROMPT_STEMS,
@@ -491,7 +496,7 @@ class TestRunPipelineLogic:
 
 
 class TestRunPipelineGateEnvDelivery:
-    """Step 14b — the per-step gate env wrappers apply as a post-compile verify-step patch."""
+    """Step 15 (gate half) — the per-step gate env wrappers apply as a post-compile verify-step patch."""
 
     def test_run_pipeline_delivers_gate_step_env_through_wrappers(
         self,
@@ -582,7 +587,7 @@ class TestRunPipelineGateEnvDelivery:
 
 
 class TestRunPipelineStageEnvDelivery:
-    """Step 14 — the per-stage env delivery through the full run chain.
+    """Step 15 — the per-stage env delivery through the full run chain.
 
     The stage-env forms the run coordination patches after the real compile:
     the payload-closure form of a script stage and the combined delivery of
@@ -613,14 +618,19 @@ class TestRunPipelineStageEnvDelivery:
         stage env delivery then patches the claimed stage's ``script:`` line in
         the written flow-file and generates the closure under the redirected
         container-local base. No agent resolves on this path — the config's
-        ``pipeline`` section carries no agent.
+        ``pipeline`` section carries no agent. The workflow also declares a
+        global ``env`` key: it reaches the stage ambiently through the afm
+        launch layer, never through the stage closure — the closure exports
+        only the stage's own values.
         """
         import yaml
 
         afm_dir.mkdir(parents=True)
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)
-        (workflows_dir / "deploy.yml").write_text("stages:\n  build:\n    env:\n      FOO: bar\n")
+        (workflows_dir / "deploy.yml").write_text(
+            "env:\n  GLOBAL_KEY: gv\nstages:\n  build:\n    env:\n      FOO: bar\n"
+        )
 
         project_dir = tmp_path / "pipelines"
         project_dir.mkdir()
@@ -640,7 +650,11 @@ class TestRunPipelineStageEnvDelivery:
 
         assert stage["script"] == wrapper
         assert "command" not in stage
-        assert (stage_wrapper_base / "build").read_text() == "#!/bin/sh\nexport FOO=bar\npytest -q\n"
+        closure = (stage_wrapper_base / "build").read_text()
+        assert closure == "#!/bin/sh\nexport FOO=bar\npytest -q\n"
+        # The workflow's global env key stays out of the per-stage closure —
+        # it rides the afm launch layer, not the wrapper.
+        assert "GLOBAL_KEY" not in closure
 
     def test_run_pipeline_delivers_stage_and_gate_env_on_one_stage(
         self,
@@ -651,8 +665,8 @@ class TestRunPipelineStageEnvDelivery:
     ) -> None:
         """Stage env and gate-step env on one stage compose — both patches land in one written flow-file.
 
-        Step 14 patches the stage's ``command:`` line to the exec closure
-        (the workflow stage declares its own agent); step 14b then patches the
+        Step 15 patches the stage's ``command:`` line to the exec closure
+        (the workflow stage declares its own agent); the gate half then patches the
         gate step's ``run:`` line to its gate closure over the same file —
         neither delivery disturbs the other.
         """
@@ -1347,7 +1361,7 @@ class _MergingPipelineHooks(_RecordingPipelineHooks):
 
     The base recording stand-in returns the passthrough of the authored
     workflow (the no-tool-packages shape); this variant returns a distinct
-    merged document, so a threading assertion can prove the step-16 config
+    merged document, so a threading assertion can prove the step-17 config
     write receives the OVERLAY's workflow — never the pre-merge resolution.
     """
 
@@ -1360,8 +1374,37 @@ class _MergingPipelineHooks(_RecordingPipelineHooks):
         return WorkflowOverlay(workflow=self.merged, provenance=[])
 
 
+class _OverlayingPipelineHooks(_RecordingPipelineHooks):
+    """Amendment stand-in running the REAL overlay merge — the tool shape.
+
+    The merge folds one committed contribution (carrying CLASHING globals and
+    a fresh stage) onto the received base with :func:`merge_workflow_overlay`,
+    so a composed scenario proves the authored globals survive the real
+    overlay merge while a tool-supplied global never reaches the effective
+    workflow. The skip-rebuilt base is recorded for the pre-merge assertions.
+    """
+
+    def __init__(self, order: list[str] | None = None) -> None:
+        super().__init__(order)
+        self.received: WorkflowDocument | None = None
+
+    def amend_workflow(self, **kwargs: object) -> WorkflowOverlay:
+        self.order.append("amend_workflow")
+        self.received = kwargs["workflow"]
+        contribution = ToolContribution(
+            tool="t1",
+            document=WorkflowDocument(
+                agent="tool-agent",
+                env={"B": "tool"},
+                stages={"smoke": WorkflowStage(prompt="Smoke-check the release.")},
+            ),
+        )
+
+        return merge_workflow_overlay(self.received, [contribution])
+
+
 class _WriteAfmConfigSpy:
-    """Recording stand-in for the step-16 afm configuration write seam.
+    """Recording stand-in for the step-17 afm configuration write seam.
 
     Wrapped into the module seam's ``MagicMock`` so the clean-error scenarios
     keep their mock assertions (``call_count``, ``assert_not_called``, a
@@ -1381,9 +1424,9 @@ class _WriteAfmConfigSpy:
 
 
 class TestRunPipelineConfigAndLaunchLayer:
-    """Steps 1-2 and 14/17/19 — the load-and-amend opening, the afm
-    configuration write, the launch layer composition, and their clean-error
-    boundaries.
+    """Steps 1-2, 14/17/20 — the load-and-amend opening, the effective global
+    agent resolution, the afm configuration write, the launch layer
+    composition, and their clean-error boundaries.
 
     Every scenario patches the four seams the design names —
     ``load_project_config``, ``ConfigHooks.amend_config``, ``write_afm_config``,
@@ -1534,7 +1577,7 @@ class TestRunPipelineConfigAndLaunchLayer:
 
         The workflow's assistant resolves no agent (no own agent, no global
         agent) and the compiled flow references it, so the REAL config write
-        raises its pre-run error before any file is written — step 16
+        raises its pre-run error before any file is written — step 17
         precedes the run-creation facts, so no events fire and afm never
         launches.
         """
@@ -1564,7 +1607,7 @@ class TestRunPipelineConfigAndLaunchLayer:
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
 
         # The pre-run error precedes the run-creation facts and the launch —
-        # the declared error semantics of step 16.
+        # the declared error semantics of step 17.
         assert "emit_run_created" not in order
         assert "run_flow" not in order
         assert merging_hooks.created == []
@@ -1597,11 +1640,260 @@ class TestRunPipelineConfigAndLaunchLayer:
         # The composition never mutates the process environment.
         assert os.environ["AFM_DIR"] == str(afm_dir)
 
+    def _write_global_workflow(self, tmp_path: Path, text: str) -> None:
+        """Write the basename-auto-match workflow file under the isolated CWD."""
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True, exist_ok=True)
+        (workflows_dir / "deploy.yml").write_text(text)
+
+    def test_run_pipeline_without_pipeline_section_runs_on_workflow_globals(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A configuration without a pipeline section runs on the workflow globals.
+
+        The pipeline section is optional — the workflow-global agent/env are
+        the global run settings: the absent section resolves to the empty
+        default (never an AttributeError), the afm configuration write
+        receives the workflow agent, and the launch layer is the workflow
+        global env alone (the empty configuration base contributes nothing).
+        """
+        order: list[str] = []
+        self._patch_seams(
+            monkeypatch,
+            order,
+            ProjectConfig(language="python", image=None, dockerfile=None, build=None, pipeline=None),
+        )
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+        monkeypatch.chdir(tmp_path)
+        self._write_global_workflow(tmp_path, "prompt: hi\nagent: claude\nenv:\n  B: '2'\n")
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        write_spy = _run_pipeline_module.write_afm_config.side_effect
+        assert isinstance(write_spy, _WriteAfmConfigSpy)
+        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["claude"]
+        assert mock_run_flow.call_args.kwargs["env"] == {"B": "2"}
+
+    def test_run_pipeline_workflow_global_agent_feeds_all_three_consumers(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A workflow-global agent overrides pipeline.agent at every consumer seam.
+
+        The workflow file carries ``agent: claude`` while the effective
+        configuration's ``pipeline.agent`` is "codex": the afm configuration
+        write receives "claude" (the client command and the assistant
+        fallback source) and the per-stage wrapper generation receives the
+        same value as its global fallback tier — "codex" reaches neither
+        seam. The resolution happens once, at step 14, from the OVERLAY
+        workflow (the very document threaded to the config write).
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig(agent="codex", env={})))
+        monkeypatch.chdir(tmp_path)
+        self._write_global_workflow(tmp_path, "prompt: hi\nagent: claude\nstages:\n  build:\n    skip: true\n")
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+        documents = fake_documents()
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=documents),
+            mock.patch.object(_run_pipeline_module, "apply_stage_env_wrappers") as mock_wrappers,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        write_spy = _run_pipeline_module.write_afm_config.side_effect
+        assert isinstance(write_spy, _WriteAfmConfigSpy)
+
+        # The config write receives the WORKFLOW global agent, never the
+        # configuration's "codex", with the same overlay workflow object.
+        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["claude"]
+
+        workflow_doc = write_spy.calls[0][2]
+        assert workflow_doc.agent == "claude"
+
+        # The wrapper generation receives the same effective value as its
+        # global fallback tier, with the same compiled stages and workflow.
+        mock_wrappers.assert_called_once()
+        assert mock_wrappers.call_args.args[0] is documents[1].stages
+        assert mock_wrappers.call_args.args[1] is workflow_doc
+        assert mock_wrappers.call_args.args[2] == "claude"
+
+    def test_run_pipeline_launch_env_base_merges_workflow_env_keywise(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The launch env base composes pipeline.env with the workflow global env.
+
+        ``pipeline.env`` carries A=1, B=1; the workflow global env carries
+        B=2, C=3; no CLI payload rides above. The ``run_flow`` layer is the
+        key-wise merge: the workflow value wins per key (B=2), untouched
+        configuration keys survive (A=1), workflow-only keys join (C=3).
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig(env={"A": "1", "B": "1"})))
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+        monkeypatch.chdir(tmp_path)
+        self._write_global_workflow(tmp_path, "prompt: hi\nenv:\n  B: '2'\n  C: '3'\n")
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        assert mock_run_flow.call_args.kwargs["env"] == {"A": "1", "B": "2", "C": "3"}
+
+    def test_run_pipeline_cli_entries_stay_above_and_engine_keys_drop(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CLI entries stay above the workflow global env; engine keys drop silently.
+
+        The workflow global env carries B=w and GOGA_WORKFLOW=evil; the CLI
+        payload carries B=cli. The launch layer keeps B=cli (the CLI entry
+        beats both global layers on key conflict) and carries no
+        GOGA_WORKFLOW at all — a workflow cannot escalate into the engine
+        carriage variables; the inherited launch value stands.
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig(env={})))
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["B=cli"]))
+        monkeypatch.chdir(tmp_path)
+        self._write_global_workflow(tmp_path, "prompt: hi\nenv:\n  B: w\n  GOGA_WORKFLOW: evil\n")
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        assert mock_run_flow.call_args.kwargs["env"] == {"B": "cli"}
+
+    def test_run_pipeline_without_workflow_global_falls_back_to_pipeline_agent(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A workflow without ``agent:`` leaves the effective pipeline.agent feeding the seams.
+
+        The workflow resolves (prompt-only) but carries no global agent, so
+        the step-14 resolution falls back to the effective ``pipeline.agent``
+        — "codex" reaches both consumer seams, behavior identical to the
+        pre-workflow-global law.
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig(agent="codex")))
+        monkeypatch.chdir(tmp_path)
+        self._write_global_workflow(tmp_path, "prompt: hi\n")
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "apply_stage_env_wrappers") as mock_wrappers,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        write_spy = _run_pipeline_module.write_afm_config.side_effect
+        assert isinstance(write_spy, _WriteAfmConfigSpy)
+
+        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["codex"]
+        mock_wrappers.assert_called_once()
+        assert mock_wrappers.call_args.args[2] == "codex"
+
+    def test_run_pipeline_composed_run_globals_survive_skip_and_overlay(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One composed run — the globals survive skip AND the overlay, then resolve.
+
+        The workflow file carries BOTH globals (``agent: claude``,
+        ``env: {B: "2"}``) and one stage the run skips; the amendment folds a
+        contribution whose own globals CLASH. The skip rebuild and the real
+        overlay merge both preserve the authored globals verbatim (the
+        contribution's globals never arrive, its stage does), the compiled
+        workflow carries them, both consumer seams receive the workflow agent
+        "claude" — never the configuration's "codex" nor the tool's
+        "tool-agent" — and the launch env base merges the workflow env
+        key-wise over the pipeline env (the full parse → skip → overlay →
+        resolve chain).
+        """
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig(agent="codex", env={"A": "1", "B": "1"})))
+        overlaying_hooks = _OverlayingPipelineHooks(order)
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: overlaying_hooks)
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+        monkeypatch.chdir(tmp_path)
+        self._write_global_workflow(
+            tmp_path, "prompt: hi\nagent: claude\nenv:\n  B: '2'\nstages:\n  build:\n    agent: codex\n"
+        )
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+        documents = fake_documents()
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=documents) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "apply_stage_env_wrappers") as mock_wrappers,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, skip=["build"])
+
+        assert exit_code == 0
+
+        # The skip rebuild preserved the globals verbatim and applied the
+        # skip directive (the base the amendment received).
+        assert overlaying_hooks.received is not None
+        assert overlaying_hooks.received.agent == "claude"
+        assert overlaying_hooks.received.env == {"B": "2"}
+        assert overlaying_hooks.received.stages["build"].skip is True
+
+        # The overlay merged the clashing contribution: the compiled workflow
+        # (the post-merge document) still carries the authored globals, the
+        # contribution's globals never arrived, and its stage DID merge.
+        compiled = mock_compile.call_args.kwargs["workflow"]
+        assert compiled is not overlaying_hooks.received
+        assert compiled.agent == "claude"
+        assert compiled.env == {"B": "2"}
+        assert compiled.stages["build"].skip is True
+        assert compiled.stages["smoke"].prompt == "Smoke-check the release."
+
+        # Both consumer seams receive the workflow global agent — never the
+        # configuration's "codex" nor the tool's "tool-agent".
+        write_spy = _run_pipeline_module.write_afm_config.side_effect
+        assert isinstance(write_spy, _WriteAfmConfigSpy)
+        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["claude"]
+        assert write_spy.calls[0][2] is compiled
+        mock_wrappers.assert_called_once()
+        assert mock_wrappers.call_args.args[2] == "claude"
+
+        # The launch env base merges the workflow global env key-wise over
+        # the pipeline env: the workflow value wins per key, the untouched
+        # configuration key survives.
+        assert mock_run_flow.call_args.kwargs["env"] == {"A": "1", "B": "2"}
+
     def test_run_pipeline_afm_config_write_oserror_propagates_before_events(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An OSError from write_afm_config propagates unchanged — no events have
-        fired, afm never launches (step 14 precedes the run-creation facts)."""
+        fired, afm never launches (step 17 precedes the run-creation facts)."""
         order: list[str] = []
         self._patch_seams(monkeypatch, order, self._config(PipelineConfig()))
         _run_pipeline_module.write_afm_config.side_effect = PermissionError("home is unwritable")
@@ -1617,7 +1909,7 @@ class TestRunPipelineConfigAndLaunchLayer:
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
 
         # The write failure precedes the run-creation facts and the launch —
-        # the declared error semantics of step 14.
+        # the declared error semantics of step 17.
         assert "emit_run_created" not in order
         assert "emit_run_completed" not in order
         mock_run_flow.assert_not_called()
@@ -1707,8 +1999,8 @@ class TestRunPipelineConfigAndLaunchLayer:
         assert "GOGA_EXTRA_ENV" in captured.err
         assert "Traceback" not in captured.err + captured.out
         # Steps 3-16 ran: the four prompts are materialized and the afm
-        # configuration was written (step 14) — but the return precedes the
-        # run-creation facts (step 18), so no events fire and afm never launches.
+        # configuration was written (step 17) — but the return precedes the
+        # run-creation facts (step 21), so no events fire and afm never launches.
         assert (afm_dir / "prompts" / "planning.md").is_file()
         assert _run_pipeline_module.write_afm_config.call_count == 1
         assert hooks.created == []
@@ -1801,7 +2093,7 @@ class TestRunPipelineProfileActivation:
     The run coordination decodes the ``GOGA_HOME_PROFILES`` bundle and reads
     ``GOGA_PROFILE`` once (step 8), prints the launch feedback line when a
     workflow resolved (step 9), and composes the launch layer over the widened
-    engine drop set with the effective profile exported explicitly (step 19).
+    engine drop set with the effective profile exported explicitly (step 20).
     Every scenario drives the real resolution and the real config load (the
     conftest-authored ``.goga/config.yml``), with only ``compile_flow`` /
     ``run_flow`` and the hooks zone mocked at the module boundaries.

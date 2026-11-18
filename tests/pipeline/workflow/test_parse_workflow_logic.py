@@ -577,8 +577,12 @@ class TestParseWorkflowNegative:
         # Strengthened: the exact valid-keys list now includes ``extend``; the
         # substring ``prompt, stages`` alone would pass even without ``extend``,
         # so assert the full trailing fragment — extended again for the
-        # ``assistants``/``delegation``/``repeat`` top-level keys.
-        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat" in message
+        # ``assistants``/``delegation``/``repeat`` top-level keys and the
+        # ``agent``/``env`` global run-settings keys.
+        assert (
+            "valid keys: prompt, stages, extend, memory, profile, build, "
+            "assistants, delegation, repeat, gates, agent, env" in message
+        )
 
     def test_parse_workflow_rejects_non_mapping_root(self, tmp_path: Path) -> None:
         """A non-mapping YAML root raises WorkflowSyntaxError('workflow must be a mapping')."""
@@ -1352,7 +1356,7 @@ class TestParseWorkflowProfileAndBuild:
             assert str(exc_info.value) == (
                 "empty workflow — provide at least prompt, one stage, one extend entry, "
                 "the memory block, the build block, the assistants block, the delegation block, "
-                "the repeat block, or the gates block"
+                "the repeat block, the gates block, the agent key, or the env block"
             )
 
         workflow_path = _write(tmp_path, "workflow.yml", "build: {}\n")
@@ -1386,3 +1390,127 @@ class TestParseWorkflowEdgeCases:
 
         with pytest.raises(WorkflowSyntaxError, match="invalid YAML in workflow-file"):
             parse_workflow(workflow_path.read_text())
+
+
+class TestParseWorkflowGlobalRunSettings:
+    """Logic tests — the two workflow-global run-settings keys (``agent``/``env``)."""
+
+    def test_agent_parses_into_document_field(self, tmp_path: Path) -> None:
+        """A top-level ``agent`` key parses into ``WorkflowDocument.agent``."""
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  build:\n    skip: true\nagent: claude\n")
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.agent == "claude"
+        assert document.env is None
+        assert document.stages["build"].skip is True
+
+    def test_env_parses_into_document_field(self, tmp_path: Path) -> None:
+        """A top-level ``env`` map parses into ``WorkflowDocument.env`` verbatim (no rendering)."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "prompt: hi\nenv:\n  GOGA_LOG_LEVEL: info\n  MODEL: '{{ m }}'\n",
+        )
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.env == {"GOGA_LOG_LEVEL": "info", "MODEL": "{{ m }}"}
+        assert document.agent is None
+
+    def test_agent_alone_and_env_alone_are_valid_workflows(self, tmp_path: Path) -> None:
+        """Both global keys count as content — a workflow of either key alone is valid."""
+        agent_only = _write(tmp_path, "agent.yml", "agent: claude\n")
+        env_only = _write(tmp_path, "env.yml", "env:\n  A: b\n")
+
+        agent_document = parse_workflow(agent_only.read_text())
+        env_document = parse_workflow(env_only.read_text())
+
+        assert agent_document.agent == "claude"
+        assert agent_document.env is None
+        assert env_document.agent is None
+        assert env_document.env == {"A": "b"}
+
+    @pytest.mark.parametrize(
+        "agent_yaml",
+        [
+            "agent: 5\n",
+            "agent: [claude]\n",
+            "agent: {n: c}\n",
+            "agent:\n",
+        ],
+    )
+    def test_non_str_agent_raises_structural_error(self, tmp_path: Path, agent_yaml: str) -> None:
+        """Every non-str ``agent`` value (YAML null included) raises the pinned structural error."""
+        workflow_path = _write(tmp_path, "workflow.yml", f"prompt: hi\n{agent_yaml}")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.agent"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_non_mapping_env_raises(self, tmp_path: Path) -> None:
+        """A non-mapping ``env`` value raises the pinned structural error."""
+        workflow_path = _write(tmp_path, "workflow.yml", 'prompt: hi\nenv: "x"\n')
+
+        with pytest.raises(WorkflowSyntaxError, match="non-mapping env in workflow"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_non_str_env_key_raises(self, tmp_path: Path) -> None:
+        """A non-str key of the ``env`` map raises the pinned structural error."""
+        workflow_path = _write(tmp_path, "workflow.yml", "prompt: hi\nenv:\n  1: a\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str key in workflow\.env"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_non_str_env_value_raises(self, tmp_path: Path) -> None:
+        """A non-str value of the ``env`` map raises the pinned structural error naming the key."""
+        workflow_path = _write(tmp_path, "workflow.yml", "prompt: hi\nenv:\n  A: 5\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.env\.A"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_unknown_top_level_key_message_lists_agent_and_env(self) -> None:
+        """The unknown top-level key message enumerates all twelve valid keys ending with ``agent``/``env``."""
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow("prompt: hi\nagents: x\n")
+
+        assert str(exc_info.value) == (
+            "unknown key in workflow: agents; valid keys: prompt, stages, extend, memory, profile, "
+            "build, assistants, delegation, repeat, gates, agent, env"
+        )
+
+    def test_empty_workflow_message_names_agent_and_env(self, tmp_path: Path) -> None:
+        """The empty-workflow message grows the agent key and the env block among the alternatives."""
+        workflow_path = _write(tmp_path, "workflow.yml", "profile: default\n")
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path.read_text())
+
+        assert str(exc_info.value) == (
+            "empty workflow — provide at least prompt, one stage, one extend entry, "
+            "the memory block, the build block, the assistants block, the delegation block, "
+            "the repeat block, the gates block, the agent key, or the env block"
+        )
+
+    def test_blank_agent_normalizes_to_absence(self, tmp_path: Path) -> None:
+        """An empty/whitespace-only ``agent`` value normalizes to None (the scalar law of ``profile``)."""
+        workflow_path = _write(tmp_path, "workflow.yml", "agent: '   '\nstages:\n  a:\n    skip: true\n")
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.agent is None
+        assert document.stages["a"].skip is True
+
+    def test_blank_agent_does_not_rescue_empty_workflow(self, tmp_path: Path) -> None:
+        """A whitespace-only ``agent`` alone stays empty — normalization is not content."""
+        workflow_path = _write(tmp_path, "workflow.yml", "agent: '  '\n")
+
+        with pytest.raises(WorkflowSyntaxError, match="empty workflow"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_empty_env_map_equals_absence(self, tmp_path: Path) -> None:
+        """An explicit ``env: {}`` builds with env=None (NOT ``{}`` — the stage-env law)."""
+        workflow_path = _write(tmp_path, "workflow.yml", "prompt: hi\nenv: {}\n")
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.env is None
