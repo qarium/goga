@@ -77,7 +77,11 @@ def _walk(value: Any, ctx: dict[str, Any], path: str) -> Any:
     if isinstance(value, dict):
         return _walk_map(value, ctx, path)
 
-    if isinstance(value, (list, tuple)):
+    # Only the exact builtin sequences rebuild from one walk generator — a
+    # subclass (a namedtuple, a custom sequence) owns its own constructor
+    # signature, so it carries verbatim like every value outside the walked
+    # vocabulary rather than failing (or silently corrupting) reconstruction.
+    if type(value) in (list, tuple):
         return type(value)(_walk(item, ctx, f"{path}[{index}]") for index, item in enumerate(value))
 
     return value

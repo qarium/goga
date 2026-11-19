@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import inspect
+from collections import namedtuple
 from typing import Any, get_type_hints
 
 import pytest
@@ -422,3 +423,24 @@ class TestRenderContributionLogic:
         rendered = render_contribution(document, {"x": "ci"})
 
         assert rendered.extend["scan"].body["roles"] == {"a-{{ x }}", "b"}
+
+    def test_sequence_subclasses_carry_verbatim(self) -> None:
+        """Sequence subclasses outside the exact builtin types carry verbatim.
+
+        Edge: only exact list/tuple rebuild from one walk generator — a
+        namedtuple's constructor takes one positional per field, so
+        rebuilding it from a single generator argument would raise a raw
+        TypeError (two fields) or silently embed the generator (one field);
+        the subclass carries unchanged like every other non-walked value.
+        """
+        point = namedtuple("Point", ["x", "y"])("a-{{ x }}", "b")
+        single = namedtuple("Single", ["only"])("c-{{ x }}")
+        document = WorkflowDocument(
+            extend={"scan": WorkflowExtendStage(body={"point": point, "single": single})},
+        )
+
+        rendered = render_contribution(document, {"x": "ci"})
+
+        assert rendered.extend["scan"].body["point"] == point
+        assert rendered.extend["scan"].body["single"] == single
+        assert rendered.extend["scan"].body["point"].x == "a-{{ x }}"
