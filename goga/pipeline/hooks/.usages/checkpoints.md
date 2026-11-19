@@ -29,6 +29,10 @@ reads no repository. Resolve the facts before the delivery:
   name when applicable.
 - `WorkIdentity` — the current branch with the topic slug and year when
   the branch hosts a topic; the branch-only form otherwise.
+- `loaded.profile` — the operation's already-resolved active contributor
+  profile (the profile that rendered the authored workflow-file), or
+  `None`; the delivery receives it as operation data — the checkpoint
+  never reads or re-resolves it.
 
 ## Amend before compilation
 
@@ -41,6 +45,7 @@ overlay = hooks.amend_workflow(
     decision=decision,
     workflow=merged_workflow,  # None is valid — a silent miss keeps the layer active
     work=work,
+    profile=loaded.profile,    # the resolved profile or None — every tool's view and the rendering use it
 )
 compile_flow(overlay.workflow, ...)
 ```
@@ -52,14 +57,26 @@ compile_flow(overlay.workflow, ...)
   never overwritten), extend entries add; the workflow-global run settings
   (`agent`, `env`) ride the authored workflow verbatim — a tool can
   neither supply nor override them; the assistant catalog merges
-  with field-level overrides —
-  the winning tool-delivered entry of a name is the base and the authored
-  entry replaces exactly the fields it specifies (agent, env, delegate,
-  prompt, skills; an explicit empty skills/env clears), omitted fields
-  flow from the tool, a delivered name with no authored entry adds fresh
-  (tool inline declarations under an authored name stay dropped); the
-  delegation block is whole, and stage assistant maps append with name
-  deduplication.
+  with field-level overrides — the winning tool-delivered entry of a name
+  is the base and the authored entry replaces exactly the fields it
+  specifies (agent, env, delegate, prompt, skills; an explicit empty
+  skills/env clears), omitted fields flow from the tool, a delivered name
+  with no authored entry adds fresh (tool inline declarations under an
+  authored name stay dropped); the delegation block is whole, and stage
+  assistant maps append with name deduplication.
+- Every tool's view carries the same read-only profile fact (`profile` —
+  name, content, source, or `None` without activation); the card and the
+  run form deliver the same fact.
+- At each tool's commit the buffered contribution renders field-level
+  with the active profile's content (workflow rendering semantics; an
+  empty context without activation) — before the unchanged
+  presence-based empty-contribution check and the authored-wins merge.
+- A render failure in any contributed string is hard: the command stops
+  pre-run with the amendment-failure error (tool, action) carrying the
+  template cause (error class, message, document path); the tool's
+  contribution is discarded and later tools' hooks never run.
+- A contribution without template syntax composes byte-identically, with
+  or without an active profile.
 - The amendment action is hard: the first failing tool stops the command
   with a clean error naming the tool and the action; the tool's whole
   contribution is discarded.

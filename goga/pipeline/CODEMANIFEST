@@ -39,6 +39,7 @@ Imports:
       - WorkflowGateStep
       - LoadedWorkflow
       - WorkflowSyntaxError
+      - ResolvedProfile
     Usages:
       - parse-workflow
       - memory
@@ -213,8 +214,15 @@ Annotations: |
   the layer off — the raw authored DSL composes and no amendment delivers;
   a silent auto-match miss keeps the layer active onto the empty base. The
   branch, topic, and status facts resolve in the operation before the
-  delivery — the checkpoints read nothing. With no tool packages installed
-  the overlay is the passthrough — every form behaves exactly as with the
+  delivery — the checkpoints read nothing. The amendment delivery is
+  profile-aware in both forms: the operation's already-resolved active
+  contributor profile — the loaded workflow's profile, None when no
+  workflow resolved — travels into the delivery as operation data; every
+  tool's view reads the same profile fact and the delivery renders each
+  committed contribution's strings with that profile's content before
+  the merge. The run form and the card form deliver the identical fact
+  and the identical rendering. With no tool packages installed the
+  overlay is the passthrough — every form behaves exactly as with the
   amendment layer absent.
   Use the `checkpoints` practice for the checkpoint surface of the zone.
   Use the `topic-paths` practice for the topic directory resolution behind
@@ -721,9 +729,10 @@ Annotations: |
        `resolve_topic_dir` when its directory exists, the branch-only form
        otherwise) and, unless the decision is disabled, deliver the
        amendment via the `PipelineHooks` checkpoint surface with the merged
-       workflow — receiving the overlay result; a disabled decision delivers
-       nothing and the overlay is the passthrough `WorkflowOverlay` of the
-       merged workflow
+       workflow and the operation's resolved profile (the `LoadedWorkflow`
+       profile of step 2 — None when no workflow resolved) — receiving the
+       overlay result; a disabled decision delivers nothing and the overlay
+       is the passthrough `WorkflowOverlay` of the merged workflow
     5. Compile the pipeline-file via `compile_flow` into a temporary flow-file
        located in a system temporary directory — outside the project
        directory and outside every runtime directory — with the overlay
@@ -753,6 +762,10 @@ Annotations: |
       happens and the raw authored DSL composes
     - A silent auto-match miss keeps the layer active — the delivery runs
       onto the empty base
+    - The card delivers the amendment with the resolved profile exactly as
+      the run form does — the same fact on every tool's view and the same
+      rendering of contributed strings; the card's merged composition
+      equals what a run with the same flags executes
     - Loop-expanded stage copies appear as separate stages
     - The CLI skip names apply through the same in-memory merge a run applies
       and are reflected in the stage list; workflow-file skip directives
@@ -893,9 +906,14 @@ Annotations: |
         directory exists, the branch-only form otherwise)
     12. Unless the decision is disabled, deliver the amendment via the
         `PipelineHooks` checkpoint surface with the authored workflow after
-        the skip merge — receiving the overlay result; a disabled decision
-        delivers nothing (the layer is off) and the overlay is the
-        passthrough `WorkflowOverlay` of the merged workflow
+        the skip merge and the operation's resolved profile — the profile
+        of the loaded workflow (`LoadedWorkflow` profile: a
+        `ResolvedProfile`, or None when no workflow resolved): the views
+        read it as their profile fact and the delivery renders the
+        committed contributions' strings with its content — receiving the
+        overlay result; a disabled decision delivers nothing (the layer is
+        off) and the overlay is the passthrough `WorkflowOverlay` of the
+        merged workflow
     13. Resolve the in-container project name via `resolve_project_name`
         (None when the git origin remote is unavailable). Compile via
         `compile_flow` with the overlay workflow (the resolved workflow when
@@ -1045,6 +1063,10 @@ Annotations: |
       rule set shared with the card
     - The amendment delivery and its precedence are the same rule set the
       card applies — the same flags compose the same overlay in both forms
+    - The amendment delivery carries the operation's resolved profile —
+      the loaded workflow's profile, or None when no workflow resolved;
+      one resolved value feeds every tool's view and the contribution
+      rendering, identically in the run and the card forms
     - A missing workflow-file is a silent miss, not an error; the layer
       stays active onto the empty base
     - An explicit disable turns the layer off — no delivery happens and the

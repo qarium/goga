@@ -155,6 +155,13 @@ Annotations: |
   validation. The template context is the entire content of the single
   active profile; with no activation the context is empty.
 
+  The zone renders two surfaces with one fixed environment per `jinja2`:
+  whole workflow-files before parsing, and the strings of committed
+  workflow contributions — the field-level render the pipeline amendment
+  applies to a tool's document at its commit. The field-level render
+  touches strings only: structure, field presence, and non-string values
+  are preserved unchanged.
+
   Use `jinja2` for the rendering engine contract: the fixed environment
   flags, the missing-key semantics, and the strict syntax-error surfacing
   with location.
@@ -1671,6 +1678,78 @@ Annotations: |
     - Do not read files or the environment — text and context arrive as
       parameters
 
+"render_contribution(document: WorkflowDocument, profile_data: dict[str, Any]) -> rendered: WorkflowDocument":
+  location: render_contribution.py
+  annotations: |
+    Render every template surface of one committed workflow contribution
+    with the active profile's content — the field-level rendering step
+    the pipeline amendment applies to a tool's buffered document at its
+    commit moment, before the authored-wins merge.
+
+    `document`: the committed contribution — a `WorkflowDocument`-shaped
+                set of instructions, raw (pre-render)
+    `profile_data`: the template context — the entire content of the
+                    active profile, or an empty mapping when no profile
+                    is active
+    `rendered`: a NEW `WorkflowDocument` with every template surface
+                rendered; the input is never mutated
+
+    Use `jinja2` for the rendering engine contract: the fixed
+    environment flags, the context rule, the missing-key semantics, and
+    the strict syntax-error surfacing.
+    Apply `convention` for docstring style.
+
+    Algorithm:
+    1. Walk `document` type-driven at any depth, over the typed model
+       fields and the verbatim extend-entry bodies alike: render every
+       string leaf and every string mapping key individually; carry every
+       non-string scalar unchanged. The walk is field-set-complete over
+       the document model — a new model field flows through this routine
+       without touching it again — and no field is exempt: the
+       never-merging global fields (profile, build, agent, env) render
+       like every other surface
+    2. Render each surface with the fixed environment per `jinja2` and
+       exactly `profile_data` as the context — no ambient variables
+       (tool, pipeline, workflow name) exist in the context
+    3. While rendering the keys of one map — detect a rendered-key
+       collision: two distinct source keys rendering to the same result
+       key raise one strict error naming the map (its dot-path), the
+       source keys, and the colliding result
+    4. On a template error in any surface — dead fields included — raise
+       one strict error carrying the template cause: the error class, the
+       message, and the document path — the dot-path of the string
+       within the contribution built from the source (pre-render) keys,
+       with list elements indexed and the two gates shapes disambiguated
+       positionally (the workflow-level gates settings block path versus
+       a stage check-step list path)
+    5. Return the new `WorkflowDocument` — every surface rendered, every
+       non-string value carried unchanged, field presence unchanged (a
+       rendered empty string is a value, not an absence)
+
+    Requirements:
+    - Pure — no mutation of `document` or its maps; the result is a new
+      document
+    - No I/O — no files, no environment reads, no subprocess; string
+      rendering only
+    - A document whose strings carry no template syntax renders to an
+      equal document — every string unchanged, presence and order
+      preserved
+    - Without an active profile the render runs against an empty
+      context — template syntax still processes, missing keys render
+      empty
+    - Rendering never changes field presence — the presence-based
+      empty-contribution check downstream is unaffected
+
+    Constraints:
+    - Do not parse, validate, or restructure the document — rendering
+      replaces string values and keys only; the structure is preserved
+    - Do not merge, apply, or interpret the document — the amendment
+      merge and the compilation own both
+    - Do not resolve profiles or read the environment — the context
+      arrives as `profile_data`
+    - Do not build a second template environment, dialect, or ambient
+      context — one fixed environment, one context rule, per `jinja2`
+
 "resolve_activation(cli_profile: str | None, env_profile: str | None, workflow_default: str | None) -> name: str | None":
   location: resolve_activation.py
   annotations: |
@@ -1758,5 +1837,6 @@ Description: |
   settings (agent and env). Additionally owns the
   contributor-profile zone of the
   workflow path: profile resolution, strict profile-name validation,
-  activation precedence resolution, and whole-file Jinja rendering of
-  workflow-files before parsing.
+  activation precedence resolution, whole-file Jinja rendering of
+  workflow-files before parsing, and field-level rendering of committed
+  workflow contributions.

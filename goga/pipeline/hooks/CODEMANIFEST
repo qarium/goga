@@ -13,6 +13,8 @@ Imports:
   - Types:
       - WorkflowDocument
       - WorkflowGates
+      - ResolvedProfile
+      - render_contribution
     From: goga/pipeline/workflow
 
 Usages:
@@ -46,8 +48,22 @@ Annotations: |
   contribution is discarded. The notifications are soft — a failing
   hook warns naming the tool, the action, and the reason, and the
   command's exit code is unaffected. Tools are mutually blind — every
-  amendment view reads the original authored workflow, never a staged
-  state.
+  amendment view reads the original authored workflow and the same
+  resolved profile fact, never a staged state.
+  The amendment is profile-aware: every tool's view carries the
+  operation's already-resolved active contributor profile as a read-only
+  fact — identical for every tool, absent without activation — and a
+  tool's committed contribution renders field-level with that profile's
+  content at its commit moment, inside the walk, before the
+  presence-based empty-contribution check: every string leaf and every
+  string mapping key of the contributed document is a template surface,
+  and `render_contribution` renders them under the fixed workflow
+  rendering semantics. A render failure is disciplinarily a hook failure
+  — one hard pre-run error in the amendment-failure format carrying the
+  template cause; the first failing tool stops the walk, later tools'
+  hooks never run, and the tool's whole contribution is discarded. A
+  contribution without template syntax composes byte-identically with or
+  without an active profile.
   The overlay merge preserves the collaboration instructions of the
   workflow model. The merge maintains the assistant-namespace invariant
   end to end: each name appears at most once across the merged catalog
@@ -248,7 +264,7 @@ Annotations: |
     "provenance -> list[str]": |
       The tools whose contributions committed, in enumeration order.
 
-"WorkflowAmendment(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, work: WorkIdentity)":
+"WorkflowAmendment(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, work: WorkIdentity, profile: ResolvedProfile | None = None)":
   location: amendments.py
   annotations: |
     The read-and-contribute view of one tool — the delivered facts of
@@ -260,6 +276,12 @@ Annotations: |
                  runner-skip merge, pre-layer; read-only and identical
                  for every tool; None when no workflow resolved
     `work`: the current work identity
+    `profile`: the operation's already-resolved active contributor
+                profile — the profile that rendered the authored
+                workflow-file: its name, its whole content, and its
+                source (project or home) — or None when no profile is
+                active (no activation resolved, or no workflow in
+                effect)
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -269,6 +291,11 @@ Annotations: |
     Requirements:
     - The reads deliver the original facts — no staged-application
       state exists; a tool never sees another tool's contribution
+    - The `profile` fact is operation data passed in by the caller —
+      no reads and no re-resolution happen at the checkpoint; it is
+      read-only and identical for every tool and in every delivery
+      form, and reads absent (None) without activation — including
+      the no-workflow silent-miss case
     - The buffered contribution belongs to this tool alone
   properties:
     "pipeline -> PipelineIdentity": |
@@ -280,6 +307,10 @@ Annotations: |
       tool; None when no workflow resolved.
     "work -> WorkIdentity": |
       The current work identity.
+    "profile -> ResolvedProfile | None": |
+      The operation's active contributor profile — its name, its whole
+      content, and its source — or None when no profile is active;
+      read-only and identical for every tool.
   methods:
     "contribute(document: WorkflowDocument)": |
       Buffer one declarative contribution of this tool.
@@ -699,7 +730,7 @@ Annotations: |
     - Every context is built from the values the caller passes — no
       repository reads happen at a checkpoint
   methods:
-    "amend_workflow(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, work: WorkIdentity) -> overlay: WorkflowOverlay": |
+    "amend_workflow(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, work: WorkIdentity, profile: ResolvedProfile | None = None) -> overlay: WorkflowOverlay": |
       Deliver the workflow-amendment checkpoint and return the
       effective workflow with its provenance.
 
@@ -708,6 +739,11 @@ Annotations: |
       `workflow`: the authored workflow after the decision and the
                    runner-skip merge; None when no workflow resolved
       `work`: the current work identity
+      `profile`: the operation's already-resolved active contributor
+                 profile — the profile that rendered the authored
+                 workflow-file — or None when no profile is active
+                 (including the no-workflow silent-miss case);
+                 identical for every tool and in every delivery form
       `overlay`: the effective workflow and the contributing tools
 
       Use the `per-tool-delivery` practice for the delivery loop.
@@ -718,36 +754,59 @@ Annotations: |
       2. Walk the subscriptions of the address per tool in enumeration
          order: build the tool's `WorkflowAmendment` view over the
          delivered facts — every tool reads the same original
-         `workflow` — wrap it via `wrap_context`, project the call
-         arguments via `build_hook_arguments` with the tool's own
-         context, and call each hook of the tool
-      3. A tool whose every hook returned without raising and whose
-         buffer carries a non-empty contribution commits as one
-         `ToolContribution`
-      4. A tool with a raising hook is a hard failure: a clean error
+         `workflow` and the same `profile` fact — wrap it via
+         `wrap_context`, project the call arguments via
+         `build_hook_arguments` with the tool's own context, and call
+         each hook of the tool
+      3. A tool with a raising hook is a hard failure: a clean error
          naming the tool and the action stops the command at the first
          failure; the tool's contribution is discarded
-      5. A tool whose buffered document is empty — no prompt, no
-         stages, no extend, no memory, no assistants, no delegation, no
-         repeat, and no gates block — is a content no-op: a warning
-         naming the tool, the action, and the reason, the contribution
-         discarded, the walk continues
-      6. Merge the committed contributions onto `workflow` via
+      4. A tool whose every hook returned without raising has its
+         buffered document rendered at its commit moment: every string
+         of the contribution renders with the active profile's content
+         via `render_contribution`, which receives the content of
+         `profile` as its rendering context — an empty mapping when
+         `profile` is None. A render failure is the same hard failure
+         as a raising hook: the clean error naming the tool and the
+         action carries the template cause from the render error; the
+         tool's whole contribution is discarded and the walk stops
+         before the next tool is called
+      5. The empty-contribution check runs on the rendered document and
+         stays presence-based and unchanged: a tool whose rendered
+         document is empty — no prompt, no stages, no extend, no
+         memory, no assistants, no delegation, no repeat, and no gates
+         block — is a content no-op: a warning naming the tool, the
+         action, and the reason, the contribution discarded, the walk
+         continues
+      6. A tool whose rendered document is non-empty commits as one
+         `ToolContribution` — the rendered document is the committed
+         document
+      7. Merge the committed contributions onto `workflow` via
          `merge_workflow_overlay` and return the overlay
 
       Requirements:
       - The commit granularity is the tool — a tool's whole
-        contribution commits only after every hook of the tool succeeds
+        contribution renders and commits only after every hook of the
+        tool succeeds
+      - The render runs inside the walk at each tool's commit — never
+        as a pass after the walk; after a render failure no later
+        tool's hooks run
+      - The profile fact never varies per tool — one resolved value
+        reaches every view
       - An address without subscriptions returns the passthrough
         overlay — the workflow passed in, an empty provenance
       - The merged result passes the same compilation validation an
         authored workflow passes
+      - A contribution without template syntax composes byte-identically
+        with or without an active profile
 
       Constraints:
       - Do not apply any contribution outside the single merge after
         the walk
       - Do not skip a subscriber of the address
       - Do not read repositories or the filesystem at the checkpoint
+      - Do not resolve the profile here — the resolved value arrives as
+        `profile`
     "emit_run_created(pipeline: PipelineIdentity, decision: WorkflowDecision, overlay: WorkflowOverlay, composition: list[CompositionStage], work: WorkIdentity, statuses: list[str], runtime_dir: str)": |
       Emit the run-creation notification — the facts of the composition
       immediately before the runner launch.
@@ -852,4 +911,6 @@ Description: |
   fields, the global `agent` and `env` run settings, the run-cycle
   tuning (repeat block, gates settings block) with
   the per-stage check-step lists, and the collaboration instructions
-  (assistant catalog, delegation block, stage attachments).
+  (assistant catalog, delegation block, stage attachments). The
+  amendment is profile-aware: the resolved-profile fact on the view and
+  the commit-time rendering of contributed strings.
