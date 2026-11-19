@@ -38,6 +38,7 @@ from goga.pipeline.compiler import (
     PipelineDocument,
     PipelineHeader,
 )
+from goga.pipeline.describe_pipeline import describe_pipeline
 from goga.pipeline.hooks import (
     CompositionStage,
     PipelineHooks,
@@ -46,7 +47,7 @@ from goga.pipeline.hooks import (
     WorkflowOverlay,
     WorkIdentity,
 )
-from goga.pipeline.workflow import WorkflowDocument, WorkflowStage, WorkflowSyntaxError
+from goga.pipeline.workflow import WorkflowDocument, WorkflowExtendStage, WorkflowStage, WorkflowSyntaxError
 
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
 # run_pipeline function, so a string-based mock.patch path walking through it
@@ -737,3 +738,180 @@ class TestRunPipelineAmendmentAndStatuses:
         assert "demo" in caplog.text
         assert "run_created" in caplog.text
         assert "boom" in caplog.text
+
+
+class TestProfileDeliveryWiring:
+    """The run and card forms thread the operation's resolved profile into the delivery."""
+
+    def test_run_form_delivers_loaded_profile_and_renders_contributions(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The loaded project profile reaches the view and renders the contribution.
+
+        Design scenario (wiring): the auto-matched workflow carries no
+        ``profile:`` default and the CLI flag activates ``mixa`` — a project
+        profile at ``.goga/profiles/mixa.yml``. The tool's view reads the
+        resolved fact (name and project source), and its buffered
+        ``{{ worker.model }}`` prompt renders with the profile's content at
+        the commit moment — the compiled workflow carries the rendered
+        string.
+        """
+        recorded: dict[str, Any] = {}
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def on_amend(self: object, context: object) -> None:
+                recorded["profile"] = context.profile
+                context.contribute(WorkflowDocument(stages={"build": WorkflowStage(prompt="Use {{ worker.model }}")}))
+
+            hooks.subscribe("pipeline", "amend_workflow", "amend", on_amend)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir)
+        workflows_dir = isolated_cwd / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text("prompt: authored\n")  # no ``profile:`` default
+        profiles_dir = isolated_cwd / ".goga" / "profiles"
+        profiles_dir.mkdir(parents=True)
+        (profiles_dir / "mixa.yml").write_text("worker:\n  agent: codex\n  model: sonnet\n")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            result = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321, profile="mixa")
+
+        assert result == 0
+        assert recorded["profile"].name == "mixa"
+        assert recorded["profile"].source == "project"
+        compiled = mock_compile.call_args.kwargs["workflow"]
+        assert compiled.stages["build"].prompt == "Use sonnet"
+
+    def test_run_form_delivers_none_when_no_workflow_resolved(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """No resolved workflow delivers no profile — the empty context renders templates empty.
+
+        Design scenario (wiring): without a workflow file the resolution is
+        the silent miss, so the delivery receives ``None`` — the tool's view
+        reads the absent fact and its contributed template renders under the
+        empty context (the missing key interpolates empty). The delivery
+        still runs onto the empty base: the committed contribution rebuilds
+        a workflow the compiler receives.
+        """
+        recorded: dict[str, Any] = {}
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def on_amend(self: object, context: object) -> None:
+                recorded["profile"] = context.profile
+                context.contribute(WorkflowDocument(stages={"build": WorkflowStage(prompt="{{ x }}")}))
+
+            hooks.subscribe("pipeline", "amend_workflow", "amend", on_amend)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir)
+        # No workflow file anywhere — the resolution is the silent miss.
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            result = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert result == 0
+        assert recorded["profile"] is None
+        compiled = mock_compile.call_args.kwargs["workflow"]
+        assert compiled is not None  # the delivery ran onto the empty base
+        assert compiled.stages["build"].prompt == ""  # rendered empty under the empty context
+
+    def test_card_form_delivers_the_same_fact_and_renders_identically(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The card form delivers the identical profile fact and the identical rendering.
+
+        Design scenario (wiring, card/run parity): the same project and tool
+        composed through both forms under ``profile="mixa"`` — the card-form
+        view reads a profile equal to the run form's, the rendered
+        contribution strings are identical (the templated extend title the
+        run form's overlay carries is the title the card's composed rows
+        report), and the card provenance equals the run provenance.
+        """
+        recorded: dict[str, Any] = {}
+        profiles: list[Any] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def on_created(self: object, context: object) -> None:
+                recorded["created"] = context
+
+            def on_amend(self: object, context: object) -> None:
+                profiles.append(context.profile)
+                context.contribute(
+                    WorkflowDocument(
+                        extend={
+                            "harden": WorkflowExtendStage(after=["build"], body={"title": "Review {{ worker.model }}"})
+                        }
+                    )
+                )
+
+            hooks.subscribe("pipeline", "run_created", "notify", on_created)  # type: ignore[attr-defined]
+            hooks.subscribe("pipeline", "amend_workflow", "amend", on_amend)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir)
+        workflows_dir = isolated_cwd / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text("prompt: authored\n")
+        profiles_dir = isolated_cwd / ".goga" / "profiles"
+        profiles_dir.mkdir(parents=True)
+        (profiles_dir / "mixa.yml").write_text("worker:\n  agent: codex\n  model: sonnet\n")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321, profile="mixa")
+
+        run_profile = profiles[0]
+        run_workflow = mock_compile.call_args.kwargs["workflow"]
+        rendered_title = run_workflow.extend["harden"].body["title"]
+        assert rendered_title == "Review sonnet"
+
+        card = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False, profile="mixa")
+
+        card_profile = profiles[1]
+        assert card_profile == run_profile
+        assert card_profile.name == run_profile.name == "mixa"
+        assert [(stage.id, stage.title) for stage in card.stages] == [
+            ("build", "Build"),
+            ("harden", rendered_title),
+        ]
+        assert card.provenance == recorded["created"].provenance == ["demo"]

@@ -908,7 +908,7 @@ surfaces as `ValueError` from the walk → the CLI's generic strict pre-run bran
 pipeline.amend_workflow: template error at <path>: <Class>: <message>` and returns 1 before any
 compile/launch/event — the CLI module itself is untouched.
 
-- [ ] **Contract tests**: no contract-suite change in
+- [x] **Contract tests**: no contract-suite change in
       `tests/pipeline/test_pipeline_contract.py`,
       `tests/pipeline/test_run_pipeline_hooks.py::TestRunPipelineHooksWiringContract`, or
       `tests/pipeline/test_describe_pipeline.py::TestDescribePipelineContract` — the two public
@@ -917,13 +917,13 @@ compile/launch/event — the CLI module itself is untouched.
       stubs accept `**kwargs`). Run the existing signature/facade assertions of these suites
       unedited and green; the delivery-shape change is pinned by the logic tests below
       (expected to fail at this stage)
-- [ ] **Code**: add the `profile=resolved.profile if resolved is not None else None` argument at
+- [x] **Code**: add the `profile=resolved.profile if resolved is not None else None` argument at
       the delivery site of `goga/pipeline/run_pipeline.py` (step 12, line ~446)
-- [ ] **Code**: add the same argument at the delivery site of
+- [x] **Code**: add the same argument at the delivery site of
       `goga/pipeline/describe_pipeline.py` (step 4, line ~161)
-- [ ] **Interface verification**: `pytest tests/pipeline/test_pipeline_contract.py
+- [x] **Interface verification**: `pytest tests/pipeline/test_pipeline_contract.py
       tests/pipeline/test_describe_pipeline.py -x` — the unchanged signatures still pass
-- [ ] **Logic tests / integration scenarios** (extend the existing suites; call the handlers
+- [x] **Logic tests / integration scenarios** (extend the existing suites; call the handlers
       directly per R2; reuse the AFM_DIR-pinning, project-pipelines/workflows/profiles
       scaffolding; stub `run_flow`) — the three scenarios from the design:
       - `test_run_form_delivers_loaded_profile_and_renders_contributions` — project fixture with
@@ -942,11 +942,11 @@ compile/launch/event — the CLI module itself is untouched.
         tool; `describe_pipeline(..., profile="mixa")`; assert the card-form captured
         `context.profile` equals (`==` and `.name`) the run form's, the rendered contribution
         strings are identical, and the card provenance equals the run provenance
-- [ ] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: both signatures unchanged; the disabled branches deliver
+- [x] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: both signatures unchanged; the disabled branches deliver
       nothing (passthrough overlay); card/run parity holds; no CLI/catalog/event changes;
       `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/` — fix findings; `ruff format` the touched files
+- [x] **Lint**: `ruff check goga/ tests/pipeline/` — fix findings; `ruff format` the touched files
 
 ---
 
@@ -973,41 +973,41 @@ All commands run in the project virtualenv (`.venv`); Python 3.10+ compatibility
 
 ## Completion Criteria
 
-- [ ] Every changed contract entity is implemented in its declared `location`:
+- [x] Every changed contract entity is implemented in its declared `location`:
       `render_contribution.py` (new), `amendments.py`, `events.py`, `run_pipeline.py`,
       `describe_pipeline.py` — and matches the materialized signatures exactly (the `profile`
       parameter last with default `None`)
-- [ ] `render_contribution` is importable from `goga.pipeline.workflow` and listed in `__all__`
+- [x] `render_contribution` is importable from `goga.pipeline.workflow` and listed in `__all__`
       (alphabetical position before `render_workflow`); the hooks facade is unchanged
       (`ZONE_ALL`, fifteen names)
-- [ ] The walk renders at the commit moment inside the walk: every tool's view carries the SAME
+- [x] The walk renders at the commit moment inside the walk: every tool's view carries the SAME
       profile object; a render failure is the hard amendment failure (the first failing tool stops
       the walk — no later tool's hooks run, the contribution discarded); the empty check reads the
       rendered document and stays presence-based; the rendered document is the committed document;
       `merge_workflow_overlay` is untouched
-- [ ] The run and card forms deliver the identical fact and the identical rendering
+- [x] The run and card forms deliver the identical fact and the identical rendering
       (`resolved.profile if resolved is not None else None` at both sites); the disabled branches
       are unchanged
-- [ ] The error vocabulary holds: `template error at <dot-path>: <Class>: <message>` (source
+- [x] The error vocabulary holds: `template error at <dot-path>: <Class>: <message>` (source
       keys, indexed lists, positionally disambiguated gates, bracket-repr key paths) and
       `rendered key collision in <map>: keys <a!r> and <b!r> both render to <r!r>`; the walk's
       failure tail keeps the `… failed on pipeline.amend_workflow: <reason>` shape
-- [ ] All 23 design test scenarios are implemented (13 render-contribution + 7 hooks-delivery +
+- [x] All 23 design test scenarios are implemented (13 render-contribution + 7 hooks-delivery +
       3 wiring) and the two existing contract suites are EXTENDED in the same change sets as the
       signatures they pin (`test_amendments.py` field list + construction, `test_events.py`
       parameter list)
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic
       tests → debugging → re-verification → lint)
-- [ ] The Mandatory Rules were observed in every task and every commit: R1 style (relative
+- [x] The Mandatory Rules were observed in every task and every commit: R1 style (relative
       imports, `kw_only` discipline, Google docstrings, blank-line block separation), R2 test
       rules (mirror layout, `test_<what>_<scenario>` naming, mock-free pure-logic tests, direct
       handler calls, `pytest.raises(match=...)` regex prefixes), R3 lint/format gates (`ruff
       check goga/ tests/` + `ruff format` on touched files before every local commit; no commit
       behind red tests or lint findings), R4 REPL cycle (live-probed behavior, fresh-interpreter
       re-evaluation, all verified code migrated into source files and tests)
-- [ ] No package boundary was expanded; no new cells; no `.usages/` files created or modified;
+- [x] No package boundary was expanded; no new cells; no `.usages/` files created or modified;
       the final modules (`overlay.py`, `render_workflow.py`, the `emit_*` members, `cli.py`, the
       action catalog) and the three usage files are untouched
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass (`pytest tests/ -x`, `ruff check goga/` and `tests/`,
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (`pytest tests/ -x`, `ruff check goga/` and `tests/`,
       `goga lint` 93/0, the facade check)
