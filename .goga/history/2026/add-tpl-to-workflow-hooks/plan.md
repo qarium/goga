@@ -613,7 +613,7 @@ message (it continues `…, expected 'end of print statement'.` — the tests ma
 message with `!r` of both source keys; (d) a tuple rebuilt via `type(value)(…)` stays a tuple.
 Migrate every verified string into the implementation/messages and the assertions.
 
-- [ ] **Contract tests**: create `tests/pipeline/workflow/test_render_contribution.py` —
+- [x] **Contract tests**: create `tests/pipeline/workflow/test_render_contribution.py` —
       `TestRenderContributionContract` (module docstring in the zone's established form):
       facade identity + `__all__` membership
       (`import goga.pipeline.workflow as facade; facade.render_contribution is render_contribution`;
@@ -621,18 +621,18 @@ Migrate every verified string into the implementation/messages and the assertion
       exactly `["document", "profile_data"]`, no defaults; annotations via `get_type_hints` —
       `document: WorkflowDocument`, `profile_data: dict[str, Any]`, `return: WorkflowDocument`
       (expected to fail at this stage — the module does not exist)
-- [ ] **Code**: create `goga/pipeline/workflow/render_contribution.py` per the module layout and
+- [x] **Code**: create `goga/pipeline/workflow/render_contribution.py` per the module layout and
       the walker above — public `render_contribution` + private `_walk`, `_walk_map`,
       `_render_surface`, `_child`; Google-style docstring (Args/Returns/Raises naming both error
       shapes); blank-line block separation per R1
-- [ ] **Code**: export from the facade — in `goga/pipeline/workflow/__init__.py` add
+- [x] **Code**: export from the facade — in `goga/pipeline/workflow/__init__.py` add
       `from .render_contribution import render_contribution` (alphabetical position after
       `from .profile_source import ProfileSource`, before `from .render_workflow import
       render_workflow`) and `"render_contribution"` in `__all__` between `"parse_workflow"` and
       `"render_workflow"`
-- [ ] **Interface verification**: `pytest tests/pipeline/workflow/test_render_contribution.py -x`
+- [x] **Interface verification**: `pytest tests/pipeline/workflow/test_render_contribution.py -x`
       — the contract class passes
-- [ ] **Logic tests** (mock-free, per R2) — add the 13 scenarios from the design:
+- [x] **Logic tests** (mock-free, per R2) — add the 13 scenarios from the design:
       - `test_template_free_document_renders_to_an_equal_document` — the depth-covering document
         (`prompt="plain"`, a stage with prompt/skills/env, an extend stage with body
         title/roles, `memory`, `agent="codex"`, `env={"A": "1"}`) under
@@ -683,13 +683,13 @@ Migrate every verified string into the implementation/messages and the assertion
         ("deep-{{ x }}",))})}` with `{"x": "ci"}`; assert
         `before == ("build",)` and `isinstance(..., tuple)`,
         `body["roles"] == ("aci", ("deep-ci",))`
-- [ ] **Debugging**: `pytest tests/pipeline/workflow -x` — fix implementation code until all tests
+- [x] **Debugging**: `pytest tests/pipeline/workflow -x` — fix implementation code until all tests
       pass (do NOT fix test code to make a broken implementation pass)
-- [ ] **Contract re-verification**: facade import works
+- [x] **Contract re-verification**: facade import works
       (`python -c "from goga.pipeline.workflow import render_contribution"`); signature matches
       the manifest exactly; purity/no-I/O constraints hold (no file/env/subprocess reads in the
       module); `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/workflow/` — fix findings; `ruff format` the
+- [x] **Lint**: `ruff check goga/ tests/pipeline/workflow/` — fix findings; `ruff format` the
       touched files (`render_contribution.py`, `__init__.py`,
       `tests/pipeline/workflow/test_render_contribution.py`)
 
