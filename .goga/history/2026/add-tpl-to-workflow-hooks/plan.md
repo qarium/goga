@@ -812,24 +812,24 @@ counts as non-empty); the merge consumes only rendered strings from here on (con
 `profile`/`build`/`agent`/`env` are base-only globals the merge never reads — the "dead fields
 included" strictness lands pre-merge).
 
-- [ ] **Contract tests**: extend `tests/pipeline/hooks/test_events.py`
+- [x] **Contract tests**: extend `tests/pipeline/hooks/test_events.py`
       `TestCheckpointContract::test_surface_carries_the_declared_method_signatures` — the
       `amend_workflow` parameter list gains `"profile"` after `"work"`
       (`["self", "pipeline", "decision", "workflow", "work", "profile"]`) (expected to fail at
       this stage)
-- [ ] **Code**: add the `profile: ResolvedProfile | None = None` parameter (last, after `work`)
+- [x] **Code**: add the `profile: ResolvedProfile | None = None` parameter (last, after `work`)
       to `amend_workflow`; add the `TYPE_CHECKING` import of `ResolvedProfile` and the runtime
       import of `render_contribution` from `..workflow`; pass `profile=profile` into every tool's
       `WorkflowAmendment` view construction
-- [ ] **Code**: implement steps 4–6 of the algorithm delta at the existing walk slot
+- [x] **Code**: implement steps 4–6 of the algorithm delta at the existing walk slot
       (`events.py:169–190`): buffer `None` → `continue`; context selection
       (`profile.data if profile is not None else {}`); the try/render/except wrap raising
       `ValueError(f"contribution of tool {tool} failed on pipeline.amend_workflow: {reason}")`;
       the empty check reading `rendered`; the commit carrying `document=rendered`
-- [ ] **Code**: update the routine docstring (Algorithm steps 4–6, the `profile` arg line, the
+- [x] **Code**: update the routine docstring (Algorithm steps 4–6, the `profile` arg line, the
       Raises note covering the render-failure channel)
-- [ ] **Interface verification**: `pytest tests/pipeline/hooks/test_events.py -x` — all pass
-- [ ] **Logic tests** (extend `TestAmendWorkflowDelivery`; real platform fixtures, no mocks beyond
+- [x] **Interface verification**: `pytest tests/pipeline/hooks/test_events.py -x` — all pass
+- [x] **Logic tests** (extend `TestAmendWorkflowDelivery`; real platform fixtures, no mocks beyond
       the existing boundary) — the seven scenarios from the design:
       - `test_view_carries_the_same_profile_fact_for_every_tool` — two
         `install_tool_package` tools recording `id(context.profile)` and `context.profile.name`;
@@ -862,12 +862,12 @@ included" strictness lands pre-merge).
       - `test_template_free_composition_is_identical_with_and_without_profile` — one plain-string
         contribution delivered twice (`profile=None` and `profile=ResolvedProfile(...,
         data={"model": "sonnet"})`); assert the two `overlay.workflow` documents are `==`
-- [ ] **Debugging**: `pytest tests/pipeline/hooks -x` — fix implementation code until all tests
+- [x] **Debugging**: `pytest tests/pipeline/hooks -x` — fix implementation code until all tests
       pass
-- [ ] **Contract re-verification**: facade unchanged (`ZONE_ALL`); the hard/soft discipline holds
+- [x] **Contract re-verification**: facade unchanged (`ZONE_ALL`); the hard/soft discipline holds
       (only the amendment action is hard; the `emit_*` members untouched);
       `merge_workflow_overlay` untouched; `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/hooks/` — fix findings; `ruff format` the touched
+- [x] **Lint**: `ruff check goga/ tests/pipeline/hooks/` — fix findings; `ruff format` the touched
       files
 
 ### Task 4: Profile wiring and card/run parity — `run_pipeline` / `describe_pipeline` (goga/pipeline)

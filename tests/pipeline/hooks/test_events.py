@@ -46,7 +46,14 @@ from goga.pipeline.hooks import (
     WorkflowOverlay,
     WorkIdentity,
 )
-from goga.pipeline.workflow import WorkflowDocument, WorkflowGates, WorkflowRepeat
+from goga.pipeline.workflow import (
+    ProfileSource,
+    ResolvedProfile,
+    WorkflowDocument,
+    WorkflowGates,
+    WorkflowRepeat,
+    WorkflowStage,
+)
 
 from tests.conftest import is_kw_only_dataclass
 from tests.pipeline.hooks.conftest import ZONE_ALL, field_defaults
@@ -509,6 +516,7 @@ class TestCheckpointContract:
             "decision",
             "workflow",
             "work",
+            "profile",
         ]
         assert list(inspect.signature(PipelineHooks.emit_run_created).parameters) == [
             "self",
@@ -973,3 +981,253 @@ class TestAmendWorkflowDelivery:
         assert overlay.workflow is not None
         assert overlay.workflow is not base  # a real merge ran
         assert overlay.workflow.prompt == "authored"  # the blank text merged to nothing
+
+    def test_view_carries_the_same_profile_fact_for_every_tool(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """One ``profile`` object — the same identity on every tool's view."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"], "goga_tool_second": ["second-dist"]})
+
+        def register_demo(hooks: object) -> None:
+            def hardening(self: object, context: object) -> None:
+                self.seen_profile_id = id(context.profile)
+                self.seen_profile_name = context.profile.name
+                context.contribute(WorkflowDocument(prompt="harden"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "hardening", hardening)  # type: ignore[attr-defined]
+
+        def register_second(hooks: object) -> None:
+            def softening(self: object, context: object) -> None:
+                self.seen_profile_id = id(context.profile)
+                self.seen_profile_name = context.profile.name
+                context.contribute(WorkflowDocument(prompt="second"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "softening", softening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_demo)
+        install_tool_package("goga_tool_second", register_hooks=register_second)
+
+        pipeline, decision, work = _facts()
+        profile = ResolvedProfile(name="mixa", data={"model": "sonnet"}, source=ProfileSource.PROJECT)
+        surface = PipelineHooks()
+
+        overlay = surface.amend_workflow(
+            pipeline=pipeline,
+            decision=decision,
+            workflow=WorkflowDocument(prompt="authored"),
+            work=work,
+            profile=profile,
+        )
+
+        demo_context = surface._registry.self_context("demo")
+        second_context = surface._registry.self_context("second")
+
+        assert demo_context.seen_profile_id == id(profile)
+        assert second_context.seen_profile_id == id(profile)
+        assert demo_context.seen_profile_name == "mixa"
+        assert second_context.seen_profile_name == "mixa"
+        assert overlay.provenance == ["demo", "second"]
+
+    def test_profile_defaults_to_none_and_delivery_is_unchanged(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Omitting ``profile`` delivers ``None`` — the pre-change composition stands."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def hardening(self: object, context: object) -> None:
+                self.seen_profile = context.profile
+                context.contribute(WorkflowDocument(prompt="harden"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "hardening", hardening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        pipeline, decision, work = _facts()
+        surface = PipelineHooks()
+
+        overlay = surface.amend_workflow(
+            pipeline=pipeline,
+            decision=decision,
+            workflow=WorkflowDocument(prompt="authored"),
+            work=work,
+        )
+
+        assert surface._registry.self_context("demo").seen_profile is None
+        assert overlay.workflow is not None
+        assert overlay.workflow.prompt == "authored\n\nharden"
+        assert overlay.provenance == ["demo"]
+
+    def test_contribution_renders_at_commit_with_profile_content(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The buffered document renders field-level against the profile's content."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def hardening(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(stages={"build": WorkflowStage(prompt="Model: {{ model }}")}))
+
+            hooks.subscribe("pipeline", "amend_workflow", "hardening", hardening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        pipeline, decision, work = _facts()
+        profile = ResolvedProfile(name="mixa", data={"model": "sonnet"}, source=ProfileSource.PROJECT)
+
+        overlay = PipelineHooks().amend_workflow(
+            pipeline=pipeline,
+            decision=decision,
+            workflow=None,
+            work=work,
+            profile=profile,
+        )
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.stages["build"].prompt == "Model: sonnet"
+        assert overlay.provenance == ["demo"]
+
+    def test_render_failure_is_a_hard_stop_and_later_tools_never_run(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A render failure is the hard amendment error — later tools' hooks never run."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"], "goga_tool_second": ["second-dist"]})
+        witnesses: list[str] = []
+
+        def register_broken(hooks: object) -> None:
+            def broken(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(prompt="{{ oops"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "broken", broken)  # type: ignore[attr-defined]
+
+        def register_witness(hooks: object) -> None:
+            def softening(self: object, context: object) -> None:
+                witnesses.append("second-called")
+
+            hooks.subscribe("pipeline", "amend_workflow", "softening", softening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_broken)
+        install_tool_package("goga_tool_second", register_hooks=register_witness)
+
+        pipeline, decision, work = _facts()
+
+        # The empty context (profile omitted) does not rescue a syntax error.
+        with pytest.raises(
+            ValueError,
+            match=r"pipeline\.amend_workflow: template error at prompt: TemplateSyntaxError",
+        ) as failure:
+            PipelineHooks().amend_workflow(
+                pipeline=pipeline,
+                decision=decision,
+                workflow=WorkflowDocument(prompt="authored"),
+                work=work,
+            )
+
+        assert "contribution of tool demo failed on" in str(failure.value)
+        assert witnesses == []  # the walk stopped at the failing tool's commit
+
+    def test_empty_check_runs_on_the_rendered_document(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A dead-field-only document renders (no error), then discards as empty."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_dead(hooks: object) -> None:
+            def dead(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(profile="{{ 'x' }}"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "dead", dead)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_dead)
+
+        pipeline, decision, work = _facts()
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.hooks.events"):
+            overlay = PipelineHooks().amend_workflow(
+                pipeline=pipeline,
+                decision=decision,
+                workflow=None,
+                work=work,
+            )
+
+        discards = [r for r in caplog.records if r.message == "tool contributed an empty document; discarded"]
+        assert len(discards) == 1
+        assert overlay.provenance == []
+        assert overlay.workflow is None
+
+    def test_rendered_empty_contribution_still_commits_by_presence(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A rendered-away prompt is a present-but-empty value — the tool commits."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_vanishing(hooks: object) -> None:
+            def vanishing(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(prompt="{{ missing }}"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "vanishing", vanishing)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_vanishing)
+
+        pipeline, decision, work = _facts()
+        base = WorkflowDocument(prompt="authored")
+
+        overlay = PipelineHooks().amend_workflow(
+            pipeline=pipeline,
+            decision=decision,
+            workflow=base,
+            work=work,
+        )
+
+        assert overlay.provenance == ["demo"]  # the rendered "" is a value, not an absence
+        assert overlay.workflow is not None
+        assert overlay.workflow.prompt == "authored"  # the merge drops the empty text
+
+    def test_template_free_composition_is_identical_with_and_without_profile(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A template-free contribution composes byte-identically either way."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def hardening(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(prompt="plain hardening"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "hardening", hardening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        pipeline, decision, work = _facts()
+        surface = PipelineHooks()
+
+        without_profile = surface.amend_workflow(
+            pipeline=pipeline,
+            decision=decision,
+            workflow=WorkflowDocument(prompt="authored"),
+            work=work,
+        )
+        with_profile = surface.amend_workflow(
+            pipeline=pipeline,
+            decision=decision,
+            workflow=WorkflowDocument(prompt="authored"),
+            work=work,
+            profile=ResolvedProfile(name="mixa", data={"model": "sonnet"}, source=ProfileSource.PROJECT),
+        )
+
+        assert with_profile.workflow == without_profile.workflow
+        assert with_profile.provenance == without_profile.provenance
