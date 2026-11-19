@@ -729,24 +729,24 @@ already-resolved active contributor profile — the profile that rendered the au
 workflow-file: its name, its whole content, and its source — or None when no profile is active).
 `contribute` and the buffer are untouched.
 
-- [ ] **Contract tests**: extend `tests/pipeline/hooks/test_amendments.py`
+- [x] **Contract tests**: extend `tests/pipeline/hooks/test_amendments.py`
       `TestAmendmentContract::test_view_carries_exactly_the_declared_fields` — the
       `field_defaults(WorkflowAmendment)` assertion gains `("profile", None)` after
       `("work", MISSING)` AND the `dataclasses.fields` order assertion gains `"profile"` after
       `"work"`; update the test docstring to name the one field with a default; extend the module
       docstring's entity summary with `profile` (expected to fail at this stage)
-- [ ] **Code**: add the `profile` field, the runtime import, and the docstring arg line in
+- [x] **Code**: add the `profile` field, the runtime import, and the docstring arg line in
       `goga/pipeline/hooks/amendments.py` per the change above
-- [ ] **Interface verification**: `pytest tests/pipeline/hooks/test_amendments.py -x` — all pass
-- [ ] **Logic tests**: extend the suite with a construction test — default construction leaves
+- [x] **Interface verification**: `pytest tests/pipeline/hooks/test_amendments.py -x` — all pass
+- [x] **Logic tests**: extend the suite with a construction test — default construction leaves
       `profile is None`; explicit construction with
       `ResolvedProfile(name="mixa", data={"model": "sonnet"}, source=ProfileSource.PROJECT)`
       round-trips the fact verbatim; `contribute` still buffers unchanged beside the fact
-- [ ] **Debugging**: `pytest tests/pipeline/hooks -x` — fix implementation code until all tests
+- [x] **Debugging**: `pytest tests/pipeline/hooks -x` — fix implementation code until all tests
       pass
-- [ ] **Contract re-verification**: the view carries exactly the five declared fields in order;
+- [x] **Contract re-verification**: the view carries exactly the five declared fields in order;
       the facade is unchanged (`ZONE_ALL`); `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/hooks/` — fix findings; `ruff format` the touched
+- [x] **Lint**: `ruff check goga/ tests/pipeline/hooks/` — fix findings; `ruff format` the touched
       files
 
 ### Task 3: `PipelineHooks.amend_workflow` — render at commit, inside the walk (goga/pipeline/hooks)

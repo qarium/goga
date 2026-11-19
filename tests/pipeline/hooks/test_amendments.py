@@ -1,7 +1,7 @@
 """Contract and logic tests for the entity declared in
 ``goga/pipeline/hooks/CODEMANIFEST`` with ``location: amendments.py``:
 
-- ``WorkflowAmendment(pipeline, decision, workflow, work)`` — the
+- ``WorkflowAmendment(pipeline, decision, workflow, work, profile)`` — the
   read-and-contribute view of one tool: the delivered facts of the
   amendment checkpoint plus the buffer of one tool's contribution
 
@@ -22,7 +22,7 @@ from goga.pipeline.hooks import (
     WorkflowDecision,
     WorkIdentity,
 )
-from goga.pipeline.workflow import WorkflowDocument
+from goga.pipeline.workflow import ProfileSource, ResolvedProfile, WorkflowDocument
 
 from tests.conftest import is_kw_only_dataclass
 from tests.pipeline.hooks.conftest import ZONE_ALL, field_defaults
@@ -81,7 +81,7 @@ class TestAmendmentContract:
             )
 
     def test_view_carries_exactly_the_declared_fields(self) -> None:
-        """``pipeline, decision, workflow, work`` — names, order, no defaults."""
+        """``pipeline, decision, workflow, work, profile`` — names, order; ``profile`` the one default."""
         init_defaults = [
             (name, default) for name, default in field_defaults(WorkflowAmendment) if name != "_contribution"
         ]
@@ -91,12 +91,14 @@ class TestAmendmentContract:
             ("decision", dataclasses.MISSING),
             ("workflow", dataclasses.MISSING),
             ("work", dataclasses.MISSING),
+            ("profile", None),
         ]
         assert [field.name for field in dataclasses.fields(WorkflowAmendment)][:-1] == [
             "pipeline",
             "decision",
             "workflow",
             "work",
+            "profile",
         ]
 
     def test_contribution_buffer_is_private_init_false_default_none(self) -> None:
@@ -177,6 +179,51 @@ class TestViewFacts:
         )
 
         assert view.workflow is None
+
+    def test_profile_defaults_to_none_without_activation(
+        self,
+        pipeline: PipelineIdentity,
+        decision: WorkflowDecision,
+        workflow: WorkflowDocument,
+        work: WorkIdentity,
+    ) -> None:
+        """The profile fact reads absent when construction passes no profile."""
+        view = WorkflowAmendment(pipeline=pipeline, decision=decision, workflow=workflow, work=work)
+
+        assert view.profile is None
+
+    def test_explicit_profile_round_trips_the_fact_verbatim(
+        self,
+        pipeline: PipelineIdentity,
+        decision: WorkflowDecision,
+        workflow: WorkflowDocument,
+        work: WorkIdentity,
+    ) -> None:
+        """The delivered profile is the exact resolved object — name, data, source."""
+        profile = ResolvedProfile(name="mixa", data={"model": "sonnet"}, source=ProfileSource.PROJECT)
+        view = WorkflowAmendment(pipeline=pipeline, decision=decision, workflow=workflow, work=work, profile=profile)
+
+        assert view.profile is profile
+        assert view.profile.name == "mixa"
+        assert view.profile.data == {"model": "sonnet"}
+        assert view.profile.source is ProfileSource.PROJECT
+
+    def test_contribute_buffers_unchanged_beside_the_profile_fact(
+        self,
+        pipeline: PipelineIdentity,
+        decision: WorkflowDecision,
+        workflow: WorkflowDocument,
+        work: WorkIdentity,
+    ) -> None:
+        """Buffering a contribution never touches the profile fact."""
+        profile = ResolvedProfile(name="mixa", data={"model": "sonnet"}, source=ProfileSource.PROJECT)
+        view = WorkflowAmendment(pipeline=pipeline, decision=decision, workflow=workflow, work=work, profile=profile)
+
+        view.contribute(WorkflowDocument(prompt="a"))
+
+        assert view.profile is profile
+        assert view._contribution is not None
+        assert view._contribution.prompt == "a"
 
     def test_contribute_changes_no_constructor_fact(self, view: WorkflowAmendment) -> None:
         """No staged-application state — the four facts stay the constructor's."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..workflow import WorkflowDocument
+from ..workflow import ResolvedProfile, WorkflowDocument
 from .identity import PipelineIdentity, WorkflowDecision, WorkIdentity
 
 
@@ -19,12 +19,17 @@ class WorkflowAmendment:
             runner-skip merge, pre-layer; read-only and identical for
             every tool; ``None`` when no workflow resolved.
         work: the current work identity.
+        profile: the operation's already-resolved active contributor
+            profile — the profile that rendered the authored
+            workflow-file: its name, its whole content, and its source —
+            or ``None`` when no profile is active.
     """
 
     pipeline: PipelineIdentity
     decision: WorkflowDecision
     workflow: WorkflowDocument | None
     work: WorkIdentity
+    profile: ResolvedProfile | None = None
 
     _contribution: WorkflowDocument | None = field(init=False, default=None, repr=False)
 
