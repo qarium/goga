@@ -435,15 +435,24 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 24-s
     )
 
     # Step 12: deliver the amendment with the authored workflow after the skip
-    # merge — receiving the overlay result. A disabled decision delivers
-    # nothing (the layer is off) and the overlay is the passthrough of the
-    # merged workflow. The delivery is hard: the first failing tool stops the
-    # run here with a clean ``ValueError``, before any compile, write, or
-    # launch — and no events fire.
+    # merge — receiving the overlay result. The delivery carries the
+    # operation's resolved profile — the fact every tool's view reads and the
+    # rendering context of every committed contribution (None without
+    # activation or workflow). A disabled decision delivers nothing (the layer
+    # is off) and the overlay is the passthrough of the merged workflow. The
+    # delivery is hard: the first failing tool stops the run here with a clean
+    # ``ValueError``, before any compile, write, or launch — and no events
+    # fire.
     hooks = PipelineHooks()
 
     if decision.kind != "disabled":
-        overlay = hooks.amend_workflow(pipeline=identity, decision=decision, workflow=workflow_doc, work=work)
+        overlay = hooks.amend_workflow(
+            pipeline=identity,
+            decision=decision,
+            workflow=workflow_doc,
+            work=work,
+            profile=resolved.profile if resolved is not None else None,
+        )
     else:
         overlay = WorkflowOverlay(workflow=workflow_doc, provenance=[])
 

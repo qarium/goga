@@ -338,9 +338,9 @@ class TestTeamAndAttachmentMaterialization:
             "    title: reviewer\n"
             "    instruction: Review.\n"
             "    mode: required\n"
-            "    trigger: on_completion\n" in text
+            "    trigger: pre_completion\n" in text
         )
-        assert flow_doc.stages[0].fields["assistants"][0].trigger == "on_completion"
+        assert flow_doc.stages[0].fields["assistants"][0].trigger == "pre_completion"
 
     def test_compile_reference_takes_declaration_fields_keeps_own_gate_when(self, tmp_path: Path) -> None:
         """A reference resolves against the catalog but keeps its own gate/when."""
@@ -363,8 +363,8 @@ class TestTeamAndAttachmentMaterialization:
 
         assert entry.instruction == "Review."
         assert entry.mode == "required"
-        assert entry.trigger == "on_completion"
-        assert "trigger: on_completion" in text
+        assert entry.trigger == "pre_completion"
+        assert "trigger: pre_completion" in text
 
     def test_compile_reference_to_inline_declaration_of_another_stage(self, tmp_path: Path) -> None:
         """A reference may name an inline declaration authored on another stage."""
@@ -510,6 +510,43 @@ class TestTeamAndAttachmentMaterialization:
         assert entry.trigger == "on_message"
         assert "mode: required" in text
         assert "trigger: on_message" in text
+
+    @pytest.mark.parametrize(
+        ("gate", "when", "expected_mode", "expected_trigger"),
+        [
+            (False, "start", "advisory", "one_shot"),
+            (True, "start", "required", "one_shot"),
+            (False, "checkpoints", "advisory", "checkpoints"),
+            (True, "checkpoints", "required", "checkpoints"),
+            (False, "finish", "advisory", "on_completion"),
+            (True, "finish", "required", "pre_completion"),
+            (False, "message", "advisory", "on_message"),
+            (True, "message", "required", "on_message"),
+        ],
+    )
+    def test_compile_gate_when_trigger_matrix(
+        self, tmp_path: Path, gate: bool, when: str, expected_mode: str, expected_trigger: str
+    ) -> None:
+        """Every gate/when pair maps to its engine mode/trigger — a gated finish is the pre-completion review."""
+        attachment = f"        gate: {str(gate).lower()}\n        when: {when}\n"
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n" + attachment,
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.mode == expected_mode
+        assert entry.trigger == expected_trigger
+        assert f"mode: {expected_mode}" in text
+        assert f"trigger: {expected_trigger}" in text
 
     def test_compile_skills_only_catalog_member_materializes_empty_instruction(self, tmp_path: Path) -> None:
         """A skills-only catalog member compiles — team ``instruction: ''``, skills verbatim."""

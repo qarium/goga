@@ -53,16 +53,18 @@ One fresh view per tool — a failing hook's buffer dies with it.
 | `decision` | `WorkflowDecision` | how the workflow was chosen |
 | `workflow` | `WorkflowDocument | None` | the authored workflow — post decision, post runner-skip merge, pre-layer; read-only and identical for every tool |
 | `work` | `WorkIdentity` | the branch/topic identity of the run |
+| `profile` | `ResolvedProfile | None` | the operation's active contributor profile — `name`, `data` (the whole content), `source` (`project`/`home`); `None` when no profile is active (including the no-workflow silent-miss case); read-only and identical for every tool |
 
 | Method | Effect |
 |---|---|
-| `contribute(document)` | buffers one `WorkflowDocument`; a later call replaces the earlier whole; an empty document (no prompt, no stages, no extend, no memory, no assistants, no delegation, no repeat, no gates block) is discarded with a warning — the tool identity rides the warning record as a structured field |
+| `contribute(document)` | buffers one `WorkflowDocument`; a later call replaces the earlier whole; an empty document (no prompt, no stages, no extend, no memory, no assistants, no delegation, no repeat, no gates block — judged on the rendered document, see the contract below) is discarded with a warning — the tool identity rides the warning record as a structured field |
 
 The amendment contract:
 
 - **Mutually blind tools** — every tool reads the same original workflow through its own view; no tool ever sees another tool's contribution.
-- **Commit per tool** — a tool's buffer commits as one contribution only after every hook of the tool returned without raising.
-- **Hard failure** — the first failing hook stops the command at the first failure with a clean error naming the hook, the tool, and the action — before any compile, write, or launch: `Error: pipeline '<name>' was not amended: hook <name> of tool <tool> failed on pipeline.amend_workflow: <reason>`. A buffer the walk cannot process (a value of an out-of-contract type) fails its hook the same way; a broken tool-package import is the other fatal case.
+- **Commit per tool** — a tool's buffer commits as one contribution only after every hook of the tool returned without raising **and the buffered document rendered successfully**.
+- **Commit-moment rendering** — at the commit, every string leaf and every string mapping key of the buffered document renders as a Jinja template with the active profile's content as the context — any depth, extend bodies and the never-merging `profile`/`build`/`agent`/`env` fields included, under the same fixed environment the workflow-file uses (`trim_blocks`, `lstrip_blocks`, `keep_trailing_newline`; no ambient variables). Without an active profile the context is empty — template syntax still processes. A contribution without template syntax composes byte-identically, and a field that renders empty still counts as present. A template error or a rendered-key collision is a hard failure before any compile, write, or launch: `Error: pipeline '<name>' could not be prepared: contribution of tool <tool> failed on pipeline.amend_workflow: template error at <path>: <reason>`.
+- **Hard failure** — the first failing hook stops the command at the first failure with a clean error naming the hook, the tool, and the action — before any compile, write, or launch: `Error: pipeline '<name>' could not be prepared: hook <name> of tool <tool> failed on pipeline.amend_workflow: <reason>`. A buffer the walk cannot process (a value of an out-of-contract type) fails its hook the same way; a broken tool-package import is the other fatal case.
 - **Content only** — an amendment shapes the effective workflow; it cannot cancel, redirect, or defer the run.
 
 The committed contributions merge onto the authored workflow **authored-wins, per slot**:
@@ -154,6 +156,7 @@ With no tool packages installed the registry builds empty and the overlay is the
 | `PipelineIdentity` | `name`, `display_name`, `description`, `source` (`project`/`user`) |
 | `WorkflowDecision` | `kind` (`disabled`/`explicit`/`auto-match`/`silent-miss`), `workflow_name` |
 | `WorkIdentity` | `branch`, `slug`, `year` |
+| `ResolvedProfile` | `name`, `data`, `source` (`project`/`home`) — the active profile carried by every `amend_workflow` view |
 | `CompositionStage` | `id`, `title` |
 | `RunIdentity` | `run_id`, `run_dir`, `root_dir`, `resumed` — the run facts carried by every bridged mid-run event |
 | `StageTransition` | `id`, `name`, `from_status`, `to_status`, `phase` — the transition of one stage |

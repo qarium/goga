@@ -185,13 +185,35 @@ _GATE_MODE: dict[bool, str] = {True: "required", False: "advisory"}
 # never relied upon (``checkpoints`` is written out even though it is the
 # authoring default). ``message`` maps to the resting engagement: the engine
 # sends no initial request, the helper waits for messages (one turn each) and
-# stays attached afterwards.
+# stays attached afterwards. A GATED ``finish`` overrides its row through
+# ``_attachment_trigger`` — the gate needs the pre-completion review, not the
+# post-result final turn.
 _WHEN_TRIGGER: dict[str, str] = {
     "start": "one_shot",
     "checkpoints": "checkpoints",
     "finish": "on_completion",
     "message": "on_message",
 }
+
+
+def _attachment_trigger(gate: bool, when: str) -> str:
+    """Map an attachment's ``gate``/``when`` pair to its afm ``trigger`` — the single engagement-translation site.
+
+    Args:
+        gate: The attachment's effective gate flag.
+        when: The attachment's authored engagement value.
+
+    Returns:
+        ``"pre_completion"`` for a gated ``finish`` — the pre-completion
+        review round runs after the stage agent's turn and BEFORE the stage
+        completes, so a required verdict can block the stage from finishing;
+        otherwise the ``_WHEN_TRIGGER`` row (an ungated ``finish`` keeps
+        ``on_completion``, the final turn after the result is ready).
+    """
+    if gate and when == "finish":
+        return "pre_completion"
+
+    return _WHEN_TRIGGER[when]
 
 
 def translate_role(role: str) -> str:
@@ -1203,7 +1225,7 @@ def _assistants_by_id(
                     title=entry.name,
                     instruction=(source.prompt if source.prompt is not None else ""),
                     mode=_GATE_MODE[entry.gate],
-                    trigger=_WHEN_TRIGGER[entry.when],
+                    trigger=_attachment_trigger(entry.gate, entry.when),
                 )
             )
 

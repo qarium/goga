@@ -539,8 +539,10 @@ team agents** through the runner's collaboration mechanism: a top-level
 `delegation` block bounds helper delegation, and the per-stage
 `assistants` instruction attaches assistants to stages.
 
-Workflow collaboration requires afm 2.0+ (the shipped image carries it); an
-older image predating the mechanism must be refreshed with `--update`.
+Workflow collaboration requires afm 2.0+ (the shipped image carries it); a
+gated `finish` attachment (`gate: true` + `when: finish`) compiles to the
+engine's `pre_completion` review round and requires afm 2.2.9+. An older
+image predating the mechanism must be refreshed with `--update`.
 
 ```yaml
 assistants:                     # the catalog — run-level assistants (a name-keyed map)
@@ -628,7 +630,7 @@ attachment parameters. Two entry forms:
 | Attachment key | Type | Default | Description |
 |----------------|------|---------|-------------|
 | `when` | `start` \| `checkpoints` \| `finish` \| `message` | **required** | When the assistant engages. `message` is the resting engagement: the engine sends no initial request — the helper waits for messages and stays attached after each answer (one turn per message). |
-| `gate` | bool | `false` | `true` — the assistant's verdict must pass (or be waived by a human) before the stage may finish; `false` is advisory. |
+| `gate` | bool | `false` | `true` — the assistant's verdict must pass (or be waived by a human) before the stage may finish; `false` is advisory. With `when: finish` the gate engages as the engine's pre-completion review round (`pre_completion`, afm 2.2.9+); an ungated `finish` keeps the final-turn engagement. |
 
 `when` is required on every attachment — the entry key already names the
 assistant, so its engagement timing is authored explicitly. An unknown
@@ -1364,6 +1366,12 @@ template (`trim_blocks`, `lstrip_blocks`, `keep_trailing_newline`; standard
 renders to itself, and templates without activation render with an empty
 context. Rendering never bypasses validation: the rendered text passes the
 standard structural validation unchanged.
+
+The profile renders two surfaces: the whole workflow-file before parsing, and
+the strings of tool contributions — every string leaf and mapping key a tool
+commits through the `pipeline/amend_workflow` hook renders field-level with
+the same profile content at the tool's commit, and the same profile reaches
+the tool's hook view as a read-only fact (see [Hooks](hooks.md)).
 
 A profile is a small YAML mapping stored in one of two places, with the
 project source winning on name conflicts:

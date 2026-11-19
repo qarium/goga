@@ -177,7 +177,7 @@ class TestSerializeCollaborationStyles:
                                 title="reviewer",
                                 instruction="Review.\nStrict.\n",
                                 mode="required",
-                                trigger="on_completion",
+                                trigger="pre_completion",
                             ),
                             FlowAssistant(
                                 profile="goga-ops",
@@ -236,7 +236,7 @@ class TestSerializeCollaborationStyles:
             "      Review.\n"
             "      Strict.\n"
             "    mode: required\n"
-            "    trigger: on_completion\n"
+            "    trigger: pre_completion\n"
             "  - profile: goga-ops\n"
             "    title: ops\n"
             "    instruction: ''\n"
@@ -250,7 +250,7 @@ class TestSerializeCollaborationStyles:
             < stage_block.index("    title: reviewer")
             < stage_block.index("    instruction: |")
             < stage_block.index("    mode: required")
-            < stage_block.index("    trigger: on_completion")
+            < stage_block.index("    trigger: pre_completion")
         )
 
     def test_serialize_collaboration_stage_assistants_round_trip(self) -> None:
@@ -282,7 +282,7 @@ class TestSerializeCollaborationStyles:
                                 title="reviewer",
                                 instruction="Review.\nStrict.\n",
                                 mode="required",
-                                trigger="on_completion",
+                                trigger="pre_completion",
                             ),
                         ],
                     },
@@ -308,6 +308,6 @@ class TestSerializeCollaborationStyles:
                 "title": "reviewer",
                 "instruction": "Review.\nStrict.\n",
                 "mode": "required",
-                "trigger": "on_completion",
+                "trigger": "pre_completion",
             },
         ]

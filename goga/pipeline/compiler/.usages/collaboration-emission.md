@@ -45,13 +45,18 @@ order follows the authored key order. Every entry materializes every key:
 | `title` | the assistant name |
 | `instruction` | the authored prompt; the empty string when none |
 | `mode` | `required` when `gate: true`; `advisory` otherwise |
-| `trigger` | `one_shot` / `checkpoints` / `on_completion` / `on_message` — mapped from `when` |
+| `trigger` | `one_shot` / `checkpoints` / `on_completion` / `pre_completion` / `on_message` — mapped from `when` (a gated `finish` maps to `pre_completion`) |
 
 `trigger` is always written explicitly — the engine's own
 default is `one_shot` and is never relied upon (`when` is authored on every
 attachment; there is no compiler-side engagement default). `when: message`
 compiles to `on_message`, the resting engagement: the engine sends no initial
 request, the helper waits for messages (one turn each) and stays attached.
+`when: finish` compiles gate-aware: `gate: true` emits `pre_completion` —
+the engine's pre-completion review round, which runs after the stage
+agent's turn and before the stage completes so the required verdict can
+block the stage from finishing — while an advisory attachment (`gate:
+false`) keeps `on_completion`, the final turn after the result is ready.
 The stage entry carries
 NO `skills` key: the afm engine (verified on v2.0.9) strict-parses
 `stages[].assistants` and rejects unknown fields

@@ -13,13 +13,14 @@ from ...hooks import (
     emit_hook_event,
     wrap_context,
 )
+from ..workflow import render_contribution
 from .amendments import WorkflowAmendment
 from .contexts import CompositionStage, RunCompleted, RunCreated, RunEvent, StageEvent
 from .identity import PipelineIdentity, WorkflowDecision, WorkIdentity
 from .overlay import ToolContribution, WorkflowOverlay, merge_workflow_overlay
 
 if TYPE_CHECKING:  # the workflow document is a context fact the zone models carry
-    from ..workflow import WorkflowDocument
+    from ..workflow import ResolvedProfile, WorkflowDocument
 
 logger = logging.getLogger(__name__)
 
@@ -61,12 +62,13 @@ class PipelineHooks:
 
         return self._registry
 
-    def amend_workflow(
+    def amend_workflow(  # noqa: C901 — the seven-step contract walk, one branch per guard
         self,
         pipeline: PipelineIdentity,
         decision: WorkflowDecision,
         workflow: WorkflowDocument | None,
         work: WorkIdentity,
+        profile: ResolvedProfile | None = None,
     ) -> WorkflowOverlay:
         """Deliver the workflow-amendment checkpoint and return the overlay.
 
@@ -77,27 +79,32 @@ class PipelineHooks:
             2. Walk the subscriptions of the address per tool in
                enumeration order: build the tool's ``WorkflowAmendment``
                view over the delivered facts — every tool reads the same
-               original ``workflow`` — wrap it via ``wrap_context``,
-               project the call arguments via ``build_hook_arguments``
-               with the tool's own context, and call each hook of the tool
-            3. A tool whose every hook returned without raising and whose
-               buffer carries a non-empty contribution commits as one
-               ``ToolContribution``
-            4. A tool with a raising hook is a hard failure: a clean error
+               original ``workflow`` and the same ``profile`` fact — wrap
+               it via ``wrap_context``, project the call arguments via
+               ``build_hook_arguments`` with the tool's own context, and
+               call each hook of the tool
+            3. A tool with a raising hook is a hard failure: a clean error
                naming the hook, the tool, and the action stops the command
                at the first failure; the tool's whole contribution is
                discarded together with its view. A buffer the walk cannot
                process — a value of an out-of-contract type — fails the
                hook that wrote it under the same hard error
-            5. A tool whose buffered document is empty — no prompt, no
+            4. A tool whose every hook returned renders its buffered
+               contribution field-level at its commit moment with the
+               profile's content; a render failure is the same hard
+               failure as a raising hook: a clean error naming the tool,
+               the action, and the template cause stops the command at
+               the first failure; the tool's whole contribution is
+               discarded
+            5. A tool whose rendered document is empty — no prompt, no
                stages, no extend, no memory, no assistants, no delegation,
                no repeat, and no gates block — is a content no-op: a
                warning naming the tool, the contribution discarded, the
                walk continues
-            6. Merge the committed contributions onto ``workflow`` via
-               ``merge_workflow_overlay`` and return the overlay — an
-               address without subscriptions returns the passthrough
-               overlay
+            6. Merge the committed contributions — the rendered documents
+               — onto ``workflow`` via ``merge_workflow_overlay`` and
+               return the overlay — an address without subscriptions
+               returns the passthrough overlay
 
         Args:
             pipeline: The identity of the pipeline being composed.
@@ -105,15 +112,21 @@ class PipelineHooks:
             workflow: The authored workflow after the decision and the
                 runner-skip merge; ``None`` when no workflow resolved.
             work: The current work identity.
+            profile: The operation's already-resolved active contributor
+                profile — the same fact on every tool's view and the
+                rendering context of every committed contribution;
+                ``None`` when no profile is active.
 
         Returns:
             The :class:`~goga.pipeline.hooks.WorkflowOverlay` — the
             effective workflow and the contributing tools.
 
         Raises:
-            ValueError: The address is not declared, or a hook of the
-                hard action failed — the message names the hook, the
-                tool, and the reason.
+            ValueError: The address is not declared, a hook of the hard
+                action failed — the message names the hook, the tool, and
+                the reason — or a tool's contribution failed to render —
+                the message names the tool, the action, and the template
+                cause.
         """
         registry = self._ensure_registry()
 
@@ -133,7 +146,13 @@ class PipelineHooks:
         for tool, subscriptions in groups.items():
             # A fresh view per tool — fresh facts, fresh buffer; the view
             # dies with the tool when a hook fails, taking the buffer with it.
-            amendment = WorkflowAmendment(pipeline=pipeline, decision=decision, workflow=workflow, work=work)
+            amendment = WorkflowAmendment(
+                pipeline=pipeline,
+                decision=decision,
+                workflow=workflow,
+                work=work,
+                profile=profile,
+            )
             proxy = wrap_context(amendment)
 
             for subscription in subscriptions:
@@ -171,15 +190,27 @@ class PipelineHooks:
 
             document = amendment._contribution
 
+            # The commit-moment render: the buffered raw document renders
+            # field-level with the profile's content — dead fields included,
+            # before the empty check and the merge. Hard on failure: the
+            # message copies the hook-failure tail so the strict pre-run
+            # branch of the CLI keeps matching.
+            context = profile.data if profile is not None else {}
+
+            try:
+                rendered = render_contribution(document, context)
+            except ValueError as reason:
+                raise ValueError(f"contribution of tool {tool} failed on pipeline.amend_workflow: {reason}") from reason
+
             if (
-                document.prompt is None
-                and not document.stages
-                and not document.extend
-                and document.memory is None
-                and not document.assistants
-                and document.delegation is None
-                and document.repeat is None
-                and document.gates is None
+                rendered.prompt is None
+                and not rendered.stages
+                and not rendered.extend
+                and rendered.memory is None
+                and not rendered.assistants
+                and rendered.delegation is None
+                and rendered.repeat is None
+                and rendered.gates is None
             ):
                 logger.warning(
                     "tool contributed an empty document; discarded",
@@ -187,7 +218,7 @@ class PipelineHooks:
                 )
                 continue
 
-            contributions.append(ToolContribution(tool=tool, document=document))
+            contributions.append(ToolContribution(tool=tool, document=rendered))
 
         return merge_workflow_overlay(workflow, contributions)
 

@@ -157,8 +157,18 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 7-parameter signature i
 
     hooks = PipelineHooks()
 
+    # The delivery carries the operation's resolved profile exactly as the run
+    # form delivers it — the same fact on every tool's view, the same
+    # rendering of contributed strings, so the card's merged composition
+    # equals what a run with the same flags executes.
     if decision.kind != "disabled":
-        overlay = hooks.amend_workflow(pipeline=identity, decision=decision, workflow=workflow_doc, work=work)
+        overlay = hooks.amend_workflow(
+            pipeline=identity,
+            decision=decision,
+            workflow=workflow_doc,
+            work=work,
+            profile=resolved.profile if resolved is not None else None,
+        )
     else:
         # Disabled delivers nothing — the passthrough overlay of the MERGED
         # workflow (the skip names still compose; ``None`` under a disabled

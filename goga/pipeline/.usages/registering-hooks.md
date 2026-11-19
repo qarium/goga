@@ -51,11 +51,17 @@ the workflow decision (disabled / explicit / auto-match / silent-miss,
 with the resolved name); `workflow` — the original authored workflow
 after the decision and the runner-skip merge, read-only and identical
 for every tool (None when no workflow resolved); `work` — the current
-work identity.
+work identity; `profile` — the operation's active contributor profile:
+`name`, `data` (its whole content mapping), and `source` (`project` or
+`home`), or None when no profile is active — including when no workflow
+resolved. It is the same profile that rendered the workflow-file, read
+identically by every tool; you never need to re-resolve it — the CLI
+channel and the home bundle are wired for you.
 
 ```python
 def add_hardening(context):
-    context.contribute(hardening_workflow)
+    if context.profile and context.profile.name == "strict":
+        context.contribute(hardening_workflow)
 ```
 
 - `contribute(document)` buffers one declarative `WorkflowDocument`-shaped
@@ -69,6 +75,29 @@ def add_hardening(context):
   unset, extend entries add under fresh names. `skip` is an ordinary
   field — an authored skip is unbeatable, an unset skip is yours to set,
   including removing a pipeline-file stage the author did not protect.
+- **Every string of your contribution is a template surface.** At your
+  tool's commit the platform renders every string of the contributed
+  document — values and mapping keys alike, at any depth — with the
+  active profile's content, under the same rendering semantics the
+  workflow-file uses: a missing profile key renders empty, no active
+  profile renders against an empty context, and no other variables
+  exist in the context (your tool name, the pipeline, and the workflow
+  name are not template variables). A stage prompt contributed as
+  `Model: {{ model }}` renders against the profile exactly as an
+  authored workflow-file prompt would.
+- A template error anywhere in your contribution — fields that never
+  merge included — stops the command before it runs: the error names
+  your tool and the action and carries the template cause (the error
+  class, the message, and the document path of the failing string);
+  your whole contribution is discarded and no later tool's hooks run.
+  Two keys of one of your maps that render to the same string fail the
+  same way — the map, both source keys, and the colliding result are
+  named.
+- **Legacy note — intended behavior change:** a string carrying literal
+  `{{ }}` that used to land in the workflow as inert text now renders
+  (or fails). This is the intended and only behavior change; a
+  contribution without template syntax composes exactly as before, with
+  or without an active profile.
 - A failing hook of the amendment stops the command with a clean error
   naming your tool and the action; your whole contribution is discarded.
 - The merged workflow passes the same compilation validation as an
@@ -141,3 +170,7 @@ def on_start(context):
   `workflow`, contribute your declarative adjustments.
 - **On-the-fly composition add-ons** — contribute `extend` entries with
   fresh stage names; authored names always win.
+- **Profile-aware contribution** — subscribe to `amend_workflow`, read
+  `profile` (name, content, source) to branch programmatically, and put
+  `{{ ... }}` expressions in your contributed strings to template them
+  against the same profile the workflow-file used.

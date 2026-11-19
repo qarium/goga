@@ -5,6 +5,7 @@ from .load_workflow import load_workflow
 from .loaded_workflow import LoadedWorkflow
 from .parse_workflow import WorkflowSyntaxError, parse_workflow
 from .profile_source import ProfileSource
+from .render_contribution import render_contribution
 from .render_workflow import render_workflow
 from .resolve_activation import resolve_activation
 from .resolve_profile import resolve_profile
@@ -40,6 +41,7 @@ __all__: list[str] = [
     "load_home_profiles",
     "load_workflow",
     "parse_workflow",
+    "render_contribution",
     "render_workflow",
     "resolve_activation",
     "resolve_profile",

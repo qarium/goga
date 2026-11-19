@@ -24,9 +24,12 @@ class FlowAssistant:
         trigger: The engagement mapping — ``"one_shot"`` from ``start``,
             ``"checkpoints"`` from ``checkpoints`` (written explicitly, never
             inherited from the engine's ``one_shot`` default),
-            ``"on_completion"`` from ``finish``, ``"on_message"`` from
-            ``message`` (the resting engagement — no initial request; each
-            message is one turn and the helper stays attached).
+            ``"pre_completion"`` from a gated ``finish`` (``gate: true`` — the
+            pre-completion review that can block the stage from finishing),
+            ``"on_completion"`` from an ungated ``finish``,
+            ``"on_message"`` from ``message`` (the resting engagement — no
+            initial request; each message is one turn and the helper stays
+            attached).
     """
 
     profile: str
