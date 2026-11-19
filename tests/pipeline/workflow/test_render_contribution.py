@@ -30,6 +30,7 @@ from goga.pipeline.workflow import (
     WorkflowStage,
     render_contribution,
 )
+from jinja2 import Undefined
 
 
 class TestRenderContributionContract:
@@ -329,3 +330,95 @@ class TestRenderContributionLogic:
         assert stage.body["roles"] == ("aci", ("deep-ci",))
         assert isinstance(stage.body["roles"], tuple)
         assert isinstance(stage.body["roles"][1], tuple)
+
+    def test_template_free_strings_carry_their_bytes_verbatim(self) -> None:
+        """A template-free string carries its exact bytes — CR sequences included.
+
+        Edge: the Jinja lexer normalizes ``\\r\\n`` and ``\\r`` to ``\\n`` at
+        compile; a string without template syntax never enters the engine,
+        so every byte survives the render (the byte-identity contract).
+        """
+        windows = "line one\r\nline two\rplain"
+        document = WorkflowDocument(
+            prompt=windows,
+            extend={"scan": WorkflowExtendStage(body={"crlf\r\nkey": windows})},
+        )
+
+        rendered = render_contribution(document, {"model": "sonnet"})
+
+        assert rendered.prompt == windows
+        assert list(rendered.extend["scan"].body) == ["crlf\r\nkey"]
+        assert rendered.extend["scan"].body["crlf\r\nkey"] == windows
+
+    def test_render_environment_carries_the_fixed_flags(self) -> None:
+        """The contribution environment carries the same four flags render_workflow fixes.
+
+        The flags are the contract, not object identity — a divergence
+        between the two environments would ship silently.
+        """
+        from goga.pipeline.workflow.render_contribution import _RENDER_ENVIRONMENT
+
+        assert _RENDER_ENVIRONMENT.trim_blocks is True
+        assert _RENDER_ENVIRONMENT.lstrip_blocks is True
+        assert _RENDER_ENVIRONMENT.keep_trailing_newline is True
+        assert _RENDER_ENVIRONMENT.autoescape is False
+        assert _RENDER_ENVIRONMENT.undefined is Undefined
+
+    def test_block_tags_render_with_the_workflow_file_semantics(self) -> None:
+        """Block tags render under the workflow-file flag semantics.
+
+        Positive: ``trim_blocks``/``lstrip_blocks`` strip the block-tag
+        newlines — a contributed ``{% for %}`` loop over the profile renders
+        without dangling blank lines, exactly as the same body would inside
+        a workflow-file.
+        """
+        loop = "{% for key, value in worker.env.items() %}{{ key }}={{ value }}\n{% endfor %}"
+        document = WorkflowDocument(
+            extend={"scan": WorkflowExtendStage(body={"exports": loop})},
+        )
+
+        rendered = render_contribution(document, {"worker": {"env": {"A": "1", "B": "2"}}})
+
+        assert rendered.extend["scan"].body["exports"] == "A=1\nB=2\n"
+
+    def test_non_string_mapping_keys_carry_and_their_values_render(self) -> None:
+        """Non-string mapping keys carry verbatim; their values walk under bracket paths.
+
+        Edge: the extend body is open-ended — an int key keeps its identity
+        while its value renders, and a template error under it reports the
+        bracket-repr path ``extend.<name>.body[<key>]``.
+        """
+        document = WorkflowDocument(
+            extend={"scan": WorkflowExtendStage(body={1: "{{ model }}", "k": "v"})},
+        )
+        broken = WorkflowDocument(
+            extend={"scan": WorkflowExtendStage(body={7: "{{ oops"})},
+        )
+
+        rendered = render_contribution(document, {"model": "sonnet"})
+
+        assert list(rendered.extend["scan"].body) == [1, "k"]
+        assert rendered.extend["scan"].body[1] == "sonnet"
+        assert rendered.extend["scan"].body["k"] == "v"
+
+        with pytest.raises(
+            ValueError,
+            match=r"template error at extend\.scan\.body\[7\]: TemplateSyntaxError",
+        ):
+            render_contribution(broken, {})
+
+    def test_values_outside_the_walked_vocabulary_carry_verbatim(self) -> None:
+        """Containers outside the walked vocabulary — a set — carry verbatim.
+
+        Edge: the walk enumerates str, dataclass, dict, list, and tuple; a
+        set of template strings is not a walked surface — the whole value
+        carries unchanged, like every other non-walked leaf.
+        """
+        roles = {"a-{{ x }}", "b"}
+        document = WorkflowDocument(
+            extend={"scan": WorkflowExtendStage(body={"roles": roles})},
+        )
+
+        rendered = render_contribution(document, {"x": "ci"})
+
+        assert rendered.extend["scan"].body["roles"] == {"a-{{ x }}", "b"}

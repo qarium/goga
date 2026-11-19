@@ -199,9 +199,7 @@ class TestPipelineCommandContract:
         assert mock_run.call_args.kwargs["extra_env"] == ("FOO=bar", "BAZ=qux")
         assert mock_run.call_args.kwargs["name"] == "deploy"
 
-    def test_pipeline_without_section_dispatches(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_without_section_dispatches(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A config missing the ``pipeline`` block proceeds — the section is optional."""
         _write_config(tmp_path, with_pipeline=False)
         monkeypatch.chdir(tmp_path)

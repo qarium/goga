@@ -1166,6 +1166,41 @@ class TestAmendWorkflowDelivery:
         assert overlay.provenance == []
         assert overlay.workflow is None
 
+    def test_render_precedes_the_empty_check_a_broken_dead_field_is_a_hard_stop(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The commit-moment render runs before the empty check — dead fields included."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_dead_broken(hooks: object) -> None:
+            def dead_broken(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(profile="{{ oops"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "dead_broken", dead_broken)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_dead_broken)
+
+        pipeline, decision, work = _facts()
+
+        # Every merge-relevant field is empty, so an empty check running
+        # first would warn and discard — the broken dead-field template
+        # must fail hard instead.
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"contribution of tool demo failed on pipeline\.amend_workflow: "
+                r"template error at profile: TemplateSyntaxError"
+            ),
+        ):
+            PipelineHooks().amend_workflow(
+                pipeline=pipeline,
+                decision=decision,
+                workflow=None,
+                work=work,
+            )
+
     def test_rendered_empty_contribution_still_commits_by_presence(
         self,
         pin_package_environment,

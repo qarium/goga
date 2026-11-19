@@ -45,7 +45,7 @@ overlay = hooks.amend_workflow(
     decision=decision,
     workflow=merged_workflow,  # None is valid — a silent miss keeps the layer active
     work=work,
-    profile=loaded.profile,    # the resolved profile or None — every tool's view and the rendering use it
+    profile=loaded.profile,  # the resolved profile or None — every tool's view and the rendering use it
 )
 compile_flow(overlay.workflow, ...)
 ```

@@ -141,6 +141,13 @@ def _render_surface(text: str, ctx: dict[str, Any], path: str) -> str:
         ValueError: If the template fails — the message carries the error
             class, the Jinja message, and the surface's document dot-path.
     """
+    # A string without any template marker never enters the engine: the
+    # Jinja lexer normalizes CR sequences to "\n" at compile, which would
+    # silently mutate marker-free strings and break the byte-identity
+    # contract for template-free documents.
+    if not any(marker in text for marker in ("{{", "{%", "{#")):
+        return text
+
     try:
         return _RENDER_ENVIRONMENT.from_string(text).render(**ctx)
 
