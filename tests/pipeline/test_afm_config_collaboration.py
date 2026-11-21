@@ -3,11 +3,14 @@
 Covers the collaboration half of the afm configuration authorship: the
 section writes on every launch — always headed by the static
 ``runtime_context: wrapper`` and ``hide_attach_helpers: true`` — while the
-generated profiles materialize only
-when both the compiled flow document and the effective workflow document are
-given; the generated profiles exist exactly
-for the flow-referenced ids (one ``goga-<name>`` profile per team member and
-stage attachment, deduplicated); each profile carries exactly
+generated profiles materialize when the compiled flow document is given with
+at least one of the two declaration surfaces (the effective workflow
+document or the parsed pipeline document — the D1 gate); a pipeline-declared
+name resolves its delivery fields (agent, delegate, env) from its workflow
+extension entry, else the global agent, naming its ``pipeline.<stage>``
+authoring site on the strict pre-run errors; the generated profiles exist
+exactly for the flow-referenced ids (one ``goga-<name>`` profile per team
+member and stage attachment, deduplicated); each profile carries exactly
 ``{title, command, delegate}``; an assistant carrying a non-empty effective
 env map resolves to an owner-only sh closure whose path becomes the
 profile's command (``None`` and ``{}`` both mean "no closure");
@@ -26,10 +29,16 @@ import pytest
 import yaml
 from goga.pipeline import apply_skip_stages, write_afm_config
 from goga.pipeline.compiler import (
+    BodyFormat,
     FlowAssistant,
     FlowDocument,
     FlowStage,
     FlowTeamMember,
+    PipelineAssistant,
+    PipelineDocument,
+    PipelineHeader,
+    StagesBody,
+    StageStep,
     compile_flow,
     serialize_flow,
 )
@@ -89,6 +98,20 @@ def _workflow_doc(
     )
 
 
+def _pipeline_doc(declarations: dict[str, dict[str, PipelineAssistant]] | None = None) -> PipelineDocument:
+    """Build a parsed pipeline document carrying stage-body assistant declarations."""
+    steps = [
+        StageStep(name=stage, title=stage.title(), depends_on=None, body={}, assistants=entries or None)
+        for stage, entries in (declarations or {}).items()
+    ]
+
+    return PipelineDocument(
+        header=PipelineHeader(name="demo", description="Demo"),
+        format=BodyFormat.STAGES,
+        body=StagesBody(steps=steps),
+    )
+
+
 class TestWriteAfmConfigCollaborationContract:
     """Contract: when the collaboration section materializes."""
 
@@ -96,16 +119,31 @@ class TestWriteAfmConfigCollaborationContract:
         """write_afm_config is importable from the goga.pipeline facade."""
         assert write_afm_config is not None
 
-    def test_collaboration_profiles_require_both_flow_and_workflow(self, config_path: Path) -> None:
-        """The section always writes; the profiles need both documents.
+    def test_write_afm_config_signature_carries_trailing_pipeline(self) -> None:
+        """The signature gains the trailing pipeline parameter defaulting None."""
+        signature = inspect.signature(write_afm_config)
 
-        Without one of the documents the section is exactly the static head
+        assert list(signature.parameters) == ["agent", "flow", "workflow", "pipeline"]
+        assert signature.parameters["pipeline"].default is None
+
+    def test_collaboration_profiles_require_flow_and_either_surface(self, config_path: Path) -> None:
+        """The section always writes; the profiles need the flow plus one declaration surface (D1).
+
+        Without the flow — or without either the workflow or the pipeline
+        document — the section is exactly the static head
         (``runtime_context: wrapper`` and ``hide_attach_helpers: true``);
-        with both, the profiles materialize under the head.
+        with the flow and either surface, the profiles materialize under
+        the head (the workflow resolves its own catalog, the pipeline its
+        own stage-body declarations).
         """
         head = {"runtime_context": "wrapper", "hide_attach_helpers": True}
         flow = _flow_doc(members=[_member("reviewer")])
         workflow = _workflow_doc(catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")})
+        pipeline = _pipeline_doc(
+            declarations={
+                "verify": {"reviewer": PipelineAssistant(name="reviewer", prompt="Review.", when="checkpoints")}
+            }
+        )
 
         write_afm_config("claude")
         assert yaml.safe_load(config_path.read_text())["collaboration"] == head
@@ -116,11 +154,19 @@ class TestWriteAfmConfigCollaborationContract:
         write_afm_config("claude", workflow=workflow)
         assert yaml.safe_load(config_path.read_text())["collaboration"] == head
 
+        write_afm_config("claude", pipeline=pipeline)
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == head
+
         write_afm_config("claude", flow=flow, workflow=workflow)
         collaboration = yaml.safe_load(config_path.read_text())["collaboration"]
         assert collaboration["runtime_context"] == "wrapper"
         assert collaboration["hide_attach_helpers"] is True
         assert list(collaboration["profiles"]) == ["goga-reviewer"]
+
+        write_afm_config("claude", flow=flow, pipeline=pipeline)
+        collaboration = yaml.safe_load(config_path.read_text())["collaboration"]
+        assert list(collaboration["profiles"]) == ["goga-reviewer"]
+        assert "limits" not in collaboration
 
     def test_collaboration_free_documents_write_empty_profiles(self, config_path: Path) -> None:
         """Both documents without collaboration content write an empty profiles map under the head."""
@@ -363,6 +409,173 @@ class TestWriteAfmConfigCollaborationLogic:
         write_afm_config("claude", flow, _workflow_doc(catalog=catalog, delegation=WorkflowDelegation()))
         assert yaml.safe_load(config_path.read_text())["collaboration"]["limits"] == {"max_tasks": 50}
 
+    def test_sc1_profile_generated_without_workflow(
+        self, tmp_path: Path, config_path: Path, closure_base: Path
+    ) -> None:
+        """A pipeline-declared assistant delivers its profile with no workflow at all (SC1).
+
+        The workflow-less compile attaches the declaration; the delivery's
+        pipeline branch resolves the name to its declaring stage, finds no
+        extension entry (no workflow), and falls back to the global agent —
+        the D1 fix in action: the flow + pipeline pair materializes the
+        profiles, and no delegation block exists to write a task budget.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "- name: discover\n"
+            "  title: Discover\n"
+            "  prompt: Look\n"
+            "- name: review\n"
+            "  title: Review\n"
+            "  prompt: Check\n"
+            "  assistants:\n"
+            "    watcher:\n"
+            "      prompt: Watch.\n"
+            "      skills: [lint]\n"
+            "      when: checkpoints\n"
+        )
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, tmp_path / "flow.yml")
+
+        write_afm_config("claude", flow=flow_doc, workflow=None, pipeline=pipeline_doc)
+
+        collaboration = yaml.safe_load(config_path.read_text())["collaboration"]
+
+        assert collaboration["profiles"] == {
+            "goga-watcher": {
+                "title": "watcher",
+                "command": "/home/goga/bin/claude-as-claude.sh",
+                "delegate": False,
+            }
+        }
+        assert "limits" not in collaboration
+
+    def test_sc2_skip_veto_delivers_no_profile(self, tmp_path: Path, config_path: Path) -> None:
+        """A vetoed declaration never reaches the engine configuration (SC2 delivery).
+
+        The workflow vetoes the stage's own declaration; the compiled flow
+        references the name nowhere, so the delivery materializes an empty
+        profiles map — no dead profile remains for the vetoed attachment.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: demo\n"
+            "description: D\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "review:\n"
+            "  title: Review\n"
+            "  prompt: Check\n"
+            "  assistants:\n"
+            "    watcher:\n"
+            "      prompt: Watch.\n"
+            "      when: checkpoints\n"
+        )
+        workflow = parse_workflow("stages:\n  review:\n    assistants:\n      watcher:\n        skip: true\n")
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
+
+        assert flow_doc.team == []
+
+        write_afm_config("claude", flow=flow_doc, workflow=workflow, pipeline=pipeline_doc)
+
+        collaboration = yaml.safe_load(config_path.read_text())["collaboration"]
+
+        assert collaboration["profiles"] == {}
+
+    def test_extension_delivery_fields_reach_the_profile(self, tmp_path: Path, config_path: Path) -> None:
+        """A pipeline-declared name takes its delivery fields from its extension entry (SC3 delivery).
+
+        ``sec`` is pipeline-declared on ``build`` and extended there with
+        ``agent: codex`` — the pipeline branch resolves the name through its
+        declaring stage's entry, so the profile's command is the codex
+        wrapper; the catalog-declared ``reviewer`` keeps the global agent's
+        command, and the extension-less ``noter`` falls back to the global
+        agent (the loop copies collapse into one profile).
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: demo\n"
+            "description: D\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "  assistants:\n"
+            "    sec:\n"
+            "      prompt: Base audit.\n"
+            "      skills: [audit, deps]\n"
+            "      when: finish\n"
+            "      gate: true\n"
+            "review:\n"
+            "  title: Review\n"
+            "  prompt: Check\n"
+            "  assistants:\n"
+            "    noter:\n"
+            "      prompt: Note.\n"
+            "      when: message\n"
+        )
+        workflow = parse_workflow(
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "    skills: [code-audit]\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      sec:\n"
+            "        prompt: Also the lockfile.\n"
+            "        skills: [deps, lock]\n"
+            "        when: checkpoints\n"
+            "        gate: false\n"
+            "        agent: codex\n"
+            "      reviewer:\n"
+            "        when: start\n"
+            "  review:\n"
+            "    loop: 2\n"
+        )
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
+
+        write_afm_config("claude", flow=flow_doc, workflow=workflow, pipeline=pipeline_doc)
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert list(profiles) == ["goga-reviewer", "goga-sec", "goga-noter"]
+        assert profiles["goga-sec"]["command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert profiles["goga-reviewer"] == {
+            "title": "reviewer",
+            "command": "/home/goga/bin/claude-as-claude.sh",
+            "delegate": False,
+        }
+        assert profiles["goga-noter"]["command"] == "/home/goga/bin/claude-as-claude.sh"
+
+    def test_write_afm_config_bare_head_without_artifacts(self, config_path: Path) -> None:
+        """Neither declaration surface alone writes profiles — the fixed gating's negative half (D1).
+
+        The agent-only call and the flow-only call (no workflow, no
+        pipeline) both leave the collaboration section at its static head:
+        only the profiles and the task budget are document-derived.
+        """
+        write_afm_config("claude")
+
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == {
+            "runtime_context": "wrapper",
+            "hide_attach_helpers": True,
+        }
+
+        write_afm_config("claude", flow=_flow_doc(members=[_member("reviewer")]))
+
+        assert yaml.safe_load(config_path.read_text())["collaboration"] == {
+            "runtime_context": "wrapper",
+            "hide_attach_helpers": True,
+        }
+
     def test_afm_config_illegal_env_key_before_any_file(self, config_path: Path, closure_base: Path) -> None:
         """An illegal env key is a strict pre-run error — no config file, no closure file."""
         workflow = _workflow_doc(
@@ -465,6 +678,43 @@ class TestWriteAfmConfigCollaborationLogic:
             write_afm_config("claude", _flow_doc(members=[_member("ghost")]), workflow)
 
         assert not config_path.exists()
+
+    def test_afm_config_pipeline_declaration_no_agent_error_names_site(
+        self, tmp_path: Path, config_path: Path, closure_base: Path
+    ) -> None:
+        """A pipeline-declared name resolving no agent names its pipeline stage (D2).
+
+        With no workflow and no global agent the delivery has nothing to
+        fall back on — the strict pre-run error names the declaring stage as
+        the site, before any file is written.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: demo\n"
+            "description: D\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "review:\n"
+            "  title: Review\n"
+            "  prompt: Check\n"
+            "  assistants:\n"
+            "    watcher:\n"
+            "      prompt: Watch.\n"
+            "      when: checkpoints\n"
+        )
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, tmp_path / "flow.yml")
+
+        with pytest.raises(
+            ValueError,
+            match=r"assistant watcher at pipeline\.review resolved no agent: set its agent or a global agent",
+        ):
+            write_afm_config(None, flow=flow_doc, workflow=None, pipeline=pipeline_doc)
+
+        assert not config_path.exists()
+        assert list(closure_base.glob("*")) == []
 
     def test_write_afm_config_repeated_invocation_safe(self, config_path: Path, closure_base: Path) -> None:
         """Two consecutive writes replace the document wholesale and regenerate the closures."""

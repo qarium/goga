@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 from goga.pipeline import write_afm_config
-from goga.pipeline.compiler import FlowDocument, FlowTeamMember
+from goga.pipeline.compiler import FlowDocument, FlowTeamMember, PipelineDocument
 from goga.pipeline.workflow import WorkflowAssistant, WorkflowDocument
 
 # goga.pipeline.afm_config is shadowed in the package __init__ by the
@@ -53,11 +53,11 @@ class TestWriteAfmConfigContract:
         assert write_afm_config is not None
 
     def test_write_afm_config_signature_matches_contract(self) -> None:
-        """write_afm_config exposes the (agent, flow, workflow) -> Path signature."""
+        """write_afm_config exposes the (agent, flow, workflow, pipeline) -> Path signature."""
         signature = inspect.signature(write_afm_config)
         parameters = list(signature.parameters)
 
-        assert parameters == ["agent", "flow", "workflow"]
+        assert parameters == ["agent", "flow", "workflow", "pipeline"]
 
         agent_annotation = signature.parameters["agent"].annotation
         assert agent_annotation == "str | None" or agent_annotation == str | None
@@ -65,6 +65,10 @@ class TestWriteAfmConfigContract:
 
         assert signature.parameters["flow"].default is None
         assert signature.parameters["workflow"].default is None
+
+        pipeline_annotation = signature.parameters["pipeline"].annotation
+        assert pipeline_annotation == "PipelineDocument | None" or pipeline_annotation is PipelineDocument | None
+        assert signature.parameters["pipeline"].default is None
 
         return_annotation = signature.return_annotation
         assert return_annotation == "Path" or return_annotation is Path
