@@ -1032,7 +1032,7 @@ dropped) or a traceback escapes.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): create
+- [x] **Contract tests** (expected to fail at this stage): create
   `tests/commands/runtime/test_runtime.py` — `from
   goga.commands.runtime import runtime`: `isinstance(runtime,
   click.Group)`; subcommands `{"build", "pipeline", "archive"}` registered
@@ -1044,14 +1044,21 @@ dropped) or a traceback escapes.
   history`; pins corrected Fix 1, prevents re-introducing the ADR's wrong
   exit-0 assumption); help text rendered. Extend the cell facade
   `__init__.py` with `runtime` (`__all__` = all seven contract names)
-- [ ] **REPL probes** (before writing code; fresh `.venv/bin/python -c`
+  (verified red first — ImportError on `runtime`; green after the facade
+  grew to the seven names; the Task 3/4 facade pin test updated to the
+  seven names — the planned hard-failing change)
+- [x] **REPL probes** (before writing code; fresh `.venv/bin/python -c`
   per probe — never trust stale module state): `["-b", "main", "archive",
   "-b"]` parses with group branch `"main"` and subcommand `build=True`
   (dual `-b` disjoint); `--branch=` arrives as `""`; `["pipeline", ""]`
   delivers `name=""`; `["pipeline", "--", "-weird"]` delivers
   `name="-weird"`; `-p -weird` delivers a dash-leading value;
   `["build", "-b"]` is a usage error (build carries no options)
-- [ ] **Code**: create `goga/commands/runtime/runtime.py`, implementation
+  (all six re-verified live on click 8.5.1 with a scratch group mirroring
+  the surface: dual `-b` exit 0 with `build=True`; `--branch=` → `""`;
+  empty/dash NAME delivered verbatim; `-p -weird` taken as the value;
+  `["q", "-b"]` → exit 2 "No such option '-b'"; bare group → exit 2)
+- [x] **Code**: create `goga/commands/runtime/runtime.py`, implementation
   shape verbatim from the design:
   ```
   1. module runtime.py — imports: click; from ...docker import is_in_docker
@@ -1125,10 +1132,12 @@ dropped) or a traceback escapes.
   `--build/-b` `is_flag=True`, `--pipeline/-p` `default=None`,
   `--output/-o` `default=None` — every option with `help`. Docstrings =
   `--help` texts per the convention CLI rule
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/commands/runtime/test_runtime.py -x` — all pass; facade check
   `.venv/bin/python -c "from goga.commands.runtime import runtime"`
-- [ ] **Logic tests** (in `tests/commands/runtime/test_runtime.py`;
+  (27 passed in test_runtime.py; the group import and the full 7-name
+  facade import both green)
+- [x] **Logic tests** (in `tests/commands/runtime/test_runtime.py`;
   verbatim from the design's Test Stack Trace — General Setup: pytest +
   CliRunner; boundary mocks only: git via `mock.patch.object(subprocess,
   "run", ...)` with the CompletedProcess pattern, `GOGA_DOCKER` via
@@ -1259,21 +1268,33 @@ dropped) or a traceback escapes.
       `invoke(runtime, ["build", "-b"])`. Assert: non-zero exit, usage
       error — `build` carries no options; the dual `-b` exists only on
       `archive` (after the token) and the group (before).
-- [ ] **Debugging**: `.venv/bin/pytest tests/commands/runtime/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/commands/runtime/ -x` — fix
   implementation code until all pass (do NOT fix test code)
-- [ ] **Contract re-verification**: `runtime` is a `click.Group` in the
+  (56 passed first try — no fix needed; the one `ruff format` pass
+  collapsed four test signatures to single lines, formatting only)
+- [x] **Contract re-verification**: `runtime` is a `click.Group` in the
   cell facade `__all__` (7 names total); bare group exits 2; every
   documented failure is a `ClickException` (exit 1) except click-native
   usage failures (exit 2); stdout carries exactly one result line on
   success and nothing on failure; validation strictly ordered (in-image →
   argv → selection → branch → existence → destination → packaging)
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+  (verified — the ordering is literal in the callback bodies; the
+  exit-1/exit-2 split, empty stdout on failure, and single-line stdout on
+  success are pinned by the 20 logic scenarios)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — fix formatting if
   necessary; then the full battery and `goga lint` before committing
-- [ ] Verify `goga/commands/runtime/.usages/path-queries.md` and
+  (ruff check zero findings; one format pass then zero reformattings;
+  battery 8450 passed / 8 skipped — 8423 baseline + the 27 new tests;
+  goga lint 94 cells / 0 errors)
+- [x] Verify `goga/commands/runtime/.usages/path-queries.md` and
   `.usages/archive.md` stay truthful against the implemented behavior (no
   edit expected — both are current per the design's `.usages/` Update
   section; report any drift)
+  (verified against the implementation — one-line stdout, branch override
+  with empty-means-not-given, sanitization parity, dual `-b`, destination
+  semantics, collision/-o pointer, no-partial guarantees, host-side
+  refusal all truthful; no drift)
 
 ### Task 6: Facade re-export and root registration — `goga/commands` + `goga/cli.py` (TDD)
 

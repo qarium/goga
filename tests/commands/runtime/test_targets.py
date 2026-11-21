@@ -61,6 +61,7 @@ class TestTargetsContract:
             "resolve_build_target_dir",
             "resolve_effective_branch",
             "resolve_pipeline_target_dir",
+            "runtime",
             "sanitize_pipeline_name",
         ]
 
