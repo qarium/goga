@@ -24,7 +24,12 @@ def _patch_defaults(monkeypatch: pytest.MonkeyPatch, defaults_dir: Path) -> None
 
 
 class TestRunPipelineWorkflowResolution:
-    """Step 6 — workflow parameter resolution (no_workflow > workflow > basename)."""
+    """Step 6 — workflow parameter resolution (no_workflow > workflow > basename).
+
+    Plus the step-17 end-to-end threading scenario: the run-level
+    integration of the pipeline-declared assistants delivery (a stage-body
+    declaration reaching the written engine config with no workflow at hand).
+    """
 
     def test_run_pipeline_with_explicit_workflow_name(
         self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -310,3 +315,65 @@ class TestRunPipelineWorkflowResolution:
         assert workflow.prompt == "Hardening prompt"
         # No stage named zzz is skipped (the env skip value never merged).
         assert "zzz" not in workflow.stages
+
+    def test_run_pipeline_threads_pipeline_document(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        config_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A pipeline-declared assistant reaches the engine config as its ``goga-<name>`` profile.
+
+        The real (un-mocked) parse → compile chain runs through
+        ``run_pipeline`` on a pipeline whose stage body declares the
+        ``watcher`` assistant, with NO workflow resolved: the delivery can
+        only come from the parsed pipeline document threaded into the
+        step-17 configuration write. The written engine config must carry
+        the generated ``collaboration.profiles.goga-watcher`` entry bound
+        to the global agent's wrapper — the declaration → parse → compile
+        → delivery chain exercised at run level.
+        """
+        import yaml
+
+        _patch_defaults(monkeypatch, tmp_path / "defaults")
+
+        # The global agent comes from the authored configuration (the
+        # autouse minimal file carries an empty pipeline section).
+        (tmp_path / ".goga" / "config.yml").write_text("language: python\npipeline:\n  agent: claude\n")
+
+        # compile_flow requires flow_path.parent to already exist.
+        afm_dir.mkdir(parents=True)
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\n"
+            "description: Deploy pipeline\n"
+            "---\n"
+            "\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: Build it\n"
+            "  assistants:\n"
+            "    watcher:\n"
+            "      prompt: Watch the build.\n"
+            "      when: checkpoints\n"
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow:
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        mock_run_flow.assert_called_once()
+
+        config = yaml.safe_load(config_path.read_text())
+        profiles = config["collaboration"]["profiles"]
+        assert list(profiles) == ["goga-watcher"]
+        assert profiles["goga-watcher"] == {
+            "title": "watcher",
+            "command": "/home/goga/bin/claude-as-claude.sh",
+            "delegate": False,
+        }
+        # No workflow resolved → no delegation block → no task budget.
+        assert "limits" not in config["collaboration"]
