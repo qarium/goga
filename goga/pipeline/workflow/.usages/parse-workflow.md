@@ -23,8 +23,9 @@ Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
 - `build` — the strict six-field build block (see below).
 - `assistants` — the name-keyed catalog map of run-level helpers; the
   per-stage attachments (`stages.<name>.assistants`) are a name-keyed map
-  too — each entry a reference (`gate`/`when`, `when` required) or a full
-  inline declaration (the catalog field set plus `gate`/`when`).
+  too — each entry a reference (`gate`/`when`), a full inline declaration
+  (the catalog field set plus `gate`/`when`), an extension of a
+  pipeline-declared name (may omit `when`), or a `{skip: true}` veto.
 - `delegation` — the delegation-bounds block (`depth`, `max_tasks`).
 - `repeat` — the run-cycle tuning block (`max_cycles`, `keep_runs`; below).
 
@@ -138,7 +139,7 @@ raises a one-line error naming the workflow location.
 | notes | map[str]str | note buttons — map "note name → prompt text"; compiled into the stage's `buttons` field; stages block only; declarative |
 | reflect | map {file, mode?} | memory-reflection instruction — reflect method only; compiled into the stage's `reflect` field; stages block only; declarative |
 | memory | bool | memory-participation instruction — alignment method only; `true` participates, `false` equals absence; compiled into the stage's `memory_use` field; stages block only; declarative |
-| assistants | map | the stage's assistant attachments keyed by assistant name — a reference (`gate`/`when`) or a full inline declaration; `when` is required on every entry; an empty map equals absence; stages block only; declarative (override-style entries — no prompt/skills — are valid declarations; content resolves at compilation) |
+| assistants | map | the stage's assistant entries keyed by assistant name — a reference (`gate`/`when`), a full inline declaration, an extension of a pipeline-declared name (may omit `when`), or a `{skip: true}` veto; every entry carries exactly one meaningful instruction; an empty map equals absence; stages block only; declarative (origin classification, `when`-requirement, and namespace uniqueness are compilation checks) |
 | gates | list | the stage's check steps — a required `name`, exactly one of `script` (str or list of lines, joined at parse)/`agent` (str), optional `timeout`/`prompt` (`prompt` on `agent` steps only); an empty list equals absence; compiled into the stage's `verify` gate; stages block only; declarative |
 
 ## The notes field

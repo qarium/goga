@@ -63,7 +63,12 @@ compile_flow(overlay.workflow, ...)
   skills/env clears), omitted fields flow from the tool, a delivered name
   with no authored entry adds fresh (tool inline declarations under an
   authored name stay dropped); the delegation block is whole, and stage
-  assistant maps append with name deduplication.
+  assistant maps append with name deduplication — an appended entry may
+  carry any authored form (a reference, a full inline declaration, a
+  when-less extension, a `{skip: true}` veto): entries addressing names
+  the workflow-file does not declare (pipeline-file declarations) pass
+  through undistorted, and the origin classification plus the
+  effective-namespace uniqueness are compilation checks.
 - Every tool's view carries the same read-only profile fact (`profile` —
   name, content, source, or `None` without activation); the card and the
   run form deliver the same fact.

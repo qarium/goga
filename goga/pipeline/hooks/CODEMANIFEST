@@ -90,8 +90,18 @@ Annotations: |
   deduplication by name: the authored entries first in authored order,
   then the contributing entries in enumeration order, each entry whose
   name is already present on the stage dropped silently, and an appended
-  inline declaration whose name is already present anywhere in the merged
-  assistant namespace dropped silently the same way. The final
+  entry shaped as a declaration (any key beyond gate, when, skip) whose
+  name is already present anywhere in the merged workflow-side assistant
+  namespace is dropped silently the same way — the append rule is
+  form-blind. An appended stage-assistant entry may carry any authored
+  form — a reference, a full inline declaration, a when-less extension,
+  or a {skip: true} veto; a skip entry and a gate/when-only entry append
+  like any other: the merge never resolves a name beyond the workflow
+  document — an entry may address a name the workflow-file does not
+  declare (a pipeline-file declaration, an extension, or a veto of one),
+  and the entry's origin classification and the effective-namespace
+  uniqueness (the pipeline declarations included) are compilation checks
+  raised where both documents meet. The final
   document assembly carries the merged collaboration fields like every
   workflow-level field — they never vanish in the overlay. The gates
   follow the same preservation law: the workflow-level gates settings
@@ -403,10 +413,13 @@ Annotations: |
         ground — the authored entries first, in authored order; the
         contributing entries append in enumeration order, an entry whose
         name is already present on the stage dropped silently, and an
-        appended inline declaration whose name is already present
-        anywhere in the merged assistant namespace dropped silently the
-        same way; a stage with no authored entry takes the appended
-        contributing entries the same way
+        appended entry shaped as a declaration (any key beyond gate,
+        when, skip) whose name is already present anywhere in the merged
+        workflow-side assistant namespace dropped silently the same way;
+        a skip entry and a gate/when-only entry append like every other
+        entry (their origin classification belongs to compilation); a
+        stage with no authored entry takes the appended contributing
+        entries the same way
     5.2. stage gates: an ordinary stage field of the field-set-complete
         stage merge — an authored check-step list is never overwritten; a
         field the author left unset takes the value of the later
@@ -468,6 +481,13 @@ Annotations: |
       delivered catalog entry field by field
     - Workflows whose assistant names collide with no tool delivery
       merge to their authored workflow verbatim
+    - The merge is form-blind over the stage-assistant entry forms: a
+      skip veto, a when-less extension, a reference, and a full inline
+      declaration all ride the append rule unchanged; the merged
+      workflow document never resolves a name beyond the workflow-file —
+      entries addressing pipeline-file declarations pass through, and
+      every collision with them fails at compilation with the
+      effective-namespace errors
 
     Constraints:
     - Do not read or write the filesystem
@@ -481,6 +501,9 @@ Annotations: |
     - Do not read the agent or env fields of any contribution document
       — the globals are author-territory; only the base carries them
       into the overlay
+    - Do not classify an appended entry's origin (veto, extension,
+      reference, declaration) and do not resolve names against any
+      pipeline-file — the overlay is pipeline-blind by design
     - Do not merge content fields partially — prompt
       and skills replace whole (no text concatenation, no list union); the
       field unit is the merge unit
