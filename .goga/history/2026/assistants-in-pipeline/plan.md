@@ -1142,7 +1142,7 @@ cases: a tool-contributed extension entry addressing a pipeline-declared name ap
 pipeline namespace is invisible here); its collision with a workflow declaration of the same name
 surfaces at compilation.
 
-- [ ] **Tests (characterization — they pin CURRENT behavior and must pass BEFORE and AFTER the
+- [x] **Tests (characterization — they pin CURRENT behavior and must pass BEFORE and AFTER the
       docstring edit)**: extend `tests/pipeline/hooks/test_overlay_assistants.py` —
       `test_overlay_appends_skip_and_extension_forms_form_blind`: a base workflow stage with an
       authored entry; a contribution carrying on the same stage a `{skip: true}` entry (new name)
@@ -1150,12 +1150,12 @@ surfaces at compilation.
       contribution declaration colliding with an authored catalog name. Assert: the skip entry
       and the when-less extension append verbatim; the colliding declaration drops silently; no
       error, no resolution
-- [ ] **Code**: update the three docstrings per the documentation change (no logic edit)
-- [ ] **Run validation**: `pytest tests/pipeline/hooks -x` — all pass (the new test included,
+- [x] **Code**: update the three docstrings per the documentation change (no logic edit)
+- [x] **Run validation**: `pytest tests/pipeline/hooks -x` — all pass (the new test included,
       before and after the docstring edit)
-- [ ] **Contract re-verification**: `git diff` over `overlay.py` shows docstring/comment lines
+- [x] **Contract re-verification**: `git diff` over `overlay.py` shows docstring/comment lines
       only; `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/hooks/` — fix findings; `ruff format` the touched
+- [x] **Lint**: `ruff check goga/ tests/pipeline/hooks/` — fix findings; `ruff format` the touched
       files
 
 ### Task 7: `write_afm_config` — the three-artifact delivery (goga/pipeline)
