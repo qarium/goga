@@ -175,6 +175,16 @@ Invocation: `cli db migrate`
 - Each level is a `@click.group()`
 - Terminal commands are registered at their own level: `@db.command()`
 
+### Option positioning in nested groups
+
+- A group-level option binds **only before** the subcommand token; a
+  subcommand-level option binds **only after** it
+- The two positions are disjoint, so one short alias may safely carry
+  different meanings at the two levels — a group's `-b/--branch` and a
+  subcommand's `-b/--build` never collide during parsing
+- Document both meanings in `--help`; the residual cost is human-only
+  ambiguity, accepted deliberately
+
 ## Output and Error Handling
 
 ```python

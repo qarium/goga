@@ -17,6 +17,10 @@ Annotations: |
   with their purpose and optional suffix; they do not import the atomic helpers
   directly unless a facade composes them.
 
+  An optional explicit branch segment lets host-side observers address another
+  branch's state without git involvement; without it the branch is git-derived
+  exactly as before. Existing consumers pass no branch and observe no change.
+
   All routines are pure with respect to the filesystem: they return paths and
   strings, they do not create directories or write files. The single exception is
   no exception — `resolve_git_branch` reads git state in a read-only manner.
@@ -97,19 +101,29 @@ Annotations: |
     - Do not replace characters other than forward slashes — backslashes,
       spaces, and other special characters are preserved as-is
 
-"resolve_runtime_dir(purpose: str, ...suffix_parts: str) -> runtime_dir: Path":
+"resolve_runtime_dir(purpose: str, ...suffix_parts: str, branch: str | None = None) -> runtime_dir: Path":
   location: paths.py
   annotations: |
-    Compose the host-side runtime directory path for a given purpose, the current
-    project, the current git branch, and zero or more trailing suffix segments.
+    Compose the host-side runtime directory path for a given purpose, the
+    current project, an explicit or git-derived branch, and zero or more
+    trailing suffix segments.
 
-    `purpose`: runtime namespace segment — e.g. "builds" or "pipelines". Becomes
-               the directory immediately under ~/.goga/runtime/.
-    `...suffix_parts`: zero or more trailing path segments appended after the branch
-                    directory. Empty (the default) yields the branch-level
-                    directory itself. A single suffix is used by pipeline
-                    (pipeline_name); multiple suffixes are reserved for future
-                    consumers with deeper namespace requirements.
+    `purpose`: runtime namespace segment — e.g. "builds" or "pipelines".
+               Becomes the directory immediately under ~/.goga/runtime/.
+    `...suffix_parts`: zero or more trailing path segments appended after the
+                    branch directory. Empty (the default) yields the
+                    branch-level directory itself. A single suffix is used by
+                    pipeline (pipeline_name); multiple suffixes are reserved
+                    for future consumers with deeper namespace requirements.
+    `branch`: optional explicit branch segment. None or the empty string means
+              "not given" — the branch is derived from git via
+              `resolve_git_branch` (with its "default" fallback). A non-empty
+              value is slugified by the same rule as `resolve_git_branch`
+              (every forward slash replaced by a hyphen) and used directly —
+              git is not consulted and no branch validation is performed (the
+              formula stays pure and git-free; state of a deleted branch is a
+              legitimate address; typos surface as the consumer's
+              missing-target error).
     `runtime_dir`: absolute host path
                    ~/.goga/runtime/<purpose>/<normalized_project>/<branch>/<*suffix_parts>
 
@@ -118,7 +132,9 @@ Annotations: |
     Algorithm:
     1. Take the current working directory as the absolute project path
     2. Normalize the project path via `normalize_project_path`
-    3. Resolve the current git branch via `resolve_git_branch`
+    3. Resolve the branch segment: a non-empty `branch` is used with every
+       forward slash replaced by a hyphen; otherwise derive it via
+       `resolve_git_branch` (slugified git branch or the "default" fallback)
     4. Compose the runtime dir under the user's goga runtime area as
        <purpose>/<normalized>/<branch>/<joined suffix_parts>
     5. Return the composed absolute path
@@ -129,12 +145,18 @@ Annotations: |
       (creation is the caller's responsibility)
     - Empty `...suffix_parts` yields the branch-level directory
     - Multiple `...suffix_parts` are joined in order with the OS separator
+    - A non-empty `branch` produces exactly the path the git-derived form
+      produces for that branch — one formula, no second path scheme
+    - Slugification is idempotent — an already-slugified `branch` value
+      passes through unchanged
 
     Constraints:
     - Do not create the directory here — the caller handles creation
-    - Do not validate `purpose` against a whitelist — any non-empty string is
-      accepted; the caller owns the namespace
+    - Do not validate `purpose` against a whitelist — any non-empty string
+      is accepted; the caller owns the namespace
     - Do not validate suffix values semantically — they are path segments only
+    - Do not consult git or validate the branch when `branch` is non-empty —
+      no subprocess call, no repository check, no existence check
 
 ---
 
@@ -145,5 +167,6 @@ Description: |
   single shared formula
   ~/.goga/runtime/<purpose>/<normalized_project>/<branch>/<*suffix_parts>
   and exposes two atomic helpers plus one composite routine. Consumers call
-  resolve_runtime_dir with their purpose and optional suffix; atomic helpers
-  are consumed inside resolve_runtime_dir.
+  resolve_runtime_dir with their purpose, optional suffix, and optional
+  explicit branch segment; atomic helpers are consumed inside
+  resolve_runtime_dir.

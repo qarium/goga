@@ -62,6 +62,12 @@ Imports:
     Usages:
       - hooks-command
     From: goga/commands/hooks
+  - Types:
+      - runtime
+    Usages:
+      - path-queries
+      - archive
+    From: goga/commands/runtime
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -95,6 +101,14 @@ Annotations: |
   Use the `hooks-command` practice for consumer scenarios of the hooks
   command: the registry tree, the tool slice, and the exit codes.
 
+  Use the `path-queries` practice for consumer scenarios of the runtime
+  path queries: the one-line stdout contract of the build and pipeline
+  subcommands, the branch option semantics, and the scripting patterns.
+
+  Use the `archive` practice for consumer scenarios of the runtime archive
+  subcommand: the single-target selection, the deterministic archive naming
+  with its wrapper root, the destination semantics, and the failure modes.
+
 ---
 
 ->lint: {}
@@ -115,6 +129,7 @@ Annotations: |
 ->history: {}
 ->topics: {}
 ->hooks: {}
+->runtime: {}
 
 ---
 
