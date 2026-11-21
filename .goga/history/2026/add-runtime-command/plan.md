@@ -889,7 +889,7 @@ snippet in the explicit-destination case.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): create
+- [x] **Contract tests** (expected to fail at this stage): create
   `tests/commands/runtime/test_archive.py` — facade import of both routines
   from `goga.commands.runtime`; signature pins:
   `resolve_archive_destination(archive_stem: str, output: str | None =
@@ -897,7 +897,10 @@ snippet in the explicit-destination case.
   str, destination: Path) -> Path`; extend the cell facade
   `goga/commands/runtime/__init__.py` with the two names (`__all__` grows
   to six)
-- [ ] **REPL probes** (before writing code; all under `tmp_path` via
+  (verified red first — ImportError on the two names; green after the facade
+  grew to six; the Task 3 facade pin test updated accordingly — the planned
+  hard-failing change, renamed to `test_facade_all_lists_exactly_the_landed_names`)
+- [x] **REPL probes** (before writing code; all under `tmp_path` via
   `.venv/bin/python -c`): `tarfile.open(dest, "w:gz")` on a `0o444`
   pre-existing file in a writable directory raises `PermissionError` at
   open (and `unlink` would succeed there — the guard is what protects the
@@ -905,7 +908,11 @@ snippet in the explicit-destination case.
   "root/a.txt", …]` (wrapper-root layout); a symlink lands with
   `.issym()`; an archive written INSIDE the packaged tree does not include
   itself (built-in guard)
-- [ ] **Code**: create `goga/commands/runtime/archive.py`, algorithms
+  (all four probes re-verified live — PermissionError at open + unlink
+  succeeds in the writable dir; members `["root", "root/a.txt", "root/sub",
+  "root/sub/b.log"]` with `root` first; `issym()` True with linkname
+  `"a.txt"`; self-inclusion False)
+- [x] **Code**: create `goga/commands/runtime/archive.py`, algorithms
   verbatim from the design:
   ```
   resolve_archive_destination(archive_stem: str, output: str | None = None) -> Path:
@@ -939,10 +946,10 @@ snippet in the explicit-destination case.
   archive file. Google docstrings from the manifest annotations.
   Imports: `tarfile`, `pathlib.Path`, `click` (relative-intra rule N/A —
   no intra-package imports needed in this module)
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/commands/runtime/test_archive.py -x` — all pass; facade check for
   the two names
-- [ ] **Logic tests** (in `tests/commands/runtime/test_archive.py`;
+- [x] **Logic tests** (in `tests/commands/runtime/test_archive.py`;
   verbatim from the design's Test Stack Trace):
   - `test_resolve_archive_destination_matrix` — parametrized against
     `tmp_path`: default+absent → `cwd/<stem>.tar.gz`; default+exists →
@@ -975,16 +982,26 @@ snippet in the explicit-destination case.
     contains a symlink `link -> a.txt`. Assert:
     `tarfile.open(dest).getmember("<root>/link").issym()` is True (no
     dereference). Sufficiency: R7 "special files preserved as encountered".
-- [ ] **Debugging**: `.venv/bin/pytest tests/commands/runtime/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/commands/runtime/ -x` — fix
   implementation code until all pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade `__all__` = the six landed
+  (implementation needed no fix — two TEST-AUTHORING defects corrected, both
+  making assertions stricter, never weaker: the `default-exists` matrix row
+  never created its collision precondition, and the purity test asserted an
+  empty `tmp_path` that the autouse `_isolate_home` fixture seeds with
+  `.pytest_home` — the check moved to a dedicated `work/` cwd)
+- [x] **Contract re-verification**: facade `__all__` = the six landed
   names; `resolve_archive_destination` writes NOTHING (validation only);
   the cleanup is the guarded form (unlink only after a successful open);
   the source directory is read-only throughout (no modification, move,
   deletion inside `target_dir`)
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+  (verified live: facade exposes exactly the six names; the purity and
+  source-snapshot assertions are pinned in `test_archive.py`)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — fix formatting if
   necessary; then the full battery and `goga lint` before committing
+  (one I001 import-order autofix + SIM117/PT011 test edits + two collapsed
+  lines by `ruff format`; gates clean after; battery 8423 passed / 8 skipped
+  — 8408 baseline + the 15 new archive tests; goga lint 94 cells / 0 errors)
 
 ### Task 5: `runtime.py` — the click group with `build` / `pipeline` / `archive` (TDD)
 

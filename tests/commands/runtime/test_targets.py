@@ -53,9 +53,11 @@ class TestTargetsContract:
         assert callable(sanitize_pipeline_name)
         assert callable(resolve_pipeline_target_dir)
 
-    def test_facade_all_lists_exactly_the_four_names(self) -> None:
-        """__all__ exposes exactly the four landed target-routine names."""
+    def test_facade_all_lists_exactly_the_landed_names(self) -> None:
+        """__all__ exposes exactly the landed names — the facade grows as entities land."""
         assert runtime_facade.__all__ == [
+            "package_runtime_archive",
+            "resolve_archive_destination",
             "resolve_build_target_dir",
             "resolve_effective_branch",
             "resolve_pipeline_target_dir",

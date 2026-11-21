@@ -1,5 +1,6 @@
 """Runtime command cell — the host-side observer surface of the runtime state."""
 
+from .archive import package_runtime_archive, resolve_archive_destination
 from .targets import (
     resolve_build_target_dir,
     resolve_effective_branch,
@@ -8,6 +9,8 @@ from .targets import (
 )
 
 __all__ = [
+    "package_runtime_archive",
+    "resolve_archive_destination",
     "resolve_build_target_dir",
     "resolve_effective_branch",
     "resolve_pipeline_target_dir",
