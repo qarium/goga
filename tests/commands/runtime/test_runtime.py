@@ -6,7 +6,8 @@ subcommands.
 The group carries the shared ``-b/--branch`` scope (bound only before the
 subcommand token); the subcommands wire the ``targets``/``archive``
 routines into the CLI surface with the project's error strategy: the
-in-image refusal, the empty/dash name guards, and the XOR target
+in-image refusal, the empty/dash name guards (plus the ``.``/``..``
+branch-name and archive-label refusals), and the XOR target
 selection are ``click.ClickException`` clean errors (exit 1, stdout
 empty), while argv-form errors (a missing NAME, an unknown option after
 the subcommand, a bare group) are click's own usage errors (exit 2).
@@ -326,6 +327,71 @@ class TestRuntimeRefusals:
 
         with mock.patch.object(subprocess, "run", return_value=_git_completed("feature-x\n")):
             result = CliRunner().invoke(runtime, ["archive", "-p", "-weird"])
+
+        assert result.exit_code == 1
+        assert "invalid pipeline name" in result.stderr
+        assert result.stdout == ""
+        assert list(work.glob("*.tar.gz")) == []
+
+    def test_runtime_branch_dot_values_are_clean_error(self) -> None:
+        """`.`/`..` as -b are clean errors — the segment would escape the project/branch scope."""
+        for value in (".", ".."):
+            result = CliRunner().invoke(runtime, ["-b", value, "build"])
+
+            assert result.exit_code == 1
+            assert "invalid branch name" in result.stderr
+            assert result.stdout == ""
+
+    def test_runtime_branch_dot_archive_creates_no_archive(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """-b .. archive is refused before any packaging — no whole-level sweep into a shared artifact."""
+        work = tmp_path / "work"
+        work.mkdir()
+        monkeypatch.chdir(work)
+
+        result = CliRunner().invoke(runtime, ["-b", "..", "archive", "-b"])
+
+        assert result.exit_code == 1
+        assert "invalid branch name" in result.stderr
+        assert list(work.glob("*.tar.gz")) == []
+
+    def test_runtime_pipeline_dot_names_are_clean_error(self) -> None:
+        """`.`/`..` as NAME are clean errors — they address the branch-/project-level directory, not one pipeline."""
+        for value in (".", ".."):
+            result = CliRunner().invoke(runtime, ["pipeline", value])
+
+            assert result.exit_code == 1
+            assert "invalid pipeline name" in result.stderr
+            assert result.stdout == ""
+
+    def test_runtime_archive_dot_pipeline_value_is_clean_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """`.`/`..` as -p is refused — it would package the branch-/project-level directory, not one target."""
+        work = tmp_path / "work"
+        work.mkdir()
+        monkeypatch.chdir(work)
+
+        for value in (".", ".."):
+            with mock.patch.object(subprocess, "run", return_value=_git_completed("feature-x\n")):
+                result = CliRunner().invoke(runtime, ["archive", "-p", value])
+
+            assert result.exit_code == 1
+            assert "invalid pipeline name" in result.stderr
+            assert result.stdout == ""
+            assert list(work.glob("*.tar.gz")) == []
+
+    def test_runtime_archive_slash_pipeline_value_is_clean_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A -p value containing `/` is refused — the name forms the archive stem and wrapper root, one name each."""
+        work = tmp_path / "work"
+        work.mkdir()
+        monkeypatch.chdir(work)
+
+        with mock.patch.object(subprocess, "run", return_value=_git_completed("feature-x\n")):
+            result = CliRunner().invoke(runtime, ["archive", "-p", "a/b"])
 
         assert result.exit_code == 1
         assert "invalid pipeline name" in result.stderr

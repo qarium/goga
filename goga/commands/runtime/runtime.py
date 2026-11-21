@@ -35,7 +35,7 @@ class _RuntimeScope:
     default=None,
     help="Branch segment replacing the git-derived one, applied to every "
     "subcommand (placed before the subcommand token; an empty value means "
-    "not given)",
+    "not given; the literal '.' and '..' are refused)",
 )
 @click.pass_context
 def runtime(ctx: click.Context, branch: str | None = None) -> None:
@@ -51,7 +51,17 @@ def runtime(ctx: click.Context, branch: str | None = None) -> None:
     the subcommand token it is this group's --branch option; after the
     archive token it is the archive subcommand's --build flag. The two
     positions never collide during parsing.
+
+    The branch value is slugified and trusted — no git consultation — with
+    one refusal: the literal "." and ".." cannot form a single
+    filesystem-safe path component (no git branch can carry them either),
+    and composed into the location they would silently escape the
+    project/branch scope — for archive, packaging a wider tree than the
+    one target.
     """
+    if branch in {".", ".."}:
+        raise click.ClickException(f"invalid branch name {branch!r}")
+
     ctx.ensure_object(_RuntimeScope)
     ctx.obj.branch = branch
 
@@ -86,12 +96,16 @@ def pipeline(scope: _RuntimeScope, name: str) -> None:
     path is the directory the run actually uses. The path is printed even
     when the directory does not exist yet; nothing is created on disk. A
     name starting with "-" is passed after -- (goga runtime pipeline --
-    NAME). The path and only the path — exactly one stdout line.
+    NAME); an empty name or the literal "."/".." is a clean error — neither
+    addresses one pipeline's artifacts. The path and only the path —
+    exactly one stdout line.
     """
     if is_in_docker():
         raise click.ClickException(_HOST_ONLY_MESSAGE)
 
-    if name == "" or name.startswith("-"):
+    # "." and ".." compose into the branch-/project-level directory, not
+    # one pipeline's artifacts — the same addressability refusal as "".
+    if name == "" or name.startswith("-") or name in {".", ".."}:
         raise click.ClickException(f"invalid pipeline name {name!r}")
 
     segment = resolve_effective_branch(scope.branch)
@@ -146,7 +160,13 @@ def archive(
     if build == (pipeline is not None):
         raise click.ClickException("exactly one target is required: -b/--build or -p/--pipeline NAME")
 
-    if pipeline is not None and (pipeline == "" or pipeline.startswith("-")):
+    # Beyond the empty/dash guards: "." and ".." would package the branch-
+    # or project-level directory (a whole-branch/project sweep, not one
+    # target), and a "/" survives the colon sanitization into the archive
+    # stem and wrapper root — both must be a single directory name.
+    if pipeline is not None and (
+        pipeline == "" or pipeline.startswith("-") or pipeline in {".", ".."} or "/" in pipeline
+    ):
         raise click.ClickException(f"invalid pipeline name {pipeline!r}")
 
     segment = resolve_effective_branch(scope.branch)

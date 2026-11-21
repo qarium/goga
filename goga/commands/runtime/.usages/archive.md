@@ -78,6 +78,13 @@ to repeat, subject to the default-name collision rule.
   kept; a mid-packaging failure removes the partial archive.
 - A `-p` value starting with `-` is a clean error — it would be parsed as
   a flag.
+- A `-p` value that is empty or the literal `.`/`..` is a clean error — it
+  would package the branch- or project-level directory, not one target.
+- A `-p` value containing `/` is a clean error — the sanitized name forms
+  the archive stem and the single wrapper root, which must each be one
+  directory name.
+- The literal `.`/`..` as the group's `-b/--branch` is a clean error — the
+  segment would escape the project/branch scope and package a wider tree.
 
 ## Notes
 

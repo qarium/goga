@@ -42,9 +42,12 @@ printed path is the directory the run actually uses.
 The `-b/--branch` group option (placed before the subcommand) replaces the
 git-derived branch segment with the slugified given value (`/` → `-`). No
 git validation happens — deleted branches stay addressable; a typo produces
-a path whose directory simply does not exist. Without the option the branch
-is git-derived, falling back to `default` outside a repository or on a
-detached HEAD. An empty value means "not given".
+a path whose directory simply does not exist. The one refusal is the
+literal `.` or `..`: those cannot form a single path component and would
+silently escape the project/branch scope, so they are a clean
+`invalid branch name` error. Without the option the branch is git-derived,
+falling back to `default` outside a repository or on a detached HEAD. An
+empty value means "not given".
 
 ### Scripting contract
 
@@ -70,3 +73,8 @@ return the same value.
 
 - A missing NAME for `pipeline` is a usage error (non-zero exit).
 - A NAME starting with `-` is a clean error — it would be parsed as a flag.
+- An empty NAME or the literal `.`/`..` is a clean error — neither
+  addresses one pipeline's artifacts (they would address the branch- or
+  project-level directory).
+- The literal `.`/`..` as `-b/--branch` is a clean error — the segment
+  would escape the project/branch scope.

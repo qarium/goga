@@ -62,7 +62,12 @@ Annotations: |
               No git validation is performed — the value is slugified and
               trusted (state of a deleted branch is a legitimate address;
               a typo surfaces as the archive subcommand's missing-target
-              error).
+              error) — with one refusal: the literal "." and ".." are a
+              clean error in the group callback; they cannot form a single
+              filesystem-safe path component (no git branch can carry
+              them), and composed into the location they silently escape
+              the project/branch scope — for archive, packaging a wider
+              tree than the one target.
 
     Use the `click` practice for the group decorator, the group option,
     and the subcommand registration.
@@ -121,8 +126,10 @@ Annotations: |
       Algorithm:
       1. Refuse inside the goga image: `is_in_docker` returning True is a
          clean host-side-only error (stderr, non-zero exit)
-      2. Reject an empty `name` or one starting with "-" as a clean error
-         (argv parsability)
+      2. Reject an empty `name`, one starting with "-", or the literal
+         "."/".." as a clean error (argv parsability; an empty or dot value
+         addresses the branch-/project-level directory, not one pipeline's
+         artifacts)
       3. Resolve the effective branch segment via `resolve_effective_branch`
          with the group branch
       4. Resolve the target directory via `resolve_pipeline_target_dir`
@@ -162,9 +169,11 @@ Annotations: |
          clean host-side-only error (stderr, non-zero exit)
       2. Validate the target selection: exactly one of `build`, `pipeline`
          must be given — neither or both is a usage error; a `pipeline`
-         value that is empty or starts with "-" is a clean error (argv
-         parsability; an empty value would address the branch-level
-         directory, not one pipeline's artifacts)
+         value that is empty, starts with "-", is the literal "."/".."
+         (those address the branch-/project-level directory — a whole-
+         branch/project sweep, not one target), or contains "/" (the
+         sanitized name forms the archive stem and the single wrapper
+         root, which must each be one directory name) is a clean error
       3. Resolve the effective branch segment via `resolve_effective_branch`
          with the group branch
       4. Resolve the target: the build selection resolves the directory via

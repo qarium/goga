@@ -14,7 +14,7 @@ goga runtime [-b BRANCH] build|pipeline NAME|archive (-b | -p NAME) [-o PATH]
 
 The effective branch segment — the `<branch>` part of every path and archive name — is resolved once per invocation:
 
-- With the group option `-b`/`--branch`, the given value: every forward slash replaced by a hyphen (`release/1.2` → `release-1.2`), used directly — git is not consulted, no validation happens, so the state of a deleted branch stays addressable and a typo simply addresses a directory that does not exist.
+- With the group option `-b`/`--branch`, the given value: every forward slash replaced by a hyphen (`release/1.2` → `release-1.2`), used directly — git is not consulted, no branch validation happens, so the state of a deleted branch stays addressable and a typo simply addresses a directory that does not exist. The one refusal is the literal `.` or `..`: those cannot form a single path component and would silently escape the project/branch scope (for `archive`, packaging a wider tree than the one target) — a clean `invalid branch name` error.
 - Without it, the current git branch (slashes → hyphens), falling back to `default` when git is missing, the directory is not a repository, or HEAD is detached.
 - An empty value (`-b ""`) counts as not given.
 
@@ -40,7 +40,7 @@ tree "$(goga runtime pipeline pybuggy:api)"
 # /home/user/.goga/runtime/pipelines/<normalized-project>/<branch>/pybuggy-api
 ```
 
-NAME is the pipeline name as used at run time; a `:` in it becomes `-` in the path segment, exactly as the run composes it — the printed path is the directory the run actually uses. A name starting with `-` is passed after `--` (`goga runtime pipeline -- -weird`); an empty or dash-leading name is a clean error, not a path. Exactly one stdout line.
+NAME is the pipeline name as used at run time; a `:` in it becomes `-` in the path segment, exactly as the run composes it — the printed path is the directory the run actually uses. A name starting with `-` is passed after `--` (`goga runtime pipeline -- -weird`); an empty, dash-leading, or literal `.`/`..` name is a clean error, not a path. Exactly one stdout line.
 
 ## `goga runtime archive`
 
@@ -58,7 +58,7 @@ goga runtime -b release/1.2 archive -b   # another branch's build artifacts
 | `-p`, `--pipeline` | value | Select the named pipeline's artifacts directory as the target (sanitized as at run time) |
 | `-o`, `--output` | value | Write the archive to this path instead of the default name in the current directory |
 
-Exactly one target selection per invocation — neither or both is a clean error. The archive holds the target's full recursive contents under the single wrapper root `goga-runtime-<target>-<branch>/` (the same string as the default filename), preserving the relative structure — a bare extraction cannot scatter files, special files are preserved as encountered, and the archive opens with standard tools on a machine without goga. The source state is never modified.
+Exactly one target selection per invocation — neither or both is a clean error. A `-p` value that is empty, dash-leading, the literal `.`/`..`, or contains `/` is a clean error — the first three would address the branch- or project-level directory (a whole-branch or whole-project sweep, not one target), and a `/` would break the single-name archive stem and wrapper root. The archive holds the target's full recursive contents under the single wrapper root `goga-runtime-<target>-<branch>/` (the same string as the default filename), preserving the relative structure — a bare extraction cannot scatter files, special files are preserved as encountered, and the archive opens with standard tools on a machine without goga. The source state is never modified.
 
 ### Destination semantics
 
@@ -72,7 +72,7 @@ A missing target directory is a clean error naming the missing path, and no arch
 | Code | Meaning |
 |------|---------|
 | `0` | Success — the path or the created archive's path printed (exactly one line) |
-| `1` | A clean domain error: inside the goga image (host-side only), an empty or dash-leading pipeline name, neither/both archive targets, a missing target directory, a default-name collision, an `-o` pointing at a directory or under a missing parent, or a packaging `OSError` |
+| `1` | A clean domain error: inside the goga image (host-side only), an invalid branch name (the literal `.`/`..`), an invalid pipeline name (empty, dash-leading, `.`/`..`, or `/`-containing under `-p`), neither/both archive targets, a missing target directory, a default-name collision, an `-o` pointing at a directory or under a missing parent, or a packaging `OSError` |
 | `2` | A usage error (a missing NAME, an unknown option, a bare `goga runtime` — which prints help) |
 
 ## Notes
