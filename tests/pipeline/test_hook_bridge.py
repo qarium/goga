@@ -21,7 +21,6 @@ import inspect
 import io
 import json
 import logging
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +29,8 @@ import pytest
 from goga.hooks.catalog import declared_actions
 from goga.pipeline import hook_bridge
 from goga.pipeline.hooks import RunIdentity
+
+from tests.conftest import child_interpreter_env
 
 
 def _stage_payload() -> dict[str, object]:
@@ -127,7 +128,13 @@ import goga.pipeline.hook_bridge
 
 print(sorted(module for module in sys.modules if module.startswith(prefixes)))
 """
-        result = subprocess.run([sys.executable, "-c", child], check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, "-c", child],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=child_interpreter_env(Path(__file__).resolve().parents[2]),
+        )
 
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == "[]"
@@ -608,7 +615,7 @@ def _spawn_hook_process(event: str, stdin_text: str | None) -> subprocess.Comple
 
     return subprocess.run(
         [sys.executable, "-c", _hook_child_code()],
-        env={**os.environ, "GOGA_DOCKER": "1", "AFM_HOOK_EVENT": event, "PYTHONPATH": str(repo_root)},
+        env=child_interpreter_env(repo_root, GOGA_DOCKER="1", AFM_HOOK_EVENT=event),
         capture_output=True,
         text=True,
         timeout=60,

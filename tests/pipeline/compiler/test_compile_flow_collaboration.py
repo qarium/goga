@@ -1291,8 +1291,17 @@ class TestTwoSurfaceAssembly:
                 "duplicate assistant name: auditor "
                 "(pipeline.build.assistants.auditor, pipeline.review.assistants.auditor)",
             ),
+            (
+                "name: demo\ndescription: D\n---\n"
+                "build:\n  title: Build\n  prompt: Make\n"
+                "review:\n  title: Review\n  prompt: Check\n"
+                "  assistants:\n    watcher:\n      prompt: Watch.\n      when: checkpoints\n",
+                "stages:\n  build:\n    assistants:\n      watcher:\n        prompt: Guard.\n        when: start\n",
+                "duplicate assistant name: watcher "
+                "(workflow.stages.build.assistants.watcher, pipeline.review.assistants.watcher)",
+            ),
         ],
-        ids=["catalog-vs-pipeline", "inline-vs-catalog", "pipeline-vs-pipeline"],
+        ids=["catalog-vs-pipeline", "inline-vs-catalog", "pipeline-vs-pipeline", "inline-vs-pipeline"],
     )
     def test_namespace_collision_names_both_sites(
         self,
@@ -1305,8 +1314,10 @@ class TestTwoSurfaceAssembly:
 
         One global uniqueness domain — the catalog, the inline declarations,
         and the pipeline declarations — with the one collision message shape;
-        the extension exclusion never applies here (no entry addresses a
-        same-stage pipeline declaration in these fixtures).
+        the extension exclusion applies only to the entry's OWN stage (the
+        ``inline-vs-pipeline`` row declares ``watcher`` inline on ``build``
+        while ``review``'s pipeline body declares it — a cross-stage
+        extension-shaped entry is no extension, it collides).
         """
         with pytest.raises(StructuralError, match=re.escape(expected)):
             _compile(tmp_path, pipeline_text, workflow_text)

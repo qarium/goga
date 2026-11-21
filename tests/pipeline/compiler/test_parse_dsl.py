@@ -563,6 +563,11 @@ class TestParseDslStageAssistants:
                 "invalid assistant name in stage build.assistants.bad name!: bad name!",
             ),
             (
+                "    123:\n      prompt: X\n      when: start\n",
+                "non-str name",
+                "invalid assistant name in stage build.assistants.123: 123",
+            ),
+            (
                 "    assistant:\n      prompt: X\n      when: start\n",
                 "reserved name",
                 "assistant name is reserved",

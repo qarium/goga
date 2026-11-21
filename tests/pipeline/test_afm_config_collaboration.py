@@ -22,6 +22,7 @@ file — config or closure — is written.
 from __future__ import annotations
 
 import inspect
+import re
 import sys
 from pathlib import Path
 
@@ -39,6 +40,7 @@ from goga.pipeline.compiler import (
     PipelineHeader,
     StagesBody,
     StageStep,
+    StructuralError,
     compile_flow,
     serialize_flow,
 )
@@ -492,11 +494,13 @@ class TestWriteAfmConfigCollaborationLogic:
         """A pipeline-declared name takes its delivery fields from its extension entry (SC3 delivery).
 
         ``sec`` is pipeline-declared on ``build`` and extended there with
-        ``agent: codex`` — the pipeline branch resolves the name through its
-        declaring stage's entry, so the profile's command is the codex
-        wrapper; the catalog-declared ``reviewer`` keeps the global agent's
-        command, and the extension-less ``noter`` falls back to the global
-        agent (the loop copies collapse into one profile).
+        ``agent: codex`` — the extension entry is declaration-shaped, so it
+        joins the workflow-side namespace and the name resolves through it,
+        so the profile's command is the codex wrapper; the catalog-declared
+        ``reviewer`` keeps the global agent's command, and the
+        extension-less ``noter`` falls back to the global agent through the
+        ``pipeline.<stage>`` branch (the loop copies collapse into one
+        profile).
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
@@ -554,6 +558,94 @@ class TestWriteAfmConfigCollaborationLogic:
             "delegate": False,
         }
         assert profiles["goga-noter"]["command"] == "/home/goga/bin/claude-as-claude.sh"
+
+    def test_extension_delivery_delegate_and_env_reach_the_profile(
+        self, tmp_path: Path, config_path: Path, closure_base: Path
+    ) -> None:
+        """An extension entry's ``delegate``/``env`` ride the pipeline-declared name's profile.
+
+        ``sec`` is pipeline-declared on ``build`` and extended there with
+        ``delegate: true`` and an env map — the extension entry joins the
+        workflow-side namespace, so its delivery fields reach the profile:
+        the delegate flag materializes ``true`` and the env resolves to an
+        owner-only sh closure as the command; the extension-less ``noter``
+        (pipeline-declared on ``review``, no workflow entry) materializes
+        ``delegate: false`` and the global agent. An illegal env key on an
+        extension entry fires the same strict pre-run error as a catalog
+        entry's, before any file is written.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: demo\n"
+            "description: D\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "  assistants:\n"
+            "    sec:\n"
+            "      prompt: Base audit.\n"
+            "      when: finish\n"
+            "review:\n"
+            "  title: Review\n"
+            "  prompt: Check\n"
+            "  assistants:\n"
+            "    noter:\n"
+            "      prompt: Note.\n"
+            "      when: message\n"
+        )
+        workflow = parse_workflow(
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      sec:\n"
+            "        prompt: Also the lockfile.\n"
+            "        when: checkpoints\n"
+            "        delegate: true\n"
+            "        env:\n"
+            "          SEC_MODE: strict\n"
+            "        agent: codex\n"
+        )
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
+
+        write_afm_config("claude", flow_doc, workflow, pipeline_doc)
+
+        closure = closure_base / "goga-sec"
+        assert closure.exists()
+        assert closure.read_text() == (
+            '#!/bin/sh\nexport SEC_MODE=strict\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        )
+        assert closure.stat().st_mode & 0o777 == 0o700
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert profiles["goga-sec"] == {
+            "title": "sec",
+            "command": str(closure),
+            "delegate": True,
+        }
+        assert profiles["goga-noter"] == {
+            "title": "noter",
+            "command": "/home/goga/bin/claude-as-claude.sh",
+            "delegate": False,
+        }
+
+        # An illegal env key on an extension entry is the same strict pre-run
+        # error — fired before any file is written.
+        bad = parse_workflow(
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      sec:\n"
+            "        prompt: Also the lockfile.\n"
+            "        when: checkpoints\n"
+            "        env:\n"
+            "          BAD-KEY: v\n"
+        )
+
+        with pytest.raises(ValueError, match=r"invalid environment variable name in the sec assistant env: 'BAD-KEY'"):
+            write_afm_config("claude", flow_doc, bad, pipeline_doc)
 
     def test_write_afm_config_bare_head_without_artifacts(self, config_path: Path) -> None:
         """Neither declaration surface alone writes profiles — the fixed gating's negative half (D1).
@@ -978,3 +1070,46 @@ class TestCollaborationDeliveryIntegration:
 
         assert list(profiles) == ["goga-auditor"]
         assert profiles["goga-auditor"]["command"] == "/home/goga/bin/claude-as-claude.sh"
+
+    def test_tool_contributed_when_less_reference_dies_at_compile(self, tmp_path: Path) -> None:
+        """A contributed bare reference (no ``when``) passes the merge and dies at compilation.
+
+        The overlay is form-blind — it appends the entry untouched and never
+        invents an engagement — so the boundary behavior lives in
+        ``compile_flow``: the origin-aware check rejects a when-less entry
+        naming no pipeline declaration of the stage, with the strict text
+        naming the stage the tool never authored. In 2.1.x the model's
+        ``when`` default (``"checkpoints"``) carried such a contribution;
+        the absence-preserving model made the omission the author's error.
+        """
+        from goga.pipeline.hooks import ToolContribution, merge_workflow_overlay
+
+        workflow_path = _write_chain_inputs(
+            tmp_path,
+            ["build"],
+            "prompt: authored\nstages:\n  build:\n    agent: claude\n",
+        )
+        authored = parse_workflow(workflow_path.read_text())
+
+        # The tool ships the catalog entry AND a bare stage reference to it —
+        # the reference resolves (so the unknown-reference check passes) and
+        # the when-less omission is what compilation rejects.
+        contribution = ToolContribution(
+            tool="demo",
+            document=WorkflowDocument(
+                assistants={"qa": WorkflowAssistant(name="qa", prompt="QA.")},
+                stages={"build": WorkflowStage(assistants={"qa": WorkflowAssistant(name="qa")})},
+            ),
+        )
+
+        merged = merge_workflow_overlay(authored, [contribution]).workflow
+
+        assert merged is not None
+        assert merged.stages["build"].assistants is not None
+        assert "qa" in merged.stages["build"].assistants
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("when is required in workflow.stages.build.assistants.qa"),
+        ):
+            compile_flow(tmp_path / "pipeline.yml", tmp_path / "flow.yml", workflow=merged)

@@ -596,9 +596,9 @@ naming the authoring site (`workflow.assistants.<name>` or
 namespace — an entry no stage references, or one declared on a `skip: true`
 stage, is still authored content and still checked.
 
-`name`, `gate`, and `when` never appear in a catalog entry value — the map
-key is the name itself, and `gate`/`when` are attachment parameters
-(authoring either in the catalog is a structural error).
+`name`, `gate`, `when`, and `skip` never appear in a catalog entry value —
+the map key is the name itself, and `gate`/`when`/`skip` are attachment
+parameters (authoring any of them in the catalog is a structural error).
 
 The top-level `delegation:` block accepts:
 
@@ -614,7 +614,7 @@ or of the `assistants:` catalog alone — is valid.
 The per-stage `assistants` instruction is a name-keyed map — each key names
 the assistant (identifying the catalog entry for a reference, or the
 declaration itself for an inline entry), and each value carries the
-attachment parameters. Two entry forms:
+attachment parameters. Four entry forms:
 
 1. **A reference** — a value carrying only `gate`/`when`: the agent,
    prompt, skills, delegate permission, and env come from the catalog
@@ -625,7 +625,17 @@ attachment parameters. Two entry forms:
    (the effective-content rule above applies after the merge). Note:
    `skills` authored here has no effect — the engine
    accepts skills only on run-level team entries, and only catalog
-   entries become team members (see the behavior rules below).
+   entries and pipeline-file stage declarations become team members
+   (see the behavior rules below).
+3. **An extension of a pipeline-declared name** — a value carrying
+   declaration keys (`prompt`, `skills`, `agent`, `delegate`, `env`)
+   whose name the addressed stage's pipeline-file body declares. May omit
+   `when`/`gate` — an omitted one inherits the declaration's (an authored
+   `gate: false` downgrades it); see [Governing pipeline-shipped
+   assistants](#governing-pipeline-shipped-assistants).
+4. **A `{skip: true}` veto** — the key alone, dropping the pipeline
+   declaration's attachment, team member, and profile for this workflow
+   (the stage still runs).
 
 | Attachment key | Type | Default | Description |
 |----------------|------|---------|-------------|
@@ -666,7 +676,9 @@ Behavior rules:
   a workflow extend-entry body is a structural error.
 - **Defaults are materialized, never invented.** `gate` and `max_tasks`
   always carry their materialized values into the compiled output; `when`
-  has no default — it is authored on every attachment, and the compiled
+  has no default of its own — it is authored on every entry naming a
+  workflow-declared assistant, and an extension of a pipeline-declared
+  assistant inherits the pipeline's `when` when omitted; the compiled
   engagement value is always written explicitly. `delegate` materializes
   `false` only at delivery: while authoring it stays tri-state, so an
   unset value can inherit from a tool-delivered base in the

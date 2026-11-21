@@ -23,12 +23,13 @@ accident but absent from ``__all__`` is not part of the contract surface.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import goga.pipeline as pipeline_facade
+
+from tests.conftest import child_interpreter_env
 
 NEW_FACADE_NAMES = (
     "PipelineSummary",
@@ -65,7 +66,7 @@ def _run_child(code: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         timeout=60,
-        env={**os.environ, "PYTHONPATH": str(repo_root)},
+        env=child_interpreter_env(repo_root),
     )
 
 
