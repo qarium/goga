@@ -765,39 +765,39 @@ The step fields: trailing `assistants: dict[str, PipelineAssistant] | None = Non
 models; the `body` docstring line gains "and the extracted assistants key" (the verbatim body
 excludes it).
 
-- [ ] **Contract tests**: extend `tests/pipeline/compiler/test_data_models.py`
+- [x] **Contract tests**: extend `tests/pipeline/compiler/test_data_models.py`
       `TestDataModelsContract` — `PipelineAssistant`: facade identity + `__all__` membership,
       `is_kw_only_dataclass`, signature exactly `[name, prompt, skills, when, gate]` with
       defaults `[empty, None, None, empty, False]` and annotations `[str, str | None,
       list[str] | None, str, bool]`; `PhaseStep`/`StageStep`: the parameter lists gain trailing
       `assistants` defaulting `None` with annotation `dict[str, PipelineAssistant] | None`;
       update the module docstring's coverage line (expected to fail at this stage)
-- [ ] **Code**: create `goga/pipeline/compiler/pipeline_assistant.py` — one-line module docstring
+- [x] **Code**: create `goga/pipeline/compiler/pipeline_assistant.py` — one-line module docstring
       ("The ``PipelineAssistant`` dataclass — one pipeline-file stage-declared helper."),
       `from __future__ import annotations`, `@dataclass(kw_only=True)` class with Google-style
       docstring (Args per field: name/prompt/skills/when/gate semantics from the contract)
-- [ ] **Code**: add the trailing `assistants` field to `PhaseStep` (`phase_step.py`) and
+- [x] **Code**: add the trailing `assistants` field to `PhaseStep` (`phase_step.py`) and
       `StageStep` (`stage_step.py`) with docstring lines ("The step's pipeline assistant
       declarations keyed by assistant name, in authored order — None when the source body carries
       no assistants key or an empty map"); both models import `PipelineAssistant` for the
       annotation (TYPE_CHECKING or runtime per the file's existing style — the modules currently
       import nothing beyond `dataclasses`/`typing`; a `TYPE_CHECKING` import keeps them
       import-cheap, matching `from __future__ import annotations`)
-- [ ] **Code**: export from the facade — in `goga/pipeline/compiler/__init__.py` add
+- [x] **Code**: export from the facade — in `goga/pipeline/compiler/__init__.py` add
       `from .pipeline_assistant import PipelineAssistant` (alphabetical position after
       `from .phases_body import PhasesBody`, before `from .pipeline_document import
       PipelineDocument`) and `"PipelineAssistant"` in `__all__` in the same slot
-- [ ] **Interface verification**: `pytest tests/pipeline/compiler/test_data_models.py -x` — all
+- [x] **Interface verification**: `pytest tests/pipeline/compiler/test_data_models.py -x` — all
       pass
-- [ ] **Logic tests**: extend `TestDataModelsLogic` — `PipelineAssistant(name="x", when="start")`
+- [x] **Logic tests**: extend `TestDataModelsLogic` — `PipelineAssistant(name="x", when="start")`
       carries `gate=False` and `None` prompt/skills; `skills=[]` round-trips as a value;
       constructing without `when` raises `TypeError`; positional construction raises `TypeError`
-- [ ] **Debugging**: `pytest tests/pipeline/compiler/test_data_models.py -x` — fix implementation
+- [x] **Debugging**: `pytest tests/pipeline/compiler/test_data_models.py -x` — fix implementation
       code until all tests pass
-- [ ] **Contract re-verification**: facade import works
+- [x] **Contract re-verification**: facade import works
       (`python -c "from goga.pipeline.compiler import PipelineAssistant"`); the model validates
       nothing; `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/compiler/` — fix findings; `ruff format` the
+- [x] **Lint**: `ruff check goga/ tests/pipeline/compiler/` — fix findings; `ruff format` the
       touched files (`pipeline_assistant.py`, `phase_step.py`, `stage_step.py`, `__init__.py`,
       `test_data_models.py`)
 

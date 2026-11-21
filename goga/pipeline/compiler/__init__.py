@@ -14,6 +14,7 @@ from .flow_verify_step import FlowVerifyStep
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
+from .pipeline_assistant import PipelineAssistant
 from .pipeline_document import PipelineDocument
 from .pipeline_header import PipelineHeader
 from .pipeline_roles import PipelineRoles
@@ -34,6 +35,7 @@ __all__: list[str] = [
     "FlowVerifyStep",
     "PhaseStep",
     "PhasesBody",
+    "PipelineAssistant",
     "PipelineDocument",
     "PipelineHeader",
     "PipelineRoles",

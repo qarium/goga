@@ -1,12 +1,14 @@
-"""Contract and logic tests for the ten compiler-cell dataclass models.
+"""Contract and logic tests for the eleven compiler-cell dataclass models.
 
-Covers ``PipelineHeader``, ``PhaseStep``, ``StageStep``, ``PhasesBody``,
-``StagesBody``, ``FlowStage``, ``FlowDocument``, ``FlowCollaboration``,
-``FlowTeamMember`` and ``FlowAssistant`` — every data model that is not the
-``BodyFormat`` enum.
+Covers ``PipelineHeader``, ``PipelineAssistant``, ``PhaseStep``,
+``StageStep``, ``PhasesBody``, ``StagesBody``, ``FlowStage``,
+``FlowDocument``, ``FlowCollaboration``, ``FlowTeamMember`` and
+``FlowAssistant`` — every data model that is not the ``BodyFormat`` enum.
 """
 
 from __future__ import annotations
+
+import inspect
 
 import pytest
 from goga.pipeline.compiler import (
@@ -17,10 +19,13 @@ from goga.pipeline.compiler import (
     FlowTeamMember,
     PhasesBody,
     PhaseStep,
+    PipelineAssistant,
     PipelineHeader,
     StagesBody,
     StageStep,
 )
+
+from tests.conftest import is_kw_only_dataclass
 
 
 class TestDataModelsContract:
@@ -29,6 +34,7 @@ class TestDataModelsContract:
     def test_all_models_importable_from_facade(self) -> None:
         """Every data model must be importable from the compiler facade."""
         assert PipelineHeader is not None
+        assert PipelineAssistant is not None
         assert PhaseStep is not None
         assert StageStep is not None
         assert PhasesBody is not None
@@ -45,6 +51,64 @@ class TestDataModelsContract:
 
         assert header.name == "Goga feature"
         assert header.description == "Feature implementation"
+
+    def test_pipeline_assistant_importable_from_facade(self) -> None:
+        """PipelineAssistant is importable from the facade and listed in ``__all__``."""
+        import goga.pipeline.compiler as facade
+
+        assert facade.PipelineAssistant is PipelineAssistant
+        assert "PipelineAssistant" in facade.__all__
+
+    def test_pipeline_assistant_is_kw_only_dataclass(self) -> None:
+        """Every field of PipelineAssistant is keyword-only."""
+        assert is_kw_only_dataclass(PipelineAssistant)
+
+    def test_pipeline_assistant_signature_matches_contract(self) -> None:
+        """The signature matches the contract — five fields, ``when`` required, ``gate`` advisory.
+
+        name, prompt, skills, when, gate in the declared order; ``name`` and
+        ``when`` carry no default (no compiler-side engagement default
+        exists), ``prompt``/``skills`` default to ``None`` (absence stays
+        distinguishable from every authored value), and ``gate`` materializes
+        the advisory ``False``. No delivery fields — ``agent``, ``env`` and
+        ``delegate`` are workflow-file territory.
+        """
+        parameters = list(inspect.signature(PipelineAssistant).parameters.values())
+        empty = inspect.Parameter.empty
+
+        assert [parameter.name for parameter in parameters] == ["name", "prompt", "skills", "when", "gate"]
+        assert [parameter.default for parameter in parameters] == [empty, None, None, empty, False]
+        assert [parameter.annotation for parameter in parameters] == [
+            "str",
+            "str | None",
+            "list[str] | None",
+            "str",
+            "bool",
+        ]
+
+    def test_phase_step_signature_matches_contract(self) -> None:
+        """PhaseStep carries the trailing ``assistants`` field defaulting to ``None``.
+
+        The annotation pins the typed map of pipeline declarations; the
+        verbatim ``body`` excludes the extracted key.
+        """
+        parameters = list(inspect.signature(PhaseStep).parameters.values())
+
+        assert [parameter.name for parameter in parameters] == ["name", "title", "body", "assistants"]
+        assert parameters[-1].default is None
+        assert parameters[-1].annotation == "dict[str, PipelineAssistant] | None"
+
+    def test_stage_step_signature_matches_contract(self) -> None:
+        """StageStep carries the trailing ``assistants`` field defaulting to ``None``.
+
+        The annotation pins the typed map of pipeline declarations; the
+        verbatim ``body`` excludes the extracted key.
+        """
+        parameters = list(inspect.signature(StageStep).parameters.values())
+
+        assert [parameter.name for parameter in parameters] == ["name", "title", "depends_on", "body", "assistants"]
+        assert parameters[-1].default is None
+        assert parameters[-1].annotation == "dict[str, PipelineAssistant] | None"
 
     def test_phase_step_constructible_kw_only(self) -> None:
         """PhaseStep accepts name, title and the verbatim body dict."""
@@ -136,6 +200,7 @@ class TestDataModelsContract:
         "model",
         [
             PipelineHeader,
+            PipelineAssistant,
             PhaseStep,
             StageStep,
             PhasesBody,
@@ -193,6 +258,43 @@ class TestDataModelsContract:
 
 class TestDataModelsLogic:
     """Edge-case / behavior tests."""
+
+    def test_pipeline_assistant_defaults_materialize_advisory_gate(self) -> None:
+        """Constructing with name and when yields None prompt/skills and gate False."""
+        helper = PipelineAssistant(name="x", when="start")
+
+        assert helper.prompt is None
+        assert helper.skills is None
+        assert helper.gate is False
+
+    def test_pipeline_assistant_empty_skills_round_trips_as_value(self) -> None:
+        """An authored empty skills list stays a value — a declaration resolving content."""
+        helper = PipelineAssistant(name="x", when="finish", skills=[])
+
+        assert helper.skills == []
+
+    def test_pipeline_assistant_when_is_required(self) -> None:
+        """Constructing without when raises TypeError — no engagement default exists."""
+        with pytest.raises(TypeError):
+            PipelineAssistant(name="x")  # type: ignore[call-arg]
+
+    def test_pipeline_assistant_positional_construction_rejected(self) -> None:
+        """PipelineAssistant is keyword-only — positional construction raises TypeError."""
+        with pytest.raises(TypeError):
+            PipelineAssistant("x", None, None, "start")  # type: ignore[misc]
+
+    def test_step_assistants_field_defaults_none_and_carries_authored_map(self) -> None:
+        """The typed assistants field defaults to None and carries an authored map."""
+        declaration = PipelineAssistant(name="watcher", prompt="Watch.", when="checkpoints")
+        phase = PhaseStep(name="a", title="b", body={})
+        stage = StageStep(name="a", title="b", depends_on=None, body={})
+
+        assert phase.assistants is None
+        assert stage.assistants is None
+
+        carrying = StageStep(name="a", title="b", depends_on=None, body={}, assistants={"watcher": declaration})
+
+        assert carrying.assistants == {"watcher": declaration}
 
     def test_stage_step_tristate_none_vs_empty_distinct(self) -> None:
         """depends_on None and [] are distinct explicit values, preserved on construction."""
