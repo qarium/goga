@@ -1296,28 +1296,28 @@ Wiring (from the design — verbatim): replace the call with
 the `compile_flow` return already in scope at step 13 (`run_pipeline.py:477`). No other step
 changes.
 
-- [ ] **Contract tests**: the `run_pipeline` signature is UNCHANGED — but the step-17 call shape
+- [x] **Contract tests**: the `run_pipeline` signature is UNCHANGED — but the step-17 call shape
       IS source-pinned: rework `tests/pipeline/test_run_pipeline_contract.py::
       test_run_pipeline_source_consumes_the_effective_configuration` (line 453) in the same change
       set — the expected call string becomes `write_afm_config(effective_agent, flow_doc,
       overlay.workflow, pipeline_doc)` and the docstring's "two artifacts" wording becomes the
       four-artifact threading; the other signature/facade assertions of the suite run unedited
       and green
-- [ ] **Code**: add the `pipeline_doc` argument at the delivery site
+- [x] **Code**: add the `pipeline_doc` argument at the delivery site
       (`goga/pipeline/run_pipeline.py:532`)
-- [ ] **Interface verification**: `pytest tests/pipeline/test_run_pipeline_contract.py
+- [x] **Interface verification**: `pytest tests/pipeline/test_run_pipeline_contract.py
       tests/pipeline/test_run_pipeline_workflow.py -x` — the unchanged surface still passes
-- [ ] **Logic tests / integration scenario**: extend `tests/pipeline/test_run_pipeline_workflow.py`
+- [x] **Logic tests / integration scenario**: extend `tests/pipeline/test_run_pipeline_workflow.py`
       `TestRunPipelineWorkflowResolution` (per its conventions, with a pipeline-declared
       assistant) — `test_run_pipeline_threads_pipeline_document`: a run-level test whose pipeline
       declares an assistant on a stage; assert the written engine config carries the
       `goga-<name>` profile (the threading through step 17 is exercised end-to-end; stub the
       launch layer per the suite's established pattern)
-- [ ] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: step 17's contract wording holds (all four artifacts passed;
+- [x] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: step 17's contract wording holds (all four artifacts passed;
       pre-run collaboration errors still fail the launch cleanly before any events); `goga lint`
       still 0 errors; `goga schema` unchanged map
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/` — fix findings; `ruff format` the touched files
+- [x] **Lint**: `ruff check goga/ tests/pipeline/` — fix findings; `ruff format` the touched files
 
 ---
 
@@ -1350,46 +1350,46 @@ All commands run in the project virtualenv; Python 3.10+ compatibility required.
 
 ## Completion Criteria
 
-- [ ] Every changed contract entity is implemented in its declared `location`:
+- [x] Every changed contract entity is implemented in its declared `location`:
       `workflow_assistant.py`, `parse_workflow.py`, `pipeline_assistant.py` (new),
       `phase_step.py`, `stage_step.py`, `parse_dsl.py`, `compile_flow.py`, `overlay.py`
       (docstrings only), `afm_config.py`, `run_pipeline.py` — and matches the materialized
       signatures exactly (the nine-field absence-preserving model; the five-field
       `PipelineAssistant` with required `when`; the trailing `assistants` step fields; the
       four-parameter `write_afm_config`)
-- [ ] `PipelineAssistant` is importable from `goga.pipeline.compiler` and listed in `__all__`;
+- [x] `PipelineAssistant` is importable from `goga.pipeline.compiler` and listed in `__all__`;
       every other facade is unchanged
-- [ ] The two-surface assembly holds: pipeline declarations attach on BOTH paths (with and
+- [x] The two-surface assembly holds: pipeline declarations attach on BOTH paths (with and
       without a workflow); the veto removes exactly the assistant (SC2); the extension merge
       produces the exact join/dedup/ordering laws (SC3); the team lists catalog members first,
       then attached pipeline declarations, loop copies collapsing (SC3); the namespace is one
       global uniqueness domain with both-sites collision errors; the origin-aware `when` check
       keeps its exact former text; body prohibitions apply with `pipeline.<stage>` sites (D2)
-- [ ] The delivery holds: the profiles gate is `flow` + (`workflow` or `pipeline`) (D1 proven
+- [x] The delivery holds: the profiles gate is `flow` + (`workflow` or `pipeline`) (D1 proven
       behaviorally); a pipeline-declared name resolves delivery from its workflow extension entry,
       else the global agent, with the `pipeline.<stage>` site (D2); `run_pipeline` threads
       `pipeline_doc` end-to-end
-- [ ] The overlay is functionally untouched (docstrings only) and the form-blind append is pinned
+- [x] The overlay is functionally untouched (docstrings only) and the form-blind append is pinned
       by a passing characterization test
-- [ ] All 26 design test scenarios are implemented (8 positive + 11 negative + 7 edge, parametrized
+- [x] All 26 design test scenarios are implemented (8 positive + 11 negative + 7 edge, parametrized
       tables counted once) and the pinned suites are reworked in the same change sets as the code
       they pin (the model contract/logic suites, the parse assistants suite, the data-models
       suite, the afm-config gating and signature tests, the compile stage-body rejection test,
       the run-pipeline step-17 source pin)
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic
       tests → debugging → re-verification → lint)
-- [ ] The Mandatory Rules were observed in every task and every commit: R1 style (relative
+- [x] The Mandatory Rules were observed in every task and every commit: R1 style (relative
       imports, `kw_only` discipline, Google docstrings, blank-line block separation), R2 test
       rules (mirror layout, `test_<what>_<scenario>` naming, parametrized boundary tables,
       mock-free pure-logic tests, direct handler calls, `tmp_path` for file I/O), R3 lint/format
       gates (`ruff check goga/ tests/` + `ruff format` on touched files before every local
       commit; no commit behind red tests or lint findings), R4 REPL cycle (live-probed behavior,
       fresh-interpreter re-evaluation, all verified code migrated into source files and tests)
-- [ ] No package boundary was expanded; no new cells; no `.usages/` files or rider docs created
+- [x] No package boundary was expanded; no new cells; no `.usages/` files or rider docs created
       or modified; the final modules (`serialize_flow`, `FlowAssistant`, `FlowTeamMember`,
       `FlowCollaboration`, `_reject_authoring_output_keys`, the overlay merge logic, `cli.py`)
       are untouched
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass (`pytest tests/ -x` modulo the recorded pre-existing
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (`pytest tests/ -x` modulo the recorded pre-existing
       environmental failures, `ruff check goga/` and `tests/`, `goga lint` 93/0, `goga schema`
       unchanged, the facade checks); SC5's golden-file comparison passes byte-exactly

@@ -459,12 +459,13 @@ class TestRunPipelineConfigSurfaceContract:
         agent reaches the seams through the step-14 resolution (the
         workflow-global value first, the effective ``pipeline.agent`` as the
         fallback), and the step-17 config write threads the resolved
-        effective agent, the compiled flow document, and the overlay
-        workflow (the collaboration plumbing's two artifacts).
+        effective agent, the compiled flow document, the overlay workflow,
+        and the parsed pipeline document (the collaboration plumbing's four
+        artifacts).
         """
         source = Path(_run_pipeline_module.__file__).read_text()
 
-        assert "write_afm_config(effective_agent, flow_doc, overlay.workflow)" in source
+        assert "write_afm_config(effective_agent, flow_doc, overlay.workflow, pipeline_doc)" in source
         assert "workflow_agent if workflow_agent is not None else config.pipeline.agent" in source
         assert "config.pipeline.env" in source
 
@@ -495,7 +496,7 @@ class TestRunPipelineGlobalRunSettingsContract:
         source = Path(_run_pipeline_module.__file__).read_text()
 
         assert "apply_stage_env_wrappers(flow_doc.stages, overlay.workflow, effective_agent, flow_path)" in source
-        assert "write_afm_config(effective_agent, flow_doc, overlay.workflow)" in source
+        assert "write_afm_config(effective_agent, flow_doc, overlay.workflow, pipeline_doc)" in source
         assert "write_afm_config(config.pipeline.agent" not in source
         assert "apply_stage_env_wrappers(flow_doc.stages, overlay.workflow, config.pipeline.agent" not in source
 
