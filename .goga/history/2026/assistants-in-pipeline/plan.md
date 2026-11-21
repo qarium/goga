@@ -595,7 +595,7 @@ REPL-cycle checkpoints (R4): before writing the reworked assertions, probe live 
 `inspect.signature(WorkflowAssistant)` parameter list and annotation strings; construct
 `WorkflowAssistant(name="x", skip=True)` and confirm every other field `None`.
 
-- [ ] **Contract tests**: rework `tests/pipeline/workflow/test_workflow_assistant_contract.py` —
+- [x] **Contract tests**: rework `tests/pipeline/workflow/test_workflow_assistant_contract.py` —
       `test_workflow_assistant_signature_matches_contract`: nine parameters
       `[name, prompt, skills, agent, delegate, env, gate, when, skip]`, defaults
       `[empty, None, None, None, None, None, None, None, None]`, annotations
@@ -603,26 +603,26 @@ REPL-cycle checkpoints (R4): before writing the reworked assertions, probe live 
       bool | None, str | None, bool | None]`; `test_workflow_assistant_field_order_fixed`: the
       nine-name list; update the module docstring (nine fields, absence-preserving attachment
       parameters) (expected to fail at this stage)
-- [ ] **Code**: edit `goga/pipeline/workflow/workflow_assistant.py` — `gate: bool | None = None`,
+- [x] **Code**: edit `goga/pipeline/workflow/workflow_assistant.py` — `gate: bool | None = None`,
       `when: str | None = None`, new trailing `skip: bool | None = None`; rewrite the docstring:
       `gate` (None when not authored — absence vs authored false is the extension-inheritance
       distinction), `when` (None when not authored; legal only where the origin check allows —
       compile owns it), `skip` (the veto carriage — None on every non-skip entry, True on a
       `{skip: true}` entry addressing a pipeline-declared name of that stage)
-- [ ] **Interface verification**: `pytest tests/pipeline/workflow/test_workflow_assistant_contract.py -x`
+- [x] **Interface verification**: `pytest tests/pipeline/workflow/test_workflow_assistant_contract.py -x`
       — all pass
-- [ ] **Logic tests**: rework `tests/pipeline/workflow/test_workflow_assistant_logic.py` —
+- [x] **Logic tests**: rework `tests/pipeline/workflow/test_workflow_assistant_logic.py` —
       `test_workflow_assistant_defaults_are_materialized` becomes the absence test (constructing
       with only `name` yields `gate is None`, `when is None`, `skip is None`); add
       `test_skip_shaped_instance_carries_only_the_veto` (`WorkflowAssistant(name="x", skip=True)`:
       every other field `None`); keep the verbatim-storage and equality tests (add `skip` to the
       constructed values where they enumerate fields)
-- [ ] **Debugging**: `pytest tests/pipeline/workflow -x` — fix implementation code until all tests
+- [x] **Debugging**: `pytest tests/pipeline/workflow -x` — fix implementation code until all tests
       pass, EXCEPT the parse-suite failures owned by Task 2 (the `when`-required, duplicate-name,
       and materialized-default pins); do NOT fix test code to make a broken implementation pass
-- [ ] **Contract re-verification**: facade unchanged; the model stays pure data (no validation);
+- [x] **Contract re-verification**: facade unchanged; the model stays pure data (no validation);
       `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/workflow/` — fix findings; `ruff format` the
+- [x] **Lint**: `ruff check goga/ tests/pipeline/workflow/` — fix findings; `ruff format` the
       touched files (`workflow_assistant.py`, both test modules)
 
 ### Task 2: `parse_workflow` step 6.7 — skip grammar, optional `when`, namespace-check deletion (goga/pipeline/workflow)
