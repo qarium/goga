@@ -12,6 +12,7 @@ import yaml
 from .body_format import BodyFormat
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
+from .pipeline_assistant import PipelineAssistant
 from .pipeline_header import PipelineHeader
 from .pipeline_roles import PipelineRoles
 from .stage_step import StageStep
@@ -35,14 +36,35 @@ _ROLE_KEYS = ("planner", "executor", "reviewer")
 # so any authored value is dropped rather than leaked into the output. ``id`` is a
 # reserved output key (the stage id derives from ``name``); an authored value would
 # otherwise clobber the serializer's seeded ``id`` and break the position-derived
-# depends_on chain, so it is dropped too.
-_PHASE_STEP_KEYS = {"name", "title", "depends_on", "id"}
+# depends_on chain, so it is dropped too. ``assistants`` is extracted into
+# the step's typed field (step 4a) — the raw key never reaches the verbatim
+# body.
+_PHASE_STEP_KEYS = {"name", "title", "depends_on", "id", "assistants"}
 
 # Stage-step keys carried as separate fields, not inside the verbatim body. ``name``
 # and ``id`` are reserved output keys (the display label derives from ``title``,
 # the id from the map key); authored values would otherwise clobber the serializer's
-# seeded ``name``/``id``, so they are dropped.
-_STAGE_STEP_KEYS = {"title", "depends_on", "name", "id"}
+# seeded ``name``/``id``, so they are dropped. ``assistants`` is extracted into
+# the step's typed field (step 4a) — the raw key never reaches the verbatim
+# body.
+_STAGE_STEP_KEYS = {"title", "depends_on", "name", "id", "assistants"}
+
+# The stage-body ``assistants`` map's value-key vocabulary (step 4a) — one
+# pipeline-file stage-declared helper per entry. The delivery keys ``agent``,
+# ``env`` and ``delegate`` are NOT part of it: authoring one here is the
+# unknown-key error carrying the delivery-keys clause.
+_ASSISTANT_DECLARATION_KEYS = ("prompt", "skills", "when", "gate")
+
+# The declaration's ``when`` domain — the same four-value engagement
+# vocabulary the workflow surface authors (compile_flow's ``_WHEN_TRIGGER``
+# translates it to the afm trigger).
+_ASSISTANT_WHEN_VALUES = ("start", "checkpoints", "finish", "message")
+
+# Assistant-name grammar and the one reserved name — the cross-surface rules
+# (identical to the workflow cell's): ``[A-Za-z0-9._-]+`` and never the
+# afm-reserved ``assistant``.
+_ASSISTANT_NAME_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
+_RESERVED_ASSISTANT_NAME = "assistant"
 
 
 class StructuralError(ValueError):
@@ -177,6 +199,142 @@ def _extract_repeatable(header_data: dict[str, Any]) -> bool:
     return value
 
 
+def _validate_assistant_declaration_name(stage: str, name: Any) -> None:
+    """Validate a declaration name's grammar and reserved status (the step-4a name rules).
+
+    Args:
+        stage: The step's name (the stage name in the error message).
+        name: The authored declaration name — the map key of the entry, which
+            YAML may parse as a non-``str`` (an int key, for instance).
+
+    Raises:
+        StructuralError: If ``name`` is not a ``str`` or does not fullmatch
+            ``[A-Za-z0-9._-]+`` (the message names the stage and the key), or
+            equals the reserved ``"assistant"`` (the cross-surface text).
+    """
+    # The non-str guard comes first — a non-str key must die on the clean
+    # structural message, never on a ``TypeError`` out of ``fullmatch``.
+    if not isinstance(name, str) or not _ASSISTANT_NAME_PATTERN.fullmatch(name):
+        raise StructuralError(f"invalid assistant name in stage {stage}.assistants.{name}: {name}")
+
+    if name == _RESERVED_ASSISTANT_NAME:
+        raise StructuralError("assistant name is reserved")
+
+
+def _validate_assistant_declaration_field(stage: str, name: Any, key: str, value: Any) -> None:
+    """Validate one declaration value key (the four-key loop of step 4a).
+
+    Args:
+        stage: The step's name (the stage name in every error message).
+        name: The declaration's name (the map key of the entry).
+        key: The authored value key.
+        value: The authored value.
+
+    Raises:
+        StructuralError: If the value fails its key's type check or the key
+            is unknown — the delivery keys carry the workflow-file clause.
+    """
+    if key == "prompt":
+        if not isinstance(value, str):
+            raise StructuralError(f"non-str value in stage {stage}.assistants.{name}.prompt")
+    elif key == "skills":
+        if not isinstance(value, list) or not all(isinstance(skill, str) for skill in value):
+            raise StructuralError(f"non-list-of-str skills in stage {stage}.assistants.{name}")
+    elif key == "when":
+        if value not in _ASSISTANT_WHEN_VALUES:
+            raise StructuralError(
+                f"when must be one of: {', '.join(_ASSISTANT_WHEN_VALUES)} in stage {stage}.assistants.{name}"
+            )
+    elif key == "gate":
+        if not isinstance(value, bool):
+            raise StructuralError(f"non-bool value in stage {stage}.assistants.{name}.gate")
+    else:
+        raise StructuralError(
+            f"unknown key in stage {stage}.assistants.{name}: {key}; "
+            f"valid keys: {', '.join(_ASSISTANT_DECLARATION_KEYS)}; "
+            "agent, env, delegate are workflow-file territory"
+        )
+
+
+def _build_assistant_declaration(stage: str, name: Any, entry: Any) -> PipelineAssistant:
+    """Validate one ``assistants`` entry and build its :class:`PipelineAssistant`.
+
+    Args:
+        stage: The step's name (the stage name in every error message).
+        name: The declaration's name — the map key of the entry.
+        entry: The raw parsed entry value.
+
+    Returns:
+        The validated declaration (``gate`` materializes the advisory
+        ``False`` when not authored).
+
+    Raises:
+        StructuralError: If the entry is not a mapping, ``when`` is absent,
+            a value fails its type check or the key is unknown, the name is
+            invalid or reserved, or the entry resolves neither ``prompt``
+            nor ``skills``.
+    """
+    if not isinstance(entry, dict):
+        raise StructuralError(f"non-mapping assistant declaration in stage {stage}.assistants.{name}")
+
+    # ``when`` presence is checked before the key loop — an empty entry
+    # dies as when-required, never as an unknown key.
+    if "when" not in entry:
+        raise StructuralError(f"when is required in stage {stage}.assistants.{name}")
+
+    for key, value in entry.items():
+        _validate_assistant_declaration_field(stage, name, key, value)
+
+    _validate_assistant_declaration_name(stage, name)
+
+    prompt = entry.get("prompt")
+    skills = entry.get("skills")
+
+    if prompt is None and skills is None:
+        raise StructuralError(f"assistant declaration {name} in stage {stage} resolves neither prompt nor skills")
+
+    return PipelineAssistant(
+        name=name,
+        prompt=prompt,
+        skills=skills,
+        when=entry["when"],
+        gate=entry.get("gate", False),
+    )
+
+
+def _extract_step_assistants(stage: str, item: dict[str, Any]) -> dict[str, PipelineAssistant] | None:
+    """Validate a step item's ``assistants`` map and build the declaration models (step 4a).
+
+    Args:
+        stage: The step's name (the stage name in every error message).
+        item: The raw parsed step item (a list element or a map value).
+
+    Returns:
+        The deep-copied map of validated :class:`PipelineAssistant`
+        declarations keyed by assistant name, in authored order — ``None``
+        when the item carries no ``assistants`` key or an empty map (an
+        empty map equals absence).
+
+    Raises:
+        StructuralError: If the map is not a mapping or any entry fails the
+            declaration validation (see :func:`_build_assistant_declaration`).
+    """
+    raw = item.get("assistants")
+
+    if raw is None:
+        return None
+
+    if not isinstance(raw, dict):
+        raise StructuralError(f"non-mapping assistants in stage {stage}; author the map form keyed by assistant name")
+
+    if not raw:
+        return None
+
+    built = {name: _build_assistant_declaration(stage, name, entry) for name, entry in raw.items()}
+
+    return copy.deepcopy(built)
+
+
 def _extract_phase_step(item: Any) -> PhaseStep:
     """Build a ``PhaseStep`` from one element of a list body, deep-copying its fields.
 
@@ -184,11 +342,12 @@ def _extract_phase_step(item: Any) -> PhaseStep:
         item: One element of the parsed list body.
 
     Returns:
-        The ``PhaseStep`` with name/title split out and a deep-copied body.
+        The ``PhaseStep`` with name/title split out, the ``assistants`` map
+        extracted into the typed field (step 4a), and a deep-copied body.
 
     Raises:
-        StructuralError: If the item is not a mapping or lacks string
-            name/title.
+        StructuralError: If the item is not a mapping, lacks string
+            name/title, or its ``assistants`` map fails step-4a validation.
     """
     if not isinstance(item, dict):
         raise StructuralError("phase item must be a mapping")
@@ -199,9 +358,10 @@ def _extract_phase_step(item: Any) -> PhaseStep:
     if not (isinstance(name, str) and isinstance(title, str)):
         raise StructuralError("phase item missing name/title")
 
+    assistants = _extract_step_assistants(name, item)
     body = _deep_copy_without(item, _PHASE_STEP_KEYS)
 
-    return PhaseStep(name=name, title=title, body=body)
+    return PhaseStep(name=name, title=title, body=body, assistants=assistants)
 
 
 def _extract_depends_on(depends_on: Any) -> list[str] | None:
@@ -233,11 +393,13 @@ def _extract_stage_step(name: Any, value: Any) -> StageStep:
         value: The map value for this step.
 
     Returns:
-        The ``StageStep`` with title/depends_on split out and a deep-copied body.
+        The ``StageStep`` with title/depends_on split out, the ``assistants``
+        map extracted into the typed field (step 4a), and a deep-copied body.
 
     Raises:
         StructuralError: If the key is not a string, the value is not a mapping,
-            lacks a string title, or has a malformed ``depends_on``.
+            lacks a string title, has a malformed ``depends_on``, or its
+            ``assistants`` map fails step-4a validation.
     """
     if not isinstance(name, str):
         raise StructuralError("stage name must be a string")
@@ -251,9 +413,10 @@ def _extract_stage_step(name: Any, value: Any) -> StageStep:
         raise StructuralError("stage value missing title")
 
     depends_on = _extract_depends_on(value.get("depends_on"))
+    assistants = _extract_step_assistants(name, value)
     body = _deep_copy_without(value, _STAGE_STEP_KEYS)
 
-    return StageStep(name=name, title=title, depends_on=depends_on, body=body)
+    return StageStep(name=name, title=title, depends_on=depends_on, body=body, assistants=assistants)
 
 
 def _deep_copy_without(mapping: dict[str, Any], excluded: set[str]) -> dict[str, Any]:
@@ -307,15 +470,21 @@ def parse_dsl(text: str) -> tuple[PipelineHeader, BodyFormat, PhasesBody | Stage
         ``PipelineHeader``, ``fmt`` is the detected ``BodyFormat`` (PHASES for a
         list body, STAGES for a mapping body), and ``body`` is the parsed
         ``PhasesBody`` (PHASES) or ``StagesBody`` (STAGES). Step bodies are
-        deep-copied so caller mutation cannot affect the source; an empty body
-        parses with zero steps (``compile_flow`` rejects it).
+        deep-copied so caller mutation cannot affect the source; a step's
+        ``assistants`` map is extracted into its typed field (the verbatim body
+        excludes the key); an empty body parses with zero steps
+        (``compile_flow`` rejects it).
 
     Raises:
         StructuralError: If the separator is missing, the header lacks string
             name/description, the header's ``repeatable`` flag is present and
             not strictly bool, the body is neither list nor mapping, a step is
-            not a mapping or lacks required fields, or ``depends_on`` is not
-            ``None``/``list[str]``.
+            not a mapping or lacks required fields, ``depends_on`` is not
+            ``None``/``list[str]``, or a step's ``assistants`` map fails the
+            step-4a vocabulary (a non-mapping map or entry, a missing
+            ``when``, a bad value type, an unknown key — the delivery keys
+            carry the workflow-file clause —, an invalid or reserved name, or
+            a declaration resolving neither ``prompt`` nor ``skills``).
     """
     header_text, body_text = _split_segments(text)
 
