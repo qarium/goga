@@ -700,7 +700,11 @@ class TestCollaborationDeliveryIntegration:
             tool="demo",
             document=WorkflowDocument(
                 assistants={"auditor": WorkflowAssistant(name="auditor", prompt="Audit.")},
-                stages={"build": WorkflowStage(assistants={"auditor": WorkflowAssistant(name="auditor")})},
+                stages={
+                    "build": WorkflowStage(
+                        assistants={"auditor": WorkflowAssistant(name="auditor", when="checkpoints")}
+                    )
+                },
             ),
         )
 

@@ -1,11 +1,13 @@
 """Logic tests for the ``WorkflowAssistant`` dataclass.
 
-Covers construction behavior beyond the contract surface: the materialized
-defaults (values, not omissions), the verbatim round-trip of every authored
-field, dataclass equality, and the discriminator premise — a reference-shaped
+Covers construction behavior beyond the contract surface: the
+absence-preserving defaults (constructing with only ``name`` leaves every
+other parameter ``None``), the verbatim round-trip of every authored field,
+dataclass equality, and the discriminator premises — a reference-shaped
 instance never invents declaration fields (``prompt``/``skills``/``agent``/
-``delegate``/``env`` stay ``None``), which is what lets the consumers
-separate a reference from an inline declaration by presence alone.
+``delegate``/``env`` stay ``None``) and a skip-shaped instance carries
+nothing but the veto, which is what lets the consumers separate the entry
+kinds by presence alone.
 """
 
 from __future__ import annotations
@@ -16,14 +18,16 @@ from goga.pipeline.workflow import WorkflowAssistant
 class TestWorkflowAssistantLogic:
     """Logic tests — construction behavior of the ``WorkflowAssistant`` dataclass."""
 
-    def test_workflow_assistant_defaults_are_materialized(self) -> None:
-        """Constructing with only ``name`` yields the materialized authoring defaults.
+    def test_workflow_assistant_defaults_are_absence_preserving(self) -> None:
+        """Constructing with only ``name`` yields absence on every attachment parameter.
 
         prompt None, skills None, agent None, delegate None (the
-        not-authored, inheritable tri-state value), env None, gate False,
-        when "checkpoints" — the values a bare stage reference carries after
-        parsing. The pin prevents a silent drift of the defaults into the
-        consumers' declaration discriminator and the compiled output.
+        not-authored, inheritable tri-state value), env None, gate None,
+        when None, skip None — absence stays distinguishable from every
+        authored value (an authored ``gate: false`` downgrades where an
+        absent gate inherits). The pin prevents a silent drift of the
+        defaults into the consumers' presence-based discriminators and the
+        compiled output.
         """
         assistant = WorkflowAssistant(name="reviewer")
 
@@ -33,11 +37,36 @@ class TestWorkflowAssistantLogic:
         assert assistant.agent is None
         assert assistant.delegate is None
         assert assistant.env is None
-        assert assistant.gate is False
-        assert assistant.when == "checkpoints"
+        assert assistant.gate is None
+        assert assistant.when is None
+        assert assistant.skip is None
+
+    def test_skip_shaped_instance_carries_only_the_veto(self) -> None:
+        """A ``{skip: true}`` entry shape carries ``skip=True`` and nothing else.
+
+        Every other field stays ``None`` — the veto is pure (no declaration
+        content, no attachment parameters), so the consumers discriminate
+        it by ``skip is True`` alone, never by truthiness of another field.
+        """
+        veto = WorkflowAssistant(name="watcher", skip=True)
+
+        assert veto.name == "watcher"
+        assert veto.prompt is None
+        assert veto.skills is None
+        assert veto.agent is None
+        assert veto.delegate is None
+        assert veto.env is None
+        assert veto.gate is None
+        assert veto.when is None
+        assert veto.skip is True
 
     def test_workflow_assistant_stores_authored_values_verbatim(self) -> None:
-        """Every field round-trips an authored declaration verbatim (no composition, no rewrite)."""
+        """Every field round-trips an authored value verbatim (no composition, no rewrite).
+
+        The model is pure data — it stores any authored combination
+        (including ``skip`` beside declaration fields); the grammar of
+        combinable keys belongs to the parser.
+        """
         assistant = WorkflowAssistant(
             name="security",
             prompt="Audit the stage output.",
@@ -47,6 +76,7 @@ class TestWorkflowAssistantLogic:
             env={"REVIEW_MODE": "strict"},
             gate=True,
             when="finish",
+            skip=True,
         )
 
         assert assistant.name == "security"
@@ -57,6 +87,7 @@ class TestWorkflowAssistantLogic:
         assert assistant.env == {"REVIEW_MODE": "strict"}
         assert assistant.gate is True
         assert assistant.when == "finish"
+        assert assistant.skip is True
 
     def test_equality_of_identical_constructions(self) -> None:
         """Two assistants with identical fields compare equal (the dataclass __eq__)."""
@@ -65,15 +96,16 @@ class TestWorkflowAssistantLogic:
 
         assert left == right
         assert left != WorkflowAssistant(name="reviewer", prompt="Other.")
+        assert left != WorkflowAssistant(name="reviewer", prompt="Review.", skip=True)
 
     def test_reference_shaped_instance_never_invents_declaration_fields(self) -> None:
         """A reference with attachment overrides keeps all five declaration fields at None.
 
-        The model is one shape for all three entry forms — a reference
-        carries only its own ``gate``/``when`` overrides, so the consumers'
-        presence-based five-field discriminator (any of ``prompt``,
-        ``skills``, ``agent``, ``delegate``, ``env`` authored) classifies it
-        as a reference, never a declaration.
+        The model is one shape for every entry form — a reference carries
+        only its own ``gate``/``when`` overrides (never a veto), so the
+        consumers' presence-based five-field discriminator (any of
+        ``prompt``, ``skills``, ``agent``, ``delegate``, ``env`` authored)
+        classifies it as a reference, never a declaration.
         """
         reference = WorkflowAssistant(name="reviewer", gate=True, when="finish")
 
@@ -84,3 +116,4 @@ class TestWorkflowAssistantLogic:
         assert reference.env is None
         assert reference.gate is True
         assert reference.when == "finish"
+        assert reference.skip is None

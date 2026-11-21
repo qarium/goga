@@ -1219,13 +1219,18 @@ def _assistants_by_id(
                     extra={"stage": base_name, "assistant": entry.name},
                 )
 
+            # The entry's ``gate`` is absence-preserving — an un-authored
+            # gate (a programmatic or overlay-merged entry) materializes
+            # ``False`` here; an authored ``False`` stays an authored value.
+            gate = entry.gate if entry.gate is not None else False
+
             entries.append(
                 FlowAssistant(
                     profile=f"{_PROFILE_PREFIX}{entry.name}",
                     title=entry.name,
                     instruction=(source.prompt if source.prompt is not None else ""),
-                    mode=_GATE_MODE[entry.gate],
-                    trigger=_attachment_trigger(entry.gate, entry.when),
+                    mode=_GATE_MODE[gate],
+                    trigger=_attachment_trigger(gate, entry.when),
                 )
             )
 
