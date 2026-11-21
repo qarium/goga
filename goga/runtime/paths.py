@@ -44,7 +44,7 @@ def resolve_git_branch() -> str:
     return "default"
 
 
-def resolve_runtime_dir(purpose: str, *suffix_parts: str) -> Path:
+def resolve_runtime_dir(purpose: str, *suffix_parts: str, branch: str | None = None) -> Path:
     """Compose the host-side runtime directory path for a purpose — the directory itself is never created.
 
     Args:
@@ -52,6 +52,11 @@ def resolve_runtime_dir(purpose: str, *suffix_parts: str) -> Path:
             Becomes the directory immediately under ``~/.goga/runtime/``.
         *suffix_parts: Zero or more trailing path segments appended after the
             branch directory.
+        branch: Optional explicit branch segment. None or the empty string means
+            "not given" — the branch is derived from git via ``resolve_git_branch``
+            (with its ``"default"`` fallback). A non-empty value is slugified by
+            the same rule (every forward slash replaced by a hyphen) and used
+            directly — git is not consulted and no branch validation is performed.
 
     Returns:
         The composed absolute host path
@@ -59,8 +64,11 @@ def resolve_runtime_dir(purpose: str, *suffix_parts: str) -> Path:
     """
     cwd = Path.cwd()
     normalized = normalize_project_path(cwd)
-    branch = resolve_git_branch()
-    runtime_dir = Path.home() / ".goga" / "runtime" / purpose / normalized / branch
+
+    segment = branch.replace("/", "-") if branch else resolve_git_branch()
+    runtime_dir = Path.home() / ".goga" / "runtime" / purpose / normalized / segment
+
     for part in suffix_parts:
         runtime_dir = runtime_dir / part
+
     return runtime_dir

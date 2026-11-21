@@ -3,7 +3,7 @@
 
 - ``normalize_project_path(project_path: Path) -> str``
 - ``resolve_git_branch() -> str``
-- ``resolve_runtime_dir(purpose: str, *suffix_parts: str) -> Path``
+- ``resolve_runtime_dir(purpose: str, *suffix_parts: str, branch: str | None = None) -> Path``
 
 These are pure host-side helpers with no docker dependency, so the tests exercise
 them directly with monkeypatched cwd/home and a mocked ``subprocess.run``.
@@ -51,14 +51,17 @@ class TestPathsContract:
         assert hints["return"] is str
 
     def test_resolve_runtime_dir_signature(self) -> None:
-        """resolve_runtime_dir(purpose: str, *suffix_parts: str) -> Path."""
+        """resolve_runtime_dir(purpose: str, *suffix_parts: str, branch: str | None = None) -> Path."""
         sig = inspect.signature(resolve_runtime_dir)
         params = list(sig.parameters)
-        assert params == ["purpose", "suffix_parts"]
+        assert params == ["purpose", "suffix_parts", "branch"]
         assert sig.parameters["purpose"].kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
         assert sig.parameters["suffix_parts"].kind == inspect.Parameter.VAR_POSITIONAL
+        assert sig.parameters["branch"].kind == inspect.Parameter.KEYWORD_ONLY
+        assert sig.parameters["branch"].default is None
         hints = typing.get_type_hints(resolve_runtime_dir)
         assert hints["return"] is Path
+        assert hints["branch"] == typing.Optional[str]
 
     def test_normalize_project_path_returns_str(self) -> None:
         """normalize_project_path returns a str."""
@@ -158,6 +161,62 @@ class TestResolveRuntimeDirLogic:
         expected = Path("/Users/tester/.goga/runtime/purpose") / cwd_segment / "main" / "a" / "b"
         assert result == expected
         assert result.parts[-2:] == ("a", "b")
+
+    def test_resolve_runtime_dir_explicit_branch_matches_derived_form(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """An explicit branch addresses exactly the git-derived directory — one formula.
+
+        With git mocked to report ``feature/x`` the explicit
+        ``branch="feature/x"`` composes the same path as the derived form,
+        and the explicit call does not consult git at all (subprocess.run
+        call count unchanged).
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: Path("/Users/tester"))
+        completed = subprocess.CompletedProcess(
+            ["git", "branch", "--show-current"],
+            0,
+            stdout="feature/x\n",
+            stderr="",
+        )
+
+        with mock.patch.object(subprocess, "run", return_value=completed) as run_mock:
+            derived = resolve_runtime_dir("builds")
+            count_after_derived = run_mock.call_count
+            explicit = resolve_runtime_dir("builds", branch="feature/x")
+
+        assert explicit == derived
+        assert run_mock.call_count == count_after_derived
+
+    def test_resolve_runtime_dir_empty_branch_falls_back_to_derived(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The empty string means "not given" — the branch is git-derived."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: Path("/Users/tester"))
+        completed = subprocess.CompletedProcess(
+            ["git", "branch", "--show-current"],
+            0,
+            stdout="main\n",
+            stderr="",
+        )
+
+        with mock.patch.object(subprocess, "run", return_value=completed):
+            result = resolve_runtime_dir("builds", branch="")
+
+        assert result.name == "main"
+
+    def test_resolve_runtime_dir_slugification_idempotent(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """An already-slugified branch passes through unchanged."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: Path("/Users/tester"))
+
+        result = resolve_runtime_dir("builds", branch="feature-x")
+
+        assert result.name == "feature-x"
 
 
 # --- Logic tests (negative) ---
