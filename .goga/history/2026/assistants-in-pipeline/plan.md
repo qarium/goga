@@ -1033,7 +1033,7 @@ steps carry `assistants=None`; a raw `assistants` key in an extend body still di
 `_reject_authoring_output_keys` (defensive re-check, unchanged message). `gate: false` authored
 on an extension downgrades a gated declaration (absence inherits).
 
-- [ ] **Contract tests**: extend `tests/pipeline/compiler/test_compile_flow_collaboration.py`
+- [x] **Contract tests**: extend `tests/pipeline/compiler/test_compile_flow_collaboration.py`
       `TestCompileFlowCollaborationContract` — rework
       `test_authored_assistants_key_in_stage_body_rejected`: after the parse-time extraction its
       current fixture (a list-form `assistants:` in a pipeline stage body) dies at PARSE with
@@ -1042,20 +1042,20 @@ on an extension downgrades a gated declaration (absence inherits).
       onto an embedded extend body (or a programmatic body) — the pinned text `"assistants key is
       forbidden in stage body; use assistants in workflow.stages"` stays byte-identical
       (expected to fail at this stage)
-- [ ] **Code**: rewrite `_collaboration_emission` per algorithm A–F (the `workflow is None`
+- [x] **Code**: rewrite `_collaboration_emission` per algorithm A–F (the `workflow is None`
       early return is REPLACED by the empty-ns/empty-entries path over `identity_ids`); implement
       `_assemble_stage_attachments`, `join_prompt`, `expand_skills`, the pipeline declaration
       index, and the collision-error helper (both-sites text); parameterize `_reject_attachment_body`
       with the site prefix (`pipeline.<base>` / `workflow.stages.<base>`)
-- [ ] **Code**: `_make_expanded_copy` deep-copies `assistants` onto every copy; the
+- [x] **Code**: `_make_expanded_copy` deep-copies `assistants` onto every copy; the
       extend-embedding constructors leave `assistants` at the default `None`; the workflow-less
       branch builds `identity_ids` and passes `reconstructed` into the emission (delete the
       `_collaboration_emission(None, {}, [], {})` call)
-- [ ] **Code**: update the docstrings of the routine and the touched helpers (the two-surface
+- [x] **Code**: update the docstrings of the routine and the touched helpers (the two-surface
       model, the ordering laws, the D2 sites) per R1
-- [ ] **Interface verification**: `pytest tests/pipeline/compiler/test_compile_flow_collaboration.py -x`
+- [x] **Interface verification**: `pytest tests/pipeline/compiler/test_compile_flow_collaboration.py -x`
       — the contract class passes
-- [ ] **Logic tests** (extend the suite; reuse the `_compile` helper; mock-free) — the design's
+- [x] **Logic tests** (extend the suite; reuse the `_compile` helper; mock-free) — the design's
       scenarios:
       - `test_phases_format_stage_assistants_compile_without_workflow` (SC1 compile half): the
         compiled flow carries the stage entry `{profile: goga-watcher, title: watcher,
@@ -1103,14 +1103,14 @@ on an extension downgrades a gated declaration (absence inherits).
         collaboration-free workflow compiles byte-identically to the recorded golden (frozen
         literal per the `test_serialize_flow_collaboration.py` pattern; collaboration mode key
         excepted as today)
-- [ ] **Debugging**: `pytest tests/pipeline/compiler -x` — fix implementation code until all tests
+- [x] **Debugging**: `pytest tests/pipeline/compiler -x` — fix implementation code until all tests
       pass
-- [ ] **Contract re-verification**: `PipelineDocument(header, fmt, body)` still built from the
+- [x] **Contract re-verification**: `PipelineDocument(header, fmt, body)` still built from the
       ORIGINAL body; working-body copies never alias it; `serialize_flow`/`FlowAssistant`/
       `FlowTeamMember`/`FlowCollaboration` untouched; `_reject_authoring_output_keys`' assistants
       branch byte-identical; the one WARNING site unchanged (wording and trigger, now excluding
       pipeline declarations); `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/compiler/` — fix findings; `ruff format` the
+- [x] **Lint**: `ruff check goga/ tests/pipeline/compiler/` — fix findings; `ruff format` the
       touched files
 
 ### Task 6: Overlay documentation — the form-blind append stated (goga/pipeline/hooks)
