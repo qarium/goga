@@ -105,9 +105,10 @@ note buttons. A workflow `memory` block plus per-stage `reflect` /
 `memory` instructions turn on project-memory participation — active only
 when at least one stage takes part. Every compiled flow also carries a
 `collaboration` block (mode `assistants` always, the delegation depth when
-authored), and a workflow declaring an `assistants` catalog adds a `team`
-list and per-stage `assistants` entries — the helper-agent plumbing
-delivered to the engine configuration on launch (see
+authored), and authored collaboration adds a `team` list and per-stage
+`assistants` entries — a workflow `assistants` catalog or pipeline-file
+stage-body declarations (which attach with or without a workflow) — the
+helper-agent plumbing delivered to the engine configuration on launch (see
 [Workflows — Collaboration](workflows.md#collaboration-assistants-delegation)).
 A repeatable pipeline (header `repeatable: true`) always compiles a
 top-level `repeat` key — a workflow `repeat` block's authored bounds, else

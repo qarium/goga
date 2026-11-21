@@ -80,9 +80,12 @@ def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, tuple[Workflow
     Args:
         workflow: The effective workflow document. The catalog comes first
             (authored order), then every inline stage declaration in authored
-            stage order. The parser (and the overlay merge) already guarantee
-            no duplicate names, so a later declaration can never shadow a
-            catalog entry of the same name.
+            stage order. Duplicate names are compilation's check —
+            ``compile_flow`` rejects them with the both-sites collision error
+            before the delivery runs (the parse-time guarantee is gone). This
+            builder never rejects: on a direct call with an uncompiled
+            duplicate, the later declaration simply overwrites the earlier
+            slot (last one wins).
 
     Returns:
         The name → (declaration, site) map — the site is

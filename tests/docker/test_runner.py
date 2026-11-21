@@ -17,6 +17,8 @@ from goga.docker import DockerRunner, run_direct
 from goga.docker.builder import docker_image_goga_version
 from goga.version import ensure_version_match, host_goga_version, version_check_enabled
 
+from tests.conftest import child_interpreter_env
+
 
 class TestRunDirectContract:
     """Contract-surface lock for the direct-execution substrate."""
@@ -318,6 +320,7 @@ class TestRunDirectLogic:
             [sys.executable, str(driver), str(child), str(marker)],
             stdout=subprocess.PIPE,
             text=True,
+            env=child_interpreter_env(Path(__file__).resolve().parents[2]),
         )
 
         try:

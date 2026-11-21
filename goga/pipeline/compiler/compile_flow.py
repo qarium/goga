@@ -1151,7 +1151,7 @@ def _assistant_namespace(
     return namespace
 
 
-def join_prompt(pipeline_prompt: str | None, workflow_prompt: str | None) -> str | None:
+def _join_prompt(pipeline_prompt: str | None, workflow_prompt: str | None) -> str | None:
     """Join a pipeline declaration's prompt with its workflow extension text.
 
     Args:
@@ -1176,7 +1176,7 @@ def join_prompt(pipeline_prompt: str | None, workflow_prompt: str | None) -> str
     return f"{pipeline_prompt}\n\n{workflow_prompt}"
 
 
-def expand_skills(pipeline_skills: list[str] | None, workflow_skills: list[str] | None) -> list[str] | None:
+def _expand_skills(pipeline_skills: list[str] | None, workflow_skills: list[str] | None) -> list[str] | None:
     """Expand a pipeline declaration's skills with its workflow extension list.
 
     Args:
@@ -1359,8 +1359,8 @@ def _assemble_stage_attachments(  # noqa: C901, PLR0913, PLR0917 — the assembl
 
         eff_when = entry.when if entry is not None and entry.when is not None else decl.when
         eff_gate = entry.gate if entry is not None and entry.gate is not None else decl.gate
-        eff_prompt = join_prompt(decl.prompt, entry.prompt if entry is not None else None)
-        eff_skills = expand_skills(decl.skills, entry.skills if entry is not None else None)
+        eff_prompt = _join_prompt(decl.prompt, entry.prompt if entry is not None else None)
+        eff_skills = _expand_skills(decl.skills, entry.skills if entry is not None else None)
 
         for produced_id in produced_ids:
             _reject_attachment_body(f"pipeline.{base_name}", name, bodies[produced_id])

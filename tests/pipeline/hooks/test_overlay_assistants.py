@@ -11,7 +11,10 @@ the ``assistants`` / ``delegation`` vocabulary of
 
 Supported data and pure functions only for the merge — no mocks, no
 filesystem: inputs are never mutated, collisions are silent drops, and the
-merged document stays declarative (compilable through ``compile_flow``).
+merged document stays declarative — every entry form rides verbatim into
+``compile_flow``, which owns the origin checks (a contributed bare
+reference without ``when`` compiles to the strict ``when is required``
+error; the merge never invents an engagement).
 """
 
 from __future__ import annotations
