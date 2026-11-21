@@ -859,15 +859,15 @@ stage <s>.assistants.<a>.gate"`. Edge cases: an empty map equals absence; `when`
 checked before the key loop (an empty entry dies as "when is required"); the reserved name keeps
 the cross-surface message; the delivery-key clause in the unknown-key message is contractual.
 
-- [ ] **Contract tests**: extend `tests/pipeline/compiler/test_parse_dsl.py` — a contract-class
+- [x] **Contract tests**: extend `tests/pipeline/compiler/test_parse_dsl.py` — a contract-class
       test that both body formats produce steps whose `assistants` field exists with the declared
       annotation and default (expected to fail at this stage)
-- [ ] **Code**: implement `_extract_step_assistants(stage, item)` in `parse_dsl.py` per the
+- [x] **Code**: implement `_extract_step_assistants(stage, item)` in `parse_dsl.py` per the
       algorithm; call it from `_extract_phase_step` and `_extract_stage_step`; add `"assistants"`
       to `_PHASE_STEP_KEYS` and `_STAGE_STEP_KEYS` (the verbatim body excludes the key); construct
       the steps with the extracted field
-- [ ] **Interface verification**: `pytest tests/pipeline/compiler/test_parse_dsl.py -x` — all pass
-- [ ] **Logic tests** (mock-free, plain strings) — the design's scenarios:
+- [x] **Interface verification**: `pytest tests/pipeline/compiler/test_parse_dsl.py -x` — all pass
+- [x] **Logic tests** (mock-free, plain strings) — the design's scenarios:
       - `test_stage_body_assistant_parses_into_typed_field` (both formats): the typed field
         carries the declaration with every value; the verbatim body excludes the key
         (`"assistants" not in step.body`); the map is deep-copied (mutating the step's map cannot
@@ -884,12 +884,12 @@ the cross-surface message; the delivery-key clause in the unknown-key message is
         both die `"when is required in stage build.assistants.auditor"`
       - `test_empty_stage_assistants_map_equals_absence` (parse half): `assistants: {}` →
         `step.assistants is None`
-- [ ] **Debugging**: `pytest tests/pipeline/compiler/test_parse_dsl.py -x` — fix implementation
+- [x] **Debugging**: `pytest tests/pipeline/compiler/test_parse_dsl.py -x` — fix implementation
       code until all tests pass
-- [ ] **Contract re-verification**: delivery keys never enter the model; `_deep_copy_without`
+- [x] **Contract re-verification**: delivery keys never enter the model; `_deep_copy_without`
       still deep-copies bodies (declarations deep-copied separately — later working-body mutation
       cannot reach `PipelineDocument`); facade unchanged; `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/compiler/` — fix findings; `ruff format` the
+- [x] **Lint**: `ruff check goga/ tests/pipeline/compiler/` — fix findings; `ruff format` the
       touched files
 
 ### Task 5: `compile_flow` step 4.10 — two-surface assembly, veto/extension, team emission (goga/pipeline/compiler)

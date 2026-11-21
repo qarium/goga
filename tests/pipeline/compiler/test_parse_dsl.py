@@ -3,18 +3,23 @@
 Covers the parser half of the compiler cell: structural validation of a goga DSL
 pipeline-file (header segment + body segment split on a literal ``---`` line) and
 the typed 3-tuple it returns. Content of step fields is passed through verbatim;
-``depends_on`` references are not resolved.
+``depends_on`` references are not resolved. A stage body's ``assistants`` map is
+extracted into the steps' typed field (step 4a) with its vocabulary enforced at
+parse time — the verbatim body excludes the key.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
+import re
 from pathlib import Path
 
 import pytest
 from goga.pipeline.compiler import (
     BodyFormat,
     PhasesBody,
+    PipelineAssistant,
     PipelineHeader,
     PipelineRoles,
     StagesBody,
@@ -64,6 +69,26 @@ class TestParseDslContract:
         assert isinstance(header, PipelineHeader)
         assert fmt is BodyFormat.STAGES
         assert isinstance(body, StagesBody)
+
+    def test_parse_dsl_steps_carry_assistants_field_both_formats(self) -> None:
+        """Both body formats produce steps with the declared trailing ``assistants`` field.
+
+        The field is annotated ``dict[str, PipelineAssistant] | None`` and
+        defaults to ``None``; a step whose source body carries no
+        ``assistants`` key parses with ``assistants is None`` (absence).
+        """
+        phases_text = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n"
+        stages_text = "name: X\ndescription: Y\n---\n\na:\n  title: A\n"
+
+        _header, _fmt, phases_body = parse_dsl(phases_text)
+        _header, _fmt, stages_body = parse_dsl(stages_text)
+
+        for step in (*phases_body.steps, *stages_body.steps):
+            field = next(field for field in dataclasses.fields(step) if field.name == "assistants")
+
+            assert field.type == "dict[str, PipelineAssistant] | None"
+            assert field.default is None
+            assert step.assistants is None
 
 
 class TestParseDslLogic:
@@ -352,6 +377,277 @@ class TestParseDslLogic:
 
         with pytest.raises(StructuralError, match="missing body separator"):
             parse_dsl(text)
+
+
+class TestParseDslStageAssistants:
+    """Logic tests for the stage-body ``assistants`` map extraction (step 4a).
+
+    A step body (both formats) may declare the stage's helper assistants —
+    a name-keyed map whose entries carry the four value keys ``prompt``/
+    ``skills``/``when``/``gate``. ``parse_dsl`` extracts it into the typed
+    ``assistants`` field (the verbatim body excludes the key) and enforces
+    the vocabulary at parse time: ``when`` is required (checked before the
+    key loop — an empty entry dies as when-required), the delivery keys
+    carry the workflow-file clause, the name rules match the workflow
+    surface, and every declaration resolves ``prompt`` or ``skills``. An
+    absent key and an empty map both equal absence.
+    """
+
+    def test_stage_body_assistant_parses_into_typed_field(self) -> None:
+        """A stage-body declaration parses into the typed field; the body excludes the key.
+
+        Both body formats produce the same shape: the declaration carries
+        every authored value, an un-authored ``gate`` materializes ``False``,
+        and the map preserves authored order.
+        """
+        stages_text = (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "  assistants:\n"
+            "    auditor:\n"
+            "      prompt: Audit.\n"
+            "      skills: [code-audit]\n"
+            "      when: finish\n"
+            "      gate: true\n"
+            "    watcher:\n"
+            "      prompt: Watch.\n"
+            "      when: checkpoints\n"
+        )
+        phases_text = (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "- name: build\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "  assistants:\n"
+            "    auditor:\n"
+            "      prompt: Audit.\n"
+            "      skills: [code-audit]\n"
+            "      when: finish\n"
+            "      gate: true\n"
+        )
+
+        _header, stages_fmt, stages_body = parse_dsl(stages_text)
+        _header, phases_fmt, phases_body = parse_dsl(phases_text)
+
+        assert stages_fmt is BodyFormat.STAGES
+        assert phases_fmt is BodyFormat.PHASES
+
+        stages_step = stages_body.steps[0]
+
+        assert list(stages_step.assistants) == ["auditor", "watcher"]
+        assert stages_step.assistants["auditor"] == PipelineAssistant(
+            name="auditor", prompt="Audit.", skills=["code-audit"], when="finish", gate=True
+        )
+
+        watcher = stages_step.assistants["watcher"]
+
+        assert watcher.prompt == "Watch."
+        assert watcher.skills is None
+        assert watcher.when == "checkpoints"
+        assert watcher.gate is False
+
+        # The verbatim body excludes the extracted key; other keys stay verbatim.
+        assert "assistants" not in stages_step.body
+        assert stages_step.body["prompt"] == "Make"
+
+        phases_step = phases_body.steps[0]
+
+        assert phases_step.assistants["auditor"] == PipelineAssistant(
+            name="auditor", prompt="Audit.", skills=["code-audit"], when="finish", gate=True
+        )
+        assert "assistants" not in phases_step.body
+        assert phases_step.body["prompt"] == "Make"
+
+    def test_stage_body_assistants_map_is_deep_copied(self) -> None:
+        """The extracted map is deep-copied — mutating it cannot reach the parsed source.
+
+        Verified directly on the helper (the suite's established pattern):
+        the yaml-parsed item is local to ``parse_dsl`` and discarded before
+        it returns, so the isolation is not observable through the public
+        return value alone.
+        """
+        from goga.pipeline.compiler.parse_dsl import _extract_step_assistants
+
+        item = {
+            "title": "Build",
+            "assistants": {"watcher": {"prompt": "Watch.", "skills": ["lint"], "when": "checkpoints"}},
+        }
+
+        assistants = _extract_step_assistants("build", item)
+
+        # Sentinel mutations on the returned map must not reach the source.
+        assistants["watcher"].skills.append("hacked")
+        assistants["watcher"].prompt = "hacked"
+        assistants["extra"] = None
+
+        assert item["assistants"]["watcher"]["skills"] == ["lint"]
+        assert item["assistants"]["watcher"]["prompt"] == "Watch."
+        assert "extra" not in item["assistants"]
+
+    def test_delivery_key_in_stage_declaration_rejected(self) -> None:
+        """A delivery key in a declaration is the unknown-key error with the workflow-file clause.
+
+        ``agent``/``env``/``delegate`` are workflow-file territory — the
+        vocabulary boundary is enforced at parse time, strictly before any
+        run (the delivery keys never enter the model).
+        """
+        text = (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  assistants:\n"
+            "    auditor:\n"
+            "      prompt: X\n"
+            "      when: start\n"
+            "      agent: codex\n"
+        )
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape(
+                "unknown key in stage build.assistants.auditor: agent; valid keys: prompt, skills, when, gate; "
+                "agent, env, delegate are workflow-file territory"
+            ),
+        ):
+            parse_dsl(text)
+
+    def test_content_free_stage_declaration_rejected(self) -> None:
+        """A declaration resolving neither prompt nor skills is rejected (the content rule)."""
+        text = (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  assistants:\n"
+            "    auditor:\n"
+            "      when: start\n"
+        )
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("assistant declaration auditor in stage build resolves neither prompt nor skills"),
+        ):
+            parse_dsl(text)
+
+    @pytest.mark.parametrize(
+        ("assistants_literal", "case", "expected"),
+        [
+            (
+                '    auditor:\n      prompt: X\n      when: start\n      gate: "yes"\n',
+                "non-bool gate",
+                "non-bool value in stage build.assistants.auditor.gate",
+            ),
+            (
+                "    auditor:\n      prompt: X\n      when: daily\n",
+                "invalid when",
+                "when must be one of: start, checkpoints, finish, message in stage build.assistants.auditor",
+            ),
+            (
+                "    auditor:\n      prompt: X\n      when: start\n      env:\n        A: B\n",
+                "delivery key env",
+                "unknown key in stage build.assistants.auditor: env; valid keys: prompt, skills, when, gate; "
+                "agent, env, delegate are workflow-file territory",
+            ),
+            (
+                "    bad name!:\n      prompt: X\n      when: start\n",
+                "invalid name",
+                "invalid assistant name in stage build.assistants.bad name!: bad name!",
+            ),
+            (
+                "    assistant:\n      prompt: X\n      when: start\n",
+                "reserved name",
+                "assistant name is reserved",
+            ),
+            (
+                "    auditor: not a map\n",
+                "non-mapping entry",
+                "non-mapping assistant declaration in stage build.assistants.auditor",
+            ),
+            (
+                "    - profile: goga-x\n",
+                "non-mapping map",
+                "non-mapping assistants in stage build; author the map form keyed by assistant name",
+            ),
+        ],
+    )
+    def test_pipeline_declaration_vocabulary_rejections(
+        self, assistants_literal: str, case: str, expected: str
+    ) -> None:
+        """Each vocabulary violation dies in its own branch with the exact contract text.
+
+        Every rejection fires strictly before any ``PipelineAssistant`` is
+        built — the vocabulary of the new authoring surface is guarded
+        character-for-character.
+        """
+        text = (
+            "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  assistants:\n" + assistants_literal
+        )
+
+        with pytest.raises(StructuralError, match=re.escape(expected)):
+            parse_dsl(text)
+
+    @pytest.mark.parametrize(
+        ("entry_literal", "expected"),
+        [
+            (
+                "    auditor:\n      prompt: 5\n      when: start\n",
+                "non-str value in stage build.assistants.auditor.prompt",
+            ),
+            (
+                "    auditor:\n      skills: lint\n      when: start\n",
+                "non-list-of-str skills in stage build.assistants.auditor",
+            ),
+        ],
+    )
+    def test_declaration_value_type_rejections(self, entry_literal: str, expected: str) -> None:
+        """A non-str ``prompt`` and a non-list-of-str ``skills`` die on their contract texts.
+
+        Completes the four-key loop's boundary table alongside the gate and
+        ``when`` rows of the vocabulary rejections above.
+        """
+        text = "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  assistants:\n" + entry_literal
+
+        with pytest.raises(StructuralError, match=re.escape(expected)):
+            parse_dsl(text)
+
+    @pytest.mark.parametrize(
+        "entry_literal",
+        [
+            "    auditor:\n      prompt: X\n",
+            "    auditor: {}\n",
+        ],
+    )
+    def test_pipeline_declaration_when_missing_rejected(self, entry_literal: str) -> None:
+        """A declaration without ``when`` — field-less or empty — dies on the same branch.
+
+        The ``when`` presence check runs before the key loop, so an empty
+        entry dies as when-required, never as an unknown key.
+        """
+        text = "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  assistants:\n" + entry_literal
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("when is required in stage build.assistants.auditor"),
+        ):
+            parse_dsl(text)
+
+    def test_empty_stage_assistants_map_equals_absence(self) -> None:
+        """An authored empty ``assistants: {}`` map equals absence — ``step.assistants is None``."""
+        text = "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  assistants: {}\n"
+
+        _header, _fmt, body = parse_dsl(text)
+
+        assert body.steps[0].assistants is None
+        assert "assistants" not in body.steps[0].body
 
 
 class TestParseDslRolesBlock:
