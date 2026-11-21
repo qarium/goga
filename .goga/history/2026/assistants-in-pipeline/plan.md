@@ -686,23 +686,23 @@ catalog (6.5) keeps its five-key set — `gate`/`when`/`skip` are unknown keys t
 safety (verified by the design): `_override_entry` composes `None` gate/when safely — the model
 accepts them.
 
-- [ ] **Contract tests**: extend `tests/pipeline/workflow/test_parse_workflow_assistants.py`
+- [x] **Contract tests**: extend `tests/pipeline/workflow/test_parse_workflow_assistants.py`
       `TestAssistantMapContract` — the stage-attachment grammar tests document the new acceptance:
       a skip entry, a when-less entry, and a gate-only entry all PARSE (expected to fail at this
       stage)
-- [ ] **Code**: rewrite `_build_stage_assistants` per the algorithm — skip-form discrimination
+- [x] **Code**: rewrite `_build_stage_assistants` per the algorithm — skip-form discrimination
       BEFORE the empty-entry check and the seven-key loop; `when` validated only when authored;
       `gate`/`when` carried as `None` when absent; drop the parse-time `when`-required check
       (lines 1669-1672) and the `set(entry_value) <= {"gate", "when"}` reference discrimination
       (line 1687 — a when-less `{gate: true}` is now just a reference with `when=None`)
-- [ ] **Code**: delete `_validate_assistant_namespace` (line 1803) and its call site (line 267);
+- [x] **Code**: delete `_validate_assistant_namespace` (line 1803) and its call site (line 267);
       do not leave the parse-time duplicate-name or when-required checks behind as dead code —
       their assertions move to the compiler tests (Task 5)
-- [ ] **Code**: update the routine docstring's Raises vocabulary to the new grammar (skip-form
+- [x] **Code**: update the routine docstring's Raises vocabulary to the new grammar (skip-form
       texts, optional `when`, empty entry, the seven-key unknown-key message)
-- [ ] **Interface verification**: `pytest tests/pipeline/workflow/test_parse_workflow_assistants.py -x`
+- [x] **Interface verification**: `pytest tests/pipeline/workflow/test_parse_workflow_assistants.py -x`
       — the contract class passes
-- [ ] **Logic tests** (mock-free, plain strings, per R2) — the design's scenarios plus the rework:
+- [x] **Logic tests** (mock-free, plain strings, per R2) — the design's scenarios plus the rework:
       - `test_parse_time_skip_grammar_errors` (parametrized, four cases): `{skip: true, when:
         start}` → `"skip cannot be combined with extension keys in …"`; `{skip: false}` →
         `"skip: false requires an extension field in …"`; `{}` → `"empty assistant entry in …"`;
@@ -728,13 +728,13 @@ accepts them.
         `attachment.gate is False` (line 121), and the when-only reference's `entry.gate is False`
         (line 519, docstring included) become `gate is None` / `when is None` per the
         absence-preserving model (the authored-`when` rows such as line 498 stay green)
-- [ ] **Debugging**: `pytest tests/pipeline/workflow -x` — fix implementation code until all tests
+- [x] **Debugging**: `pytest tests/pipeline/workflow -x` — fix implementation code until all tests
       pass (the overlay suite `tests/pipeline/hooks` may also depend on the model — run it; its
       failures owned by this task's model change are fixed here, its Task 6 additions are not)
-- [ ] **Contract re-verification**: the parser performs NO origin classification and NO
+- [x] **Contract re-verification**: the parser performs NO origin classification and NO
       cross-surface uniqueness check (grep for the deleted helper); absence preserved on every
       attachment parameter; facade unchanged; `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/workflow/ tests/pipeline/hooks/` — fix findings;
+- [x] **Lint**: `ruff check goga/ tests/pipeline/workflow/ tests/pipeline/hooks/` — fix findings;
       `ruff format` the touched files
 
 ### Task 3: `PipelineAssistant` and the typed `assistants` step fields (goga/pipeline/compiler)
