@@ -25,15 +25,17 @@ def resolve_archive_destination(archive_stem: str, output: str | None = None) ->
 
     Raises:
         click.ClickException: The default name is already taken by an
-            existing file (the error names the path and points to
-            -o/--output), or the explicit output is an existing directory
-            or lives under a missing parent directory — no implicit
-            creation.
+            existing file or symlink (the error names the path and points
+            to -o/--output), or the explicit output is an existing
+            directory or lives under a missing parent directory — no
+            implicit creation.
     """
     if output is None:
         destination = Path.cwd() / f"{archive_stem}.tar.gz"
 
-        if destination.exists():
+        # is_symlink catches a dangling link too — exists() follows the
+        # link target, and the packaging open would write through it.
+        if destination.exists() or destination.is_symlink():
             raise click.ClickException(
                 f"archive destination already exists: {destination} — pass -o/--output to choose another"
             )

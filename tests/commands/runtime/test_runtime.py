@@ -19,6 +19,7 @@ already scrubs ``GOGA_DOCKER`` between tests.
 from __future__ import annotations
 
 import importlib
+import os
 import subprocess
 import tarfile
 from pathlib import Path
@@ -382,6 +383,7 @@ class TestRuntimeRefusals:
             result = CliRunner().invoke(runtime, ["archive", "-b", "-o", str(dest_dir)])
 
         assert result.exit_code == 1
+        assert "is a directory" in result.stderr
         assert list(dest_dir.iterdir()) == []
         assert list(work.glob("*.tar.gz")) == []
 
@@ -398,6 +400,7 @@ class TestRuntimeRefusals:
             result = CliRunner().invoke(runtime, ["archive", "-b", "-o", str(dest)])
 
         assert result.exit_code == 1
+        assert "parent directory does not exist" in result.stderr
         assert not (work / "no").exists()
 
     def test_runtime_archive_unwritable_destination_is_clean_error(
@@ -408,8 +411,13 @@ class TestRuntimeRefusals:
         The destination is pre-created read-only in a writable directory (the
         explicit -o overwrite scenario): open fails before any data, the
         guarded cleanup keeps the pre-existing file, and the command wraps
-        the OSError into a ClickException.
+        the OSError into a ClickException. Skipped when running as root —
+        root bypasses file permission bits, so the chmod would not produce
+        the failure under test.
         """
+        if os.geteuid() == 0:  # pragma: no cover - skip when chmod is not enforced
+            pytest.skip("permission-based unwritability cannot be reproduced as root")
+
         work, home = _isolate_work_home(monkeypatch, tmp_path)
         segment = normalize_project_path(work)
         _seed_target(home, ".goga", "runtime", "builds", segment, "feature-x")

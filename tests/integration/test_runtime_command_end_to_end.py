@@ -180,6 +180,33 @@ class TestBranchOverride:
         assert result.output.strip() == str(run_dir)
 
 
+class TestDerivedBranchFallback:
+    def test_git_failure_falls_back_to_default_segment(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """A failing git branch query degrades the segment to default through the whole CLI stack.
+
+        The documented fallback (outside a repository, detached HEAD, or a
+        missing git binary) — here delivered as a failing CompletedProcess,
+        the boundary the real not-a-repository case produces.
+        """
+        work, home = _isolate_work_home(monkeypatch, tmp_path)
+
+        failed = subprocess.CompletedProcess(
+            ["git", "branch", "--show-current"],
+            128,
+            stdout="",
+            stderr="fatal: not a git repository (or any of the parent directories): .git",
+        )
+
+        with mock.patch.object(subprocess, "run", return_value=failed):
+            result = CliRunner().invoke(app, ["runtime", "build"])
+
+        expected = home / ".goga" / "runtime" / "builds" / normalize_project_path(work) / "default"
+
+        assert result.exit_code == 0
+        assert result.output.strip() == str(expected)
+        assert len(result.output.strip().splitlines()) == 1
+
+
 class TestInImageRefusal:
     def test_root_app_runtime_refuses_inside_image(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Through the root app, the docker marker refuses the subcommand — clean, stdout empty."""

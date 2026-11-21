@@ -427,6 +427,10 @@ Before the first pass a validation gate runs: tools subscribed to `build/validat
 
 A running build executes inside a Docker container, where its run-state and logs are written to a persistent host directory and survive across runs of the same project on the same branch — so an interrupted build can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. After the build, test the implementation manually.
 
+That host state is addressable from the host: `goga runtime build` and `goga runtime pipeline NAME` print the artifacts directory (exactly one line, for scripting — the same directories the runs use), and `goga runtime archive -b` / `-p NAME` package exactly one target into a single `goga-runtime-<target>-<branch>.tar.gz` in the current directory (`-o` chooses another path).
+
+See [`goga runtime`](https://qarium.github.io/goga/features/runtime/cli/) for the full CLI reference and exit codes.
+
 See [`goga build`](https://qarium.github.io/goga/features/build/cli/) for the full CLI reference, configuration, and exit codes.
 
 ## Tools

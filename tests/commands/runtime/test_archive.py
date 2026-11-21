@@ -15,6 +15,7 @@ guarded cleanup — unlink only after a successful open).
 from __future__ import annotations
 
 import inspect
+import os
 import tarfile
 import typing
 from pathlib import Path
@@ -118,6 +119,26 @@ class TestResolveArchiveDestinationLogic:
 
         assert list(work.iterdir()) == []
 
+    def test_resolve_archive_destination_default_name_symlink_is_collision(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A dangling symlink under the default name is a collision — never written through.
+
+        ``exists()`` follows the link and reports a dangling one as absent;
+        without the symlink check the packaging open would create/truncate
+        the file at the link's target — an arbitrary path outside the cwd.
+        """
+        work = tmp_path / "work"
+        work.mkdir()
+        monkeypatch.chdir(work)
+        victim = tmp_path / "victim.tar.gz"
+        (work / "goga-runtime-build-main.tar.gz").symlink_to(victim)
+
+        with pytest.raises(click.ClickException, match="-o/--output"):
+            resolve_archive_destination("goga-runtime-build-main")
+
+        assert not victim.exists()
+
 
 class TestPackageRuntimeArchiveLogic:
     def test_package_runtime_archive_wrapper_root_layout(self, tmp_path: Path) -> None:
@@ -169,8 +190,13 @@ class TestPackageRuntimeArchiveLogic:
         The destination is pre-created with content and made read-only in a
         writable directory (the explicit -o overwrite scenario): open raises
         PermissionError before any data, the guarded cleanup does not unlink,
-        and the original content survives.
+        and the original content survives. Skipped when running as root —
+        root bypasses file permission bits, so the chmod would not produce
+        the failure under test.
         """
+        if os.geteuid() == 0:  # pragma: no cover - skip when chmod is not enforced
+            pytest.skip("permission-based unwritability cannot be reproduced as root")
+
         target = tmp_path / "target"
         target.mkdir()
         (target / "a.txt").write_text("hello")
