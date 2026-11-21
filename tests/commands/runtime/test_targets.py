@@ -15,6 +15,7 @@ consults it; the pure logic stays mock-free.
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import subprocess
 import typing
@@ -22,7 +23,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from goga.commands import runtime as runtime_facade
 from goga.commands.runtime import (
     resolve_build_target_dir,
     resolve_effective_branch,
@@ -30,6 +30,11 @@ from goga.commands.runtime import (
     sanitize_pipeline_name,
 )
 from goga.runtime import resolve_runtime_dir
+
+# The cell module itself — the goga.commands facade re-export shadows the
+# ``runtime`` attribute with the group object, so the module is bound through
+# sys.modules instead of the ``from goga.commands import runtime`` form.
+runtime_facade = importlib.import_module("goga.commands.runtime")
 
 
 def _git_completed(stdout: str) -> subprocess.CompletedProcess:

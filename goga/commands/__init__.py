@@ -10,6 +10,7 @@ from .init import init
 from .install import install, uninstall
 from .lint import lint
 from .pipeline import pipeline
+from .runtime import runtime
 from .schema import schema
 from .tool import tool
 from .topics import topics
@@ -29,6 +30,7 @@ __all__ = [
     "install",
     "lint",
     "pipeline",
+    "runtime",
     "schema",
     "tool",
     "topics",

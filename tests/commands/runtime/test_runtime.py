@@ -18,6 +18,7 @@ already scrubs ``GOGA_DOCKER`` between tests.
 
 from __future__ import annotations
 
+import importlib
 import subprocess
 import tarfile
 from pathlib import Path
@@ -26,9 +27,13 @@ from unittest import mock
 import click
 import pytest
 from click.testing import CliRunner
-from goga.commands import runtime as runtime_cell
 from goga.commands.runtime import runtime
 from goga.runtime import normalize_project_path
+
+# The cell module itself — the goga.commands facade re-export shadows the
+# ``runtime`` attribute with the group object, so the module is bound through
+# sys.modules instead of the ``from goga.commands import runtime`` form.
+runtime_cell = importlib.import_module("goga.commands.runtime")
 
 
 def _git_completed(stdout: str) -> subprocess.CompletedProcess:

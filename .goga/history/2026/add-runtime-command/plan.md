@@ -1316,7 +1316,7 @@ command is a real `goga` CLI surface.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): extend
+- [x] **Contract tests** (expected to fail at this stage): extend
   `tests/commands/test_commands_facade.py` — `runtime` re-exported from
   the facade (`from goga.commands import runtime as runtime_reexport`;
   `runtime_reexport is runtime_source` — the same object, not a copy);
@@ -1324,31 +1324,69 @@ command is a real `goga` CLI surface.
   click.Group)` with exactly the three subcommands; and the ROOT app
   carries it: `from goga import app` → `"runtime" in app.commands` (the
   existing test file's `Test*Facade` class pattern)
-- [ ] **Code**: `goga/commands/__init__.py` — add `from .runtime import
+  (verified red first — the identity assert failed pre-re-export; two
+  planned hard-failing pin updates alongside: `tests/test_cli.py` facade
+  size 18 → 19, and the Task 5 cell-suite module imports
+  `test_runtime.py`/`test_targets.py` switched from
+  `from goga.commands import runtime as ...` to
+  `importlib.import_module("goga.commands.runtime")` — the
+  contract-mandated re-export shadows the subpackage name with the group
+  object, the same binding the history/topics facades have; the tests'
+  intent — the cell module exposes its facade — is unchanged)
+- [x] **Code**: `goga/commands/__init__.py` — add `from .runtime import
   runtime` (import block is alphabetical: after `.pipeline`, before
   `.schema`) and the `"runtime"` entry in `__all__` (alphabetical, between
   `"pipeline"` and `"schema"`)
-- [ ] **Code**: `goga/cli.py` — add `runtime` to the
+- [x] **Code**: `goga/cli.py` — add `runtime` to the
   `from .commands import (...)` import list and
   `app.add_command(runtime)` (the existing block, `goga/cli.py:70-87`)
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/commands/test_commands_facade.py tests/test_cli.py -x` — all pass
-- [ ] **Smoke checks** (the design's Additional Instructions, verbatim):
+  (68 passed)
+- [x] **Smoke checks** (the design's Additional Instructions, verbatim):
   `.venv/bin/python -c "from goga.commands.runtime import runtime"` green;
   `goga --help` lists `runtime`; `goga runtime --help` renders the group
   help; `goga schema --depends-on goga/commands/runtime` shows the new
   subcell with its `goga/runtime` + `goga/docker` dependencies
-- [ ] **Debugging**: `.venv/bin/pytest tests/ -x` — fix implementation
+  (all green — ENVIRONMENT DRIFT REPORTED: the host
+  `/opt/goga/bin/goga` is a regular site-packages copy from image build
+  time, NOT the editable install the plan's Facts assert (18 commands,
+  sees no workspace change); the smoke checks ran against the workspace's
+  own editable install `.venv/bin/goga` (resolves /workspace from any
+  cwd), which IS the real CLI surface over this code; the live run wins.
+  PLAN SLIP REPORTED: the Validation Commands one-liner asserts
+  `'runtime' in app.commands['runtime'].commands` — false as written (the
+  group's subcommands are build/pipeline/archive); the corrected root
+  registration check passes. `goga schema` (unfiltered) resolves
+  `goga/commands/runtime` with exactly `goga/runtime` + `goga/docker`;
+  the filtered run shows the new `goga/commands → goga/commands/runtime`
+  edge)
+- [x] **Debugging**: `.venv/bin/pytest tests/ -x` — fix implementation
   code until all pass (do NOT fix test code)
-- [ ] **Contract re-verification**: `goga lint` — 94 cells, 0 errors;
+  (two implementation defects, none in this task's code: the Task 5
+  cell-suite imports bound the module through the pre-facade
+  `from goga.commands import runtime` form — fixed to importlib per the
+  contract-test note above; battery then 8454 passed / 8 skipped — 8450
+  baseline + the 4 new facade tests)
+- [x] **Contract re-verification**: `goga lint` — 94 cells, 0 errors;
   `goga schema` resolves the full dependency map; facade imports of all
   three touched cells green (see Validation Commands)
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+  (`goga lint` 94/0 on BOTH the host CLI and the workspace venv CLI —
+  lint reads the workspace manifests via cwd, so the host copy is
+  unaffected by its staleness; `from goga.commands.runtime import
+  runtime`, `from goga.commands import runtime`, and the root
+  registration check all green)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — fix formatting if
   necessary; then the full battery before committing
-- [ ] Verify `goga/commands/.usages/cli-commands.md` stays truthful (no
+  (zero findings on both gates, no formatting pass needed; battery 8454
+  passed / 8 skipped)
+- [x] Verify `goga/commands/.usages/cli-commands.md` stays truthful (no
   edit expected — 19 commands documented, `runtime` in every snippet;
   report any drift)
+  (verified against the implementation — 19-command claim, both import
+  snippets, the `app.add_command(runtime)` registration snippet, and the
+  table row all match the now-real surface; no drift)
 
 ### Task 7: Integration tests — root-app end-to-end and run-parity scenarios
 

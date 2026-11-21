@@ -17,6 +17,7 @@ from .commands import (
     install,
     lint,
     pipeline,
+    runtime,
     schema,
     tool,
     topics,
@@ -79,6 +80,7 @@ app.add_command(codegraph)
 app.add_command(drift)
 app.add_command(contract)
 app.add_command(pipeline)
+app.add_command(runtime)
 app.add_command(usages)
 app.add_command(tool)
 app.add_command(upgrade)
