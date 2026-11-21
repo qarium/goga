@@ -688,7 +688,7 @@ on this (the target routines pass `branch=segment`).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in
+- [x] **Contract tests** (expected to fail at this stage): in
   `tests/runtime/test_paths.py` — UPDATE the hard-failing
   `TestPathsContract::test_resolve_runtime_dir_signature` to the extended
   signature: `params == ["purpose", "suffix_parts", "branch"]`;
@@ -696,12 +696,12 @@ on this (the target routines pass `branch=segment`).
   annotation `Optional[str]`, default `None` (the file's existing
   `typing.get_type_hints` style); keep the `purpose`/`suffix_parts` kind
   assertions unchanged
-- [ ] **REPL probe** (before writing code): with cwd/home patched and git
+- [x] **REPL probe** (before writing code): with cwd/home patched and git
   mocked — `resolve_runtime_dir("builds", branch="feature/x")` equals
   `resolve_runtime_dir("builds")` under a git mock returning `feature/x\n`
   (one formula); with `branch="feature/x"` the `subprocess.run` mock's
   `call_count` does not increase (git-free); `branch=""` still consults git
-- [ ] **Code**: change the signature to
+- [x] **Code**: change the signature to
   `def resolve_runtime_dir(purpose: str, *suffix_parts: str, branch: str | None = None) -> Path:`
   and the body to the manifest Algorithm (verbatim):
   ```
@@ -712,14 +712,14 @@ on this (the target routines pass `branch=segment`).
   5. RETURN runtime_dir
   ```
   (`""` is falsy ⇒ derived form; no git subprocess when explicit)
-- [ ] **Code**: extend the docstring `Args:` with `branch` per the manifest
+- [x] **Code**: extend the docstring `Args:` with `branch` per the manifest
   annotation (optional explicit branch segment; None or the empty string
   means "not given" — git-derived with the "default" fallback; a non-empty
   value is slugified by the same rule and used directly — no git, no
   validation) and the `Returns:` shape with the unchanged formula
-- [ ] **Interface verification**: `.venv/bin/pytest tests/runtime/ -x` —
+- [x] **Interface verification**: `.venv/bin/pytest tests/runtime/ -x` —
   all pass
-- [ ] **Logic tests** (in `tests/runtime/test_paths.py`, verbatim from the
+- [x] **Logic tests** (in `tests/runtime/test_paths.py`, verbatim from the
   design's Test Stack Trace):
   - `test_resolve_runtime_dir_explicit_branch_matches_derived_form` —
     Setup: cwd/home patched; git mocked to `feature/x\n`. Input:
@@ -734,21 +734,28 @@ on this (the target routines pass `branch=segment`).
   - `test_resolve_runtime_dir_slugification_idempotent` — Input:
     `branch="feature-x"` (already slugified). Assert: result segment ==
     `"feature-x"` (passes through unchanged).
-- [ ] **Debugging**: `.venv/bin/pytest tests/runtime/ tests/commands/build/
+- [x] **Debugging**: `.venv/bin/pytest tests/runtime/ tests/commands/build/
   tests/commands/pipeline/ -x` — fix implementation code until all pass
   (do NOT fix test code); the build/pipeline suites prove the two existing
   callers are unaffected (positional binding unchanged)
-- [ ] **Contract re-verification**: facade import
+  (484 passed first try — no fix needed; the update to the signature test
+  was the planned TDD edit, not a fix)
+- [x] **Contract re-verification**: facade import
   `from goga.runtime import resolve_runtime_dir` green; signature kinds:
   `purpose` POSITIONAL_OR_KEYWORD, `suffix_parts` VAR_POSITIONAL, `branch`
   KEYWORD_ONLY; no other routine in `paths.py` changed
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+  (`git diff --stat goga/` → only `paths.py`, 11 insertions / 3 deletions)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — fix formatting if
   necessary; then `.venv/bin/pytest tests/ -x` (full battery) and `goga
   lint` (94 cells, 0 errors) before committing
-- [ ] Verify `goga/runtime/.usages/runtime-paths.md` stays truthful for the
+  (ruff zero findings; battery 8394 passed / 8 skipped — baseline 8391 +
+  the 3 new logic tests; goga lint 94/0)
+- [x] Verify `goga/runtime/.usages/runtime-paths.md` stays truthful for the
   extended surface (no edit expected — the apply stage already documented
   the explicit-branch section; report any drift)
+  (verified against the implementation — extended signature, explicit-branch
+  example, git-skip side effect, no-validation claims all truthful; no drift)
 
 ### Task 3: `goga/commands/runtime` cell skeleton + `targets.py` — the four target routines (TDD)
 
@@ -772,14 +779,14 @@ archive routines (Task 4) and the group (Task 5) import from this module.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Cell skeleton** (infrastructure, before anything is importable):
+- [x] **Cell skeleton** (infrastructure, before anything is importable):
   create `goga/commands/runtime/__init__.py` — module docstring + the four
   target-routine imports from `.targets` + `__all__` listing exactly those
   four names (the facade grows in Tasks 4–5 as entities land; the
   `goga/commands/build/__init__.py` pattern); create
   `tests/commands/runtime/__init__.py` (every test directory MUST carry
   one)
-- [ ] **Contract tests** (expected to fail at this stage): create
+- [x] **Contract tests** (expected to fail at this stage): create
   `tests/commands/runtime/test_targets.py` — facade import of all four
   from `goga.commands.runtime`; signature pins (the
   `tests/runtime/test_paths.py` style): `resolve_effective_branch(branch:
@@ -787,11 +794,11 @@ archive routines (Task 4) and the group (Task 5) import from this module.
   str) -> Path`; `sanitize_pipeline_name(name: str) -> str`;
   `resolve_pipeline_target_dir(pipeline_name: str, branch_segment: str) ->
   Path` (parameter names, kinds, `get_type_hints` return types)
-- [ ] **REPL probe** (before writing code): confirm the empty-segment edge
+- [x] **REPL probe** (before writing code): confirm the empty-segment edge
   the guards of Task 5 exist for — `Path("/a/b") / ""` returns `/a/b`
   (path composition silently drops an empty suffix part; verified at
   design review — this is why an empty NAME must never reach the formula)
-- [ ] **Code**: create `goga/commands/runtime/targets.py` with the four
+- [x] **Code**: create `goga/commands/runtime/targets.py` with the four
   routines, algorithms verbatim from the design:
   ```
   resolve_effective_branch(branch: str | None = None) -> str:
@@ -814,12 +821,12 @@ archive routines (Task 4) and the group (Task 5) import from this module.
   colon-free segment, the same transformation the run composes). Imports:
   `from ...runtime import resolve_git_branch, resolve_runtime_dir`
   (relative); `from pathlib import Path`
-- [ ] **Interface verification**: `.venv/bin/pytest
+- [x] **Interface verification**: `.venv/bin/pytest
   tests/commands/runtime/test_targets.py -x` — all pass; facade check
   `.venv/bin/python -c "from goga.commands.runtime import
   resolve_effective_branch, resolve_build_target_dir,
   sanitize_pipeline_name, resolve_pipeline_target_dir"`
-- [ ] **Logic tests** (in `tests/commands/runtime/test_targets.py`,
+- [x] **Logic tests** (in `tests/commands/runtime/test_targets.py`,
   verbatim from the design's Test Stack Trace; git mocked only for the
   derived cases — pure logic stays mock-free):
   - `test_resolve_effective_branch_contract_matrix` — parametrized:
@@ -841,15 +848,21 @@ archive routines (Task 4) and the group (Task 5) import from this module.
     for that name/branch (same purpose, same sanitization, same formula).
   - Purity: none of the four creates anything on disk (`not
     result.exists()` in the tmp fixture world; the routines never mkdir).
-- [ ] **Debugging**: `.venv/bin/pytest tests/commands/runtime/ -x` — fix
+- [x] **Debugging**: `.venv/bin/pytest tests/commands/runtime/ -x` — fix
   implementation code until all pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade `__all__` exposes exactly the
+  (14 passed first try — no fix needed)
+- [x] **Contract re-verification**: facade `__all__` exposes exactly the
   four landed names; signatures match the manifest block above; no extra
   public names added to the module
-- [ ] **Lint**: `.venv/bin/ruff check goga/ tests/` and
+  (verified — the module namespace carries only the four defs plus imports;
+  the facade is `__all__`, exactly the four names)
+- [x] **Lint**: `.venv/bin/ruff check goga/ tests/` and
   `.venv/bin/ruff format --check goga/ tests/` — fix formatting if
   necessary; then the full battery `.venv/bin/pytest tests/ -x` and `goga
   lint` before committing
+  (one format finding collapsed by `ruff format`, gates clean after; battery
+  8408 passed / 8 skipped — 8394 baseline + the 14 new tests; goga lint 94
+  cells / 0 errors)
 
 ### Task 4: `archive.py` — `resolve_archive_destination` + `package_runtime_archive` (TDD)
 
