@@ -636,17 +636,17 @@ contract entity is touched.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Verify the virtualenv (create if missing): `.venv` with
+- [x] Verify the virtualenv (create if missing): `.venv` with
   `.venv/bin/pip install -e ".[test]"` (verified during planning: Python
   3.12.16, click 8.5.1, pytest, ruff 0.17.6)
-- [ ] Verify the baseline test battery: `.venv/bin/pytest tests/ -x` —
+- [x] Verify the baseline test battery: `.venv/bin/pytest tests/ -x` —
   green BEFORE any change (planning baseline: 8391 passed, 8 skipped)
-- [ ] Verify the baseline lint gates: `.venv/bin/ruff check goga/ tests/`
+- [x] Verify the baseline lint gates: `.venv/bin/ruff check goga/ tests/`
   and `.venv/bin/ruff format --check goga/ tests/` — zero findings
-- [ ] Verify the cell-level lint: `goga lint` — 94 cells, 0 errors
-- [ ] Verify the pre-change facade imports of every touched cell:
+- [x] Verify the cell-level lint: `goga lint` — 94 cells, 0 errors
+- [x] Verify the pre-change facade imports of every touched cell:
   `.venv/bin/python -c "from goga.runtime import resolve_runtime_dir, resolve_git_branch; from goga.docker import is_in_docker; from goga.commands import history, build, pipeline"`
-- [ ] Commit the apply-stage contract/usage artifacts now present in the
+- [x] Commit the apply-stage contract/usage artifacts now present in the
   working tree (`goga/commands/runtime/` manifest + `.usages/`,
   `goga/runtime/CODEMANIFEST` + `.usages/runtime-paths.md`,
   `goga/commands/CODEMANIFEST` + `.usages/cli-commands.md`,
@@ -656,8 +656,16 @@ contract entity is touched.
   may stay uncommitted — ralphex allows "except the plan file") — message
   without `Co-Authored-By:` trailers; working tree clean afterwards apart
   from the plan file
-- [ ] Record the baseline results; a red baseline is reported, not
+  (already satisfied by HEAD 4c0c9b9d "feat: specify the runtime command
+  cell across contracts and usages" — all 17 artifacts verified in its
+  stat; working tree clean)
+- [x] Record the baseline results; a red baseline is reported, not
   silently absorbed
+  (baseline recorded: Python 3.12.16, click 8.5.1, pytest 9.2.0,
+  pytest-cov 7.1.0, ruff 0.17.6, editable install; battery 8391 passed,
+  8 skipped in 51.93s; ruff check + format --check zero findings;
+  goga lint 94 cells / 0 errors; facade imports green — all green, no
+  red findings to report)
 
 ### Task 2: `resolve_runtime_dir` — the keyword-only `branch` extension (TDD)
 
