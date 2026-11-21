@@ -186,7 +186,7 @@ fields:
 | `notes` | map of str→str | — | Note buttons — a map of "note name → prompt text" attached verbatim to the stage. Single-line texts serialize as plain scalars, multi-line texts as block literals. An empty map equals absence (no buttons emitted). Allowed ONLY in `stages` — it is a structural error under `extend` (an extend-stage receives its buttons through the `stages` block by name). Every `loop`-expanded copy carries the same buttons; `skip` wins over `notes`. How the buttons surface during the run is owned by the pipeline runtime — the compiler only assembles them. See [Note buttons (`notes`)](#note-buttons-notes). |
 | `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` naming which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `memory` | bool | — | Memory-participation instruction (alignment method): `true` marks the stage as participating in project memory. An explicit `false` equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
-| `assistants` | map | — | Stage assistant attachments keyed by assistant name — each entry a reference (`gate`/`when`, with `when` required) or a full inline declaration; an empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation). |
+| `assistants` | map | — | Stage assistant entries keyed by assistant name — each entry a reference (`gate`/`when`), a full inline declaration, an extension of a pipeline-declared name (may omit `when`), or a `{skip: true}` veto; an empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation). |
 | `gates` | list | — | Quality-gate check steps the stage must pass before it counts as done — a list of `{name, script xor agent, timeout?, prompt?, env?}` mappings; an empty list equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` and in any stage body. See [Quality gates (`gates`)](#quality-gates-gates). |
 
 Rules:
@@ -629,21 +629,26 @@ attachment parameters. Two entry forms:
 
 | Attachment key | Type | Default | Description |
 |----------------|------|---------|-------------|
-| `when` | `start` \| `checkpoints` \| `finish` \| `message` | **required** | When the assistant engages. `message` is the resting engagement: the engine sends no initial request — the helper waits for messages and stays attached after each answer (one turn per message). |
-| `gate` | bool | `false` | `true` — the assistant's verdict must pass (or be waived by a human) before the stage may finish; `false` is advisory. With `when: finish` the gate engages as the engine's pre-completion review round (`pre_completion`, afm 2.2.9+); an ungated `finish` keeps the final-turn engagement. |
+| `when` | `start` \| `checkpoints` \| `finish` \| `message` | not authored | When the assistant engages. `message` is the resting engagement: the engine sends no initial request — the helper waits for messages and stays attached after each answer (one turn per message). |
+| `gate` | bool | not authored | `true` — the assistant's verdict must pass (or be waived by a human) before the stage may finish; `false` is advisory. With `when: finish` the gate engages as the engine's pre-completion review round (`pre_completion`, afm 2.2.9+); an ungated `finish` keeps the final-turn engagement. |
+| `skip` | bool | not authored | `true` ALONE — veto one pipeline-declared assistant of this stage (see [Governing pipeline-shipped assistants](#governing-pipeline-shipped-assistants)). |
 
-`when` is required on every attachment — the entry key already names the
-assistant, so its engagement timing is authored explicitly. An unknown
-attachment key is a structural error (`valid keys: prompt, skills, agent,
-delegate, env, gate, when`).
+`when` is required on an entry that names an assistant declared in the
+workflow-file — the entry key already names the assistant, so its
+engagement timing is authored explicitly. A when-less entry is legal
+authoring when the name is declared by the pipeline-file stage the entry
+addresses (an extension); compilation raises "when is required" for a
+when-less entry naming no such declaration. An unknown attachment key is
+a structural error (`valid keys: prompt, skills, agent, delegate, env,
+gate, when`).
 
 Behavior rules:
 
 - **Names form one namespace.** The catalog and every inline declaration
-  share a single namespace across the workflow-file; a repeated
-  declaration name is a structural error (`duplicate assistant name:
-  <NAME>`), and the name `assistant` is rejected (`assistant name is
-  reserved`).
+  share a single namespace with the pipeline-file stage declarations of
+  the compiled pipeline — a name collision between any two sources is a
+  compilation error naming both authoring sites, and the name `assistant`
+  is rejected (`assistant name is reserved`).
 - **References resolve at compile time.** A reference naming no catalog
   entry and no inline declaration of the effective document is a compile
   error (`unknown assistant reference in workflow.stages.<NAME>`). The
@@ -654,8 +659,11 @@ Behavior rules:
   is exactly `["planning"]` — helpers attach to execution stages only.
 - **Attachments live only under `stages.<name>`.** Authoring `assistants`
   inside an `extend`-entry is a structural error — the attachments of a
-  new stage are authored in the `stages` block under its name. Authoring
-  an `assistants` key in a stage *body* is likewise a structural error.
+  new stage are authored in the `stages` block under its name. A
+  pipeline-file stage *body* declares its own helpers through its
+  `assistants` map (see [Pipeline file — Stage
+  assistants](pipeline-file.md#stage-assistants)); an `assistants` map in
+  a workflow extend-entry body is a structural error.
 - **Defaults are materialized, never invented.** `gate` and `max_tasks`
   always carry their materialized values into the compiled output; `when`
   has no default — it is authored on every attachment, and the compiled
@@ -665,9 +673,10 @@ Behavior rules:
   [assistant overrides](#assistant-overrides) — an authored `false` opts
   out and never inherits. The engine's own defaults (a `one_shot` trigger,
   a 20-task budget) are never relied upon.
-- **Skills deliver through the catalog.** The engine accepts `skills` only
+- **Skills deliver through the team.** The engine accepts `skills` only
   on run-level team entries, and the team is built from the `assistants:`
-  catalog alone — so `skills` authored on a catalog entry reaches the
+  catalog plus the pipeline-file stage declarations — so `skills`
+  authored on a catalog entry or a pipeline declaration reaches the
   engine, while `skills` authored on a full inline declaration has no
   channel: the compiler logs a warning naming the stage and the assistant
   and drops the value. Declare the assistant in the catalog (and attach it
@@ -686,6 +695,54 @@ Behavior rules:
   source, so the same authoring takes effect on consecutive runs.
 - If the environment disables collaboration, declared helpers are skipped
   with engine warnings and the run proceeds.
+
+### Governing pipeline-shipped assistants
+
+A stage of the pipeline-file may ship its own helper declarations (authored
+in the [pipeline-file stage body](pipeline-file.md#stage-assistants)). The
+workflow addresses such a shipped assistant through the same
+`stages.<stage>.assistants.<name>` entry, keyed by the name's origin:
+
+**Skip — the veto.** `{skip: true}` alone removes the assistant from that
+stage for this project: no attachment, no team membership, no generated
+profile — the stage itself still runs. `skip` targets exactly one pipeline
+declaration of that stage; skipping a name no pipeline declaration of that
+stage declares is a compilation error (a catalog or inline name is governed
+by not authoring an attachment, never by skip). `skip: false` alone
+authoring nothing is a structural error, and `skip` mixed with any other
+key is a contradictory-authoring error.
+
+**Extension — additive configuration.** Any other entry addressing a
+pipeline-declared name extends it:
+
+| Key | Effect |
+|-----|--------|
+| `when` | overrides the pipeline engagement (omitted — the pipeline value stands) |
+| `gate` | overrides the pipeline gate (omitted — stands; explicit `false` deliberately downgrades a gated helper to advisory) |
+| `agent` / `env` / `delegate` | configure delivery for this project |
+| `prompt` | APPENDED to the pipeline text — pipeline text first, one blank line, then this text |
+| `skills` | EXPANDS the pipeline list — pipeline entries first, then these, deduplicated by value |
+
+An extension may omit `when` — the pipeline engagement stands. A workflow
+that mentions a shipped assistant not at all leaves it exactly as the
+pipeline authored it — it attaches on every run, with or without a
+workflow-file.
+
+**Visibility.** A pipeline-declared name is visible only to its own stage's
+entry: addressing it from another stage is an unknown-assistant error. The
+name must not collide with the workflow's catalog or any inline
+declaration — one global namespace, enforced at compilation.
+
+```yaml
+stages:
+  review:
+    assistants:
+      auditor:            # declared by the pipeline-file stage 'review'
+        skip: true        # veto — does not run in this project
+      notifier:           # declared by the pipeline-file stage 'review'
+        when: checkpoints # re-time: pipeline 'finish' overridden
+        agent: codex      # delivery retargeted for this project
+```
 
 ### Assistant overrides
 

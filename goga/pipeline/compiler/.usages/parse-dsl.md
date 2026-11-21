@@ -50,6 +50,45 @@ header.repeatable". The flag never enters the flow-file directly — it is
 the capability the compiled `repeat` directive is derived from; the cycle
 tuning itself is authored in the workflow-file.
 
+## The stage-body `assistants` map
+
+A stage body (both body formats) may declare the stage's helper
+assistants — a name-keyed map where each entry ships with the pipeline:
+
+```yaml
+---
+- name: review
+  title: Review
+  prompt: Implement the feature
+  assistants:
+    auditor:
+      prompt: Audit the diff.
+      skills: [code-audit]
+      when: finish
+      gate: true
+```
+
+| Value key | Type | Default | Note |
+|-----------|------|---------|------|
+| `prompt` | str | — | the helper's instruction |
+| `skills` | list[str] | — | the helper's own skills (delivered via the team member) |
+| `when` | `start` \| `checkpoints` \| `finish` \| `message` | **required** | when the helper engages |
+| `gate` | bool | `false` | `true` — the verdict must pass before the stage finishes |
+
+Every declaration resolves content — `prompt` or `skills` must be
+authored. The delivery keys `agent`, `env`, `delegate` are NOT part of
+this vocabulary: authoring any of them is a structural error naming the
+stage and the assistant — delivery is configured per project in the
+workflow-file (`stages.<stage>.assistants.<name>`).
+
+The parsed steps carry the declarations in a typed `assistants` field
+(`PhaseStep`/`StageStep`); the key is extracted from the verbatim body.
+The declarations attach to their own stage on EVERY run — with a
+workflow-file or without one — and every loop-expanded copy carries
+them. Assistants are forbidden on a stage whose body carries `script`
+and on a planning-only stage. An `assistants` map in a workflow
+extend-entry body is a structural error there (workflow-side rule).
+
 ## Parameters
 
 - `text: str` — the full pipeline-file text (including the `---` separator

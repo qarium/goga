@@ -91,38 +91,38 @@ Annotations: |
   cycle semantic. The import graph stays one-directional.
 
   assistants is a declarative collaboration instruction set — a top-level
-  assistants catalog, a top-level delegation block, and a per-stage assistants
-  attachment map. Both assistants surfaces are name-keyed maps: the catalog is
-  keyed by assistant name and every stage attachment is keyed by assistant
-  name. This cell validates the three authoring surfaces structurally (the
-  name-keyed entry maps, field types, the required when of every stage
-  attachment, unknown keys, the assistant-name grammar, name uniqueness across
-  the catalog and every inline declaration, assistants forbidden inside
-  extend-entries) and extracts them into the document model with materialized
-  defaults (delegate None, gate false, max_tasks 50 whenever the delegation
-  block is authored). This cell performs NO collaboration logic — it resolves
-  no attachment references, derives no profile ids, maps no gate or engagement
-  values, and emits no team or stage-assistant entries; the consumers consume
-  the extracted values. The import graph stays one-directional.
+  assistants catalog, a top-level delegation block, and a per-stage
+  assistants attachment map. Both assistants surfaces are name-keyed maps:
+  the catalog is keyed by assistant name and every stage attachment is
+  keyed by assistant name. This cell validates the authoring surfaces
+  structurally — the name-keyed entry maps, field types, the
+  assistant-name grammar, the skip-entry form, the value domain of every
+  authored when, unknown keys — and extracts them into the document model
+  with ABSENCE-PRESERVING attachment fields (an omitted when/gate is
+  carried as not-authored; an authored gate: false is a value) and a
+  skip-veto carriage. This cell performs NO collaboration logic — it
+  resolves no attachment references, classifies no entry origin (which
+  entry is a skip veto over a pipeline-declared assistant, which is an
+  extension of one, and which is a reference or an inline declaration is
+  knowable only where both documents meet, at compilation), derives no
+  profile ids, maps no gate or engagement values, and emits no team or
+  stage-assistant entries; the consumers consume the extracted values.
+  The import graph stays one-directional.
 
   One entry model serves every authoring form: a catalog entry (the
-  declaration fields under the assistant's name, no gate/when), a full inline
-  declaration on a stage (the catalog field set plus gate/when), and a
-  reference (a value carrying only gate/when). An attachment value that
-  carries any key beyond gate/when is a full inline declaration; a value
-  carrying only gate/when is a
-  reference and requires nothing further — the reference resolves against the
-  assistant names of the same document at compilation. The assistant name is
-  the map key: an inner name key of an entry value is an unknown key, and a
-  list value or a string value on either surface is a structural error naming
-  the map form. Every stage attachment states when the assistant engages — one
-  of start, checkpoints, finish, message; a missing when is a structural
-  error. message is the resting engagement: the engine sends no initial
-  request, the helper waits for messages and stays attached after each answer
-  (gate stays combinable with it — the engine owns the completion semantics).
-  gate is
-  optional on an attachment and materializes false; gate and when are unknown
-  keys of the catalog.
+  declaration fields under the assistant's name), a full inline
+  declaration on a stage (the catalog field set plus gate/when), a
+  reference (a value carrying only gate/when), an extension (any entry
+  addressing a name declared by the pipeline-file stage — it may omit
+  when and author delivery/content fields), and a skip veto ({skip:
+  true} alone). Every entry carries exactly one meaningful instruction:
+  the veto alone, or at least one extension, reference, or declaration
+  field. Whether a when is required is decided by the name's origin at
+  compilation, not here. Assistant names match [A-Za-z0-9._-]; the name
+  "assistant" is rejected. Uniqueness of a name across the effective
+  namespace (the catalog, every inline declaration, and the pipeline
+  declarations of the compiled pipeline-file) is a compilation check;
+  this cell enforces the grammar and the per-map key uniqueness only.
 
   A full declaration — catalog or inline — MAY carry no prompt and no
   skills: an override-style entry that configures delivery fields
@@ -279,12 +279,14 @@ Annotations: |
              memory participation. None when not specified; an explicit false
              equals absence (normalized to None by `parse_workflow` — no
              separate semantics for false).
-    `assistants`: the stage's assistant attachments — a map of
-                  `WorkflowAssistant` keyed by assistant name, in authored
+    `assistants`: the stage's assistant entries — a map of
+                  WorkflowAssistant keyed by assistant name, in authored
                   order. None when not specified (an empty map equals
-                  absence — normalized by `parse_workflow`). Declarative —
-                  extracted here, consumed by the compiler to emit the
-                  stage's assistants entries
+                  absence). Each entry is a reference, a full inline
+                  declaration, an extension of a name declared by the
+                  pipeline-file stage, or a skip veto; the origin decides
+                  at compilation. Declarative — extracted here, consumed
+                  by the compiler to emit the stage's assistants entries
     `gates`: the stage's check steps — a list of `WorkflowGateStep` in
              authored order, or None when not specified (an empty list
              equals absence — normalized by `parse_workflow`). Declarative —
@@ -367,8 +369,11 @@ Annotations: |
       here, consumed by the compiler to emit the stage's memory participation.
       None when not specified; an explicit false equals absence.
     "assistants -> dict[str, WorkflowAssistant] | None": |
-      The stage's assistant attachments keyed by assistant name, in authored
-      order. None when not specified (an empty map equals absence).
+      The stage's assistant entries keyed by assistant name, in authored
+      order. None when not specified (an empty map equals absence). Each
+      entry is a reference, a full inline declaration, an extension of a
+      name declared by the pipeline-file stage, or a skip veto; the
+      origin decides at compilation.
     "gates -> list[WorkflowGateStep] | None": |
       The stage's check steps in authored order, or None when not specified
       (an empty list equals absence).
@@ -518,94 +523,93 @@ Annotations: |
       The project-memory access mode — one of "r", "w", "rw"; exists only for
       the "alignment" method, None for "reflect".
 
-"WorkflowAssistant(name: str, prompt: str | None = None, skills: list[str] | None = None, agent: str | None = None, delegate: bool | None = None, env: dict[str, str] | None = None, gate: bool = False, when: str = \"checkpoints\")":
+"WorkflowAssistant(name: str, prompt: str | None = None, skills: list[str] | None = None, agent: str | None = None, delegate: bool | None = None, env: dict[str, str] | None = None, gate: bool | None = None, when: str | None = None, skip: bool | None = None)":
   location: workflow_assistant.py
   annotations: |
     Data model of one assistant authoring entry — a named helper
-    declaration and, on a stage entry, its attachment parameters.
-    Constructed by `parse_workflow` from a catalog entry or a stage
-    attachment; carried inside `WorkflowDocument` (the catalog) and
-    `WorkflowStage` (the attachments).
+    declaration and, on a stage entry, its attachment, extension, or
+    veto parameters. Constructed by parse_workflow from a catalog entry
+    or a stage attachment; carried inside WorkflowDocument (the
+    catalog) and WorkflowStage (the stage entries).
 
-    `name`: the assistant name — the map key of the entry on both
-             authoring surfaces; matches [A-Za-z0-9._-]; "assistant" is
-             rejected; unique across the catalog and every inline
-             declaration of one workflow-file
-    `prompt`: the assistant's instruction text, or None when not authored
+    `name`: the assistant name — the map key of the entry on every
+            authoring surface; matches [A-Za-z0-9._-]; "assistant" is
+            rejected
+    `prompt`: the assistant's instruction text, or None when not
+              authored
     `skills`: list of the assistant's own skill names, or None when not
               authored — an authored empty list is carried as an
-              explicit override that clears, never normalized to absence
-    `agent`: agent name the delivery resolves into the assistant's launch
-             command, or None — None resolves to the effective global
-             pipeline agent
+              explicit override that clears
+    `agent`: agent name the delivery resolves into the assistant's
+             launch command, or None — None resolves to the effective
+             global pipeline agent
     `delegate`: whether the assistant may create child tasks — None when
-                not authored (the value is inheritable: the overlay
-                merge lets a delivered base supply it), False when
-                explicitly authored off, True when authored on
-    `env`: the assistant's environment instruction (string map, literal
-           and/or rendered); None when not authored — an authored empty
-           map is an explicit override that clears, never normalized
-           to absence
-    `gate`: whether the assistant's verdict must pass before the stage may
-            finish; materialized false (advisory) when not authored
-    `when`: when the assistant engages — one of "start", "checkpoints",
-            "finish", "message". "message" is the resting engagement: the
-            engine sends no initial request, the helper waits for messages
-            and stays attached after each answer. Authored on every stage
-            attachment (a missing when is a structural error); unknown in
-            the catalog. The model default serves the construction paths
-            that carry no attachment authoring
+                not authored (an inheritable value at the overlay
+                merge), False when explicitly authored off, True when
+                authored on
+    `env`: the assistant's environment instruction (string map); None
+           when not authored — an authored empty map is an explicit
+           override that clears
+    `gate`: whether the assistant's verdict must pass before the stage
+            may finish — None when not authored (an entry addressing a
+            pipeline-declared name inherits its gate; a reference or an
+            inline declaration materializes false at emission), True or
+            False when authored
+    `when`: when the assistant engages — one of start, checkpoints,
+            finish, message, or None when not authored (an entry
+            addressing a pipeline-declared name inherits its engagement;
+            a reference or an inline declaration requires one at
+            compilation)
+    `skip`: the veto carriage — None on every non-skip entry, True on a
+            {skip: true} entry addressing a pipeline-declared name of
+            that stage
 
-    Build the data model with the standard library dataclasses module
-    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+    Use `convention` for the data-model rules (dataclasses kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - `name` is required (no default); every other field defaults to its
-      materialized value — except `when`, whose model default serves the
-      construction paths that carry no attachment authoring (per the `when`
-      parameter annotation); field order is fixed: name, prompt, skills,
-      agent, delegate, env, gate, when
-    - delegate defaults to None (NOT False) — an absent key and an
-      explicit delegate: false are DIFFERENT instructions and must stay
-      distinguishable to the overlay merge
-    - An authored empty skills list and an authored empty env map are
-      carried as explicit empty values — never normalized to None at
-      parse time
+    - gate/when/skip default to None — absence stays distinguishable
+      from every authored value; field order is fixed: name, prompt,
+      skills, agent, delegate, env, gate, when, skip
 
     Constraints:
     - Do not validate the name grammar, types, or value domains here —
-      `parse_workflow` enforces them during parsing
-    - Do not resolve `agent` into a command, derive a profile id, or map
-      `gate`/`when` onto engine values here — the consumers perform both
-    - Do not act on `env` here — its delivery is the pipeline run
-      coordination's responsibility
+      parse_workflow enforces them during parsing
+    - Do not classify the entry origin, resolve references, derive
+      profile ids, or map gate/when onto engine values here — the
+      consumers perform both
   properties:
     "name -> str": |
-      The assistant name; unique across one workflow-file's namespace.
+      The assistant name — the map key on every authoring surface.
     "prompt -> str | None": |
       The assistant's instruction text, or None when not authored.
     "skills -> list[str] | None": |
-      The assistant's own skill names, or None when not authored.
+      The assistant's own skill names, or None when not authored; an
+      authored empty list is an explicit override that clears.
     "agent -> str | None": |
       Agent name resolved at delivery into the launch command; None
       resolves to the effective global pipeline agent.
     "delegate -> bool | None": |
-      Whether the assistant may create child tasks. None when not
-      authored — an inheritable value the overlay merge resolves from a
-      delivered base; the explicit False is an authored opt-out; True is
-      the authored permission. Downstream consumers materialize False
-      when the effective value stays None.
+      Whether the assistant may create child tasks — None inheritable
+      at the overlay merge, explicit False an authored opt-out.
     "env -> dict[str, str] | None": |
       The assistant's environment instruction (string map); None when
-      not authored — an authored empty map is an explicit override
-      that clears.
-    "gate -> bool": |
-      Whether the assistant's verdict holds stage completion; false
-      (advisory) when not authored.
-    "when -> str": |
-      When the assistant engages — start, checkpoints, finish, or message;
-      authored on every stage attachment, unknown in the catalog.
+      not authored — an authored empty map is an explicit override that
+      clears.
+    "gate -> bool | None": |
+      Whether the assistant's verdict holds stage completion — None
+      when not authored (an entry addressing a pipeline-declared name
+      inherits its gate; a reference or an inline declaration
+      materializes false at emission), authored True/False otherwise.
+    "when -> str | None": |
+      When the assistant engages — start, checkpoints, finish, or
+      message, or None when not authored (an entry addressing a
+      pipeline-declared name inherits its engagement; a reference or an
+      inline declaration requires one at compilation).
+    "skip -> bool | None": |
+      The veto carriage — None on every non-skip entry, True on a
+      {skip: true} entry addressing a pipeline-declared name of that
+      stage.
 
 "WorkflowDelegation(depth: int | None = None, max_tasks: int = 50)":
   location: workflow_delegation.py
@@ -1190,9 +1194,12 @@ Annotations: |
         An entry may carry none of prompt/skills — an override-style
         entry; the effective-content requirement is enforced at
         compilation. Every entry key must match [A-Za-z0-9._-] and must
-        not be "assistant" ("assistant name is reserved"); a key repeated
-        across the catalog and any inline declaration raises "duplicate
-        assistant name: NAME". Build a `WorkflowAssistant` per entry
+        not be "assistant"
+        ("assistant name is reserved"); names are unique within the map (a
+        YAML mapping cannot repeat a key) — uniqueness of a name across
+        the catalog, the stage attachment maps, and the pipeline
+        declarations of the compiled pipeline-file is a compilation
+        check, not a parse rule. Build a `WorkflowAssistant` per entry
         with the key as name
     6.6. For the delegation block (when present): the block must be a dict
         (otherwise "non-mapping delegation block in workflow"); the key set
@@ -1206,22 +1213,31 @@ Annotations: |
         assistants in workflow.stages.NAME; author the map form keyed by
         assistant name"); an empty map equals absence (None). Each entry
         value must be a mapping (otherwise "non-mapping assistant
-        attachment in workflow.stages.NAME.ASSISTANT"). Every entry states
-        when — a missing when raises "when is required in
-        workflow.stages.NAME.assistants.ASSISTANT"; when must be one of
-        start/checkpoints/finish/message. gate (when present) must be a
-        bool. A
-        value whose keys are within {gate, when} is a reference; a value
-        carrying any further key is a full inline declaration (the catalog
-        field set plus gate and when) — it MAY carry no prompt and no
-        skills (an override-style inline declaration); the
-        effective-content requirement is enforced at compilation. The
-        empty-preservation and delegate rules of 6.5 apply verbatim to
-        the inline field values.
-        The name rules of 6.5 apply to every entry key; the duplicate-name
-        rule counts an inline declaration against the catalog and every
-        other inline declaration. Build a `WorkflowAssistant` per entry
-        with the key as name
+        attachment in workflow.stages.NAME.ASSISTANT"). Every entry
+        carries exactly one meaningful instruction:
+        - skip form: the value carries skip alone, strictly bool;
+          skip: true is the veto entry; a lone skip: false raises
+          "skip: false requires an extension field in
+          workflow.stages.NAME.assistants.ASSISTANT"; skip together with
+          any other key raises "skip cannot be combined with extension
+          keys in workflow.stages.NAME.assistants.ASSISTANT"; an empty
+          entry raises "empty assistant entry in
+          workflow.stages.NAME.assistants.ASSISTANT"
+        - every other form: the key set is prompt, skills, agent,
+          delegate, env, gate, when — an unknown key raises "unknown key
+          in workflow.stages.NAME.assistants.ASSISTANT: KEY; valid keys:
+          prompt, skills, agent, delegate, env, gate, when". prompt and
+          agent (when present) are str; skills (when present) is a
+          list[str] (an authored empty list is an explicit override that
+          clears); delegate (when present) is a bool (absent builds
+          None — not False); env (when present) is a str→str map (an
+          authored empty map is an explicit override — NOT normalized to
+          absence). gate (when present) is strictly bool, carried as
+          None when absent. when (when present) is one of
+          start/checkpoints/finish/message, carried as None when absent.
+          The name rules apply to every entry key; names are unique
+          within the map. Build a WorkflowAssistant per entry with the
+          key as name
     6.8. An assistants key in an extend-entry raises a structural error
         "assistants is forbidden in workflow.extend.NAME" — attachments of
         a new stage are authored in the stages block by the new stage's
@@ -1361,17 +1377,14 @@ Annotations: |
       an int >= 0; max_tasks is an int >= 1; max_tasks materializes to 50
       when the block omits it
     - The stage attachment grammar: a name-keyed mapping; an empty map
-      equals absence (None); each entry value is a mapping whose keys within
-      {gate, when} form a reference and whose any further key forms a full
-      inline declaration (the catalog key set plus gate and when); when is
-      required on every entry and is one of
-      start/checkpoints/finish/message; gate is a bool
-    - An assistant entry (catalog or full inline) without prompt and
-      without skills parses successfully — override-style authoring; the
-      requirement that the EFFECTIVE entry resolve content is the
-      compiler's structural check, not a parse rule
+      equals absence (None); each entry value is a mapping whose lone key
+      skip forms the veto, whose keys within {gate, when} form a
+      reference, and whose any further key forms a full inline
+      declaration or an extension (the catalog key set plus gate and
+      when); the value domain of when is validated whenever authored;
+      gate and skip are bools
     - For assistant fields, presence is preserved: skills [] and env {}
-      are explicit empty overrides; delegate absent is None
+      are explicit empty overrides; delegate/gate/when absent are None
     - The repeat block grammar: a mapping whose key set is max_cycles,
       keep_runs; each value is an int >= 0 (a boolean is not an integer); a
       scalar block value is a structural error; an empty block equals
@@ -1387,9 +1400,6 @@ Annotations: |
       wrapper generation rejects an illegal key with a strict pre-run error
     - A malformed timeout value and the name text content are NOT
       validated — passed through verbatim (value grammar is engine-owned)
-    - Assistant names match [A-Za-z0-9._-], are not "assistant", and are
-      unique across the catalog and every inline declaration — a repeated
-      declaration name raises "duplicate assistant name: NAME"
     - assistants is forbidden in an extend-entry — attachments of a new
       stage are authored in the stages block by the new stage's name
     - A workflow consisting of the assistants block alone or the delegation
@@ -1443,6 +1453,11 @@ Annotations: |
     - Do not resolve attachment references or derive profile ids here — the
       compiler resolves a reference against the assistant names of the
       effective document and the delivery materializes the profile
+    - Do not enforce a when on any entry and do not check name uniqueness
+      beyond the entry's own map — both are origin-aware compilation
+      checks
+    - Do not classify an entry as skip/extension/reference/inline — the
+      origin resolves where both documents meet
     - Do not resolve agent to a wrapper path, merge env with any other
       layer, or apply either global anywhere here — the consumers own
       every resolution law

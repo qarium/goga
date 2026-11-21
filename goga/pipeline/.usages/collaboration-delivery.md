@@ -3,28 +3,34 @@
 How authored collaboration reaches the engine on every launch: the
 generated helper profiles, the env closures behind their commands, and
 the whole-run task budget. Target audience: contributors reasoning about
-the delivered artifacts and workflow authors checking why their authoring
-survives every launch.
+the delivered artifacts and authors of either surface (workflow-file or
+pipeline-file) checking why their authoring survives every launch.
 
-## The two artifacts
+## The three artifacts
 
-The engine consumes collaboration through two artifacts goga already
+The engine consumes collaboration through artifacts goga already
 produces:
 
 - the **compiled flow-file** — `collaboration: {mode: assistants}`,
   `max_depth` when a depth is authored, the `team` list, and the stage
   `assistants` entries;
-- the **engine configuration** written before every launch — the static
-  section head (`collaboration.runtime_context: wrapper` and
-  `collaboration.hide_attach_helpers: true`), the generated
-  `collaboration.profiles` and `collaboration.limits.max_tasks`, plus the
-  top-level `command_names` labels of the generated commands.
+- the **effective workflow** — the delivery configuration of every
+  assistant (the catalog declarations, the inline declarations, and the
+  extension entries addressing pipeline-declared names);
+- the **parsed pipeline document** — the stage-body assistant
+  declarations (content and engagement; no delivery fields).
+
+The engine configuration written before every launch carries the static
+section head (`collaboration.runtime_context: wrapper` and
+`collaboration.hide_attach_helpers: true`), the generated
+`collaboration.profiles` and `collaboration.limits.max_tasks`, plus the
+top-level `command_names` labels of the generated commands.
 
 The compiled flow is the single source of truth: a profile is
 materialized exactly for the ids the flow references (`goga-<name>` of
-every team member and every stage attachment). The two artifacts cannot
-diverge, and no dead profile remains for an attachment removed by a stage
-skip.
+every team member and every stage attachment). The artifacts cannot
+diverge, and no dead profile remains for an attachment removed by an
+assistant veto or a stage skip.
 
 ## The static head and the command labels
 
@@ -32,8 +38,9 @@ The `collaboration` section always writes, even without collaboration
 authoring: `runtime_context: wrapper` (every command goga hands the
 engine is an as-claude wrapper or a closure over one) and
 `hide_attach_helpers: true` — the run's dynamic attach-helpers dashboard
-entry point stays hidden, so helpers join a goga-managed run only through
-the authored workflow plumbing.
+entry point stays hidden, so helpers join a goga-managed run only
+through the authored plumbing (the workflow-file instructions and the
+pipeline-file stage declarations).
 
 Every command the write produces — the resolved client wrapper and each
 profile command, wrapper or closure alike — is labeled in the top-level
@@ -48,7 +55,7 @@ map writes only when at least one labeled command exists.
 |-----|-------|
 | `title` | the assistant's authored name |
 | `command` | the resolved launch command (below) |
-| `delegate` | the authored permission, false by default |
+| `delegate` | the delivery source's permission, false by default |
 
 Nothing else is written into a generated profile. The profile id is
 `goga-<name>`; the `goga-` prefix is the intended override channel — a
@@ -58,14 +65,21 @@ goga never touches.
 
 ## Command resolution
 
-The profile's command resolves exactly like a stage agent command:
+The profile's command resolves exactly like a stage agent command, over
+the delivery source of the name:
 
-1. the assistant's authored `agent` → its wrapper path;
-2. else the effective global agent (the workflow's global `agent` when the
-   effective workflow carries one, else `pipeline.agent`) → its wrapper path;
-3. else the launch fails strictly before the run with an error naming the
-   assistant and its authoring site (the catalog or the stage whose
-   attachment declares it).
+- a **workflow catalog or inline declaration** — its authored `agent`;
+- a **pipeline-file stage declaration** — no delivery fields of its own:
+  the `agent`/`env`/`delegate` of the workflow extension entry
+  addressing the name (`stages.<stage>.assistants.<name>`), else the
+  effective global agent (the workflow's global `agent` when the
+  effective workflow carries one, else `pipeline.agent`);
+- else the effective global agent for every source — the same ladder as
+  stage agents;
+- else the launch fails strictly before the run with an error naming the
+  assistant and its authoring site (the catalog, the stage whose
+  attachment declares it, or the pipeline stage whose body declares
+  it).
 
 An assistant carrying an `env` instruction is delivered through a
 generated sh closure: the closure exports the assistant's env values and
@@ -73,7 +87,7 @@ execs the resolved wrapper, and the closure path becomes the profile's
 command — a profile carries its own command and inherits none. Closures
 are regenerated on every launch in a container-local temp directory, so
 the authored configuration survives the per-launch configuration rewrite
-by living in the workflow-file. Env keys must be legal environment
+by living in the authoring files. Env keys must be legal environment
 variable names — anything else is a strict pre-run error naming the
 assistant and the key, raised before any closure is written.
 
@@ -93,3 +107,6 @@ relied upon). `delegation.depth` travels in the flow-file as
 - goga writes no profile beyond the ids the flow references, and no key
   beyond `{title, command, delegate}`.
 - goga never touches the project-layer `.afm/config.yaml`.
+- goga resolves no delivery from a pipeline declaration — delivery
+  fields are workflow territory; a pipeline-declared assistant launches
+  under its extension entry's configuration or the global agent.

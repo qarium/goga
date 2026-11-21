@@ -5,6 +5,7 @@ Imports:
       - parse_dsl
       - StructuralError
       - PipelineRoles
+      - PipelineDocument
       - FlowStage
       - FlowDocument
       - FlowVerify
@@ -322,45 +323,51 @@ Annotations: |
   wrapper generation and launch layers are run-only surfaces.
 
   Collaboration delivery: the afm configuration write materializes the
-  engine's collaboration plumbing from the two artifacts the run already
-  produces — the compiled flow and the effective workflow. The section
-  writes on EVERY launch, always headed by collaboration.runtime_context:
-  wrapper and collaboration.hide_attach_helpers: true — the static
-  execution-context decision (every command goga
-  hands the engine, client and generated profiles alike, is an as-claude
-  wrapper or a closure over one) and the static dashboard decision
-  (helpers join a goga-managed run only through the authored workflow
-  plumbing, never through dynamic dashboard attachment). The compiled
-  flow is the single source of truth: the helper profiles are
-  materialized exactly for the generated profile ids the flow references
-  (the binding of every team member and of every stage attachment), so
-  the two artifacts cannot diverge and no dead profile remains for an
-  attachment removed by a stage skip; without both documents the section
-  stays the bare static head. Every command the write produces — the
-  client wrapper and each profile command, wrapper or closure alike — is
-  labeled in the top-level command_names map with the bare agent id of
-  its underlying as-claude wrapper, so the dashboard never falls back to
-  the file base name; the map is written only when at least one labeled
-  command exists. A generated profile is exactly
+  engine's collaboration plumbing from the artifacts the run already
+  produces — the compiled flow, the effective workflow, and the parsed
+  pipeline document. The section writes on EVERY launch, always headed
+  by collaboration.runtime_context: wrapper and
+  collaboration.hide_attach_helpers: true — the static
+  execution-context decision (every command goga hands the engine,
+  client and generated profiles alike, is an as-claude wrapper or a
+  closure over one) and the static dashboard decision (helpers join a
+  goga-managed run only through the authored plumbing — the
+  workflow-file instructions and the pipeline-file stage declarations —
+  never through dynamic dashboard attachment). The compiled flow is the
+  single source of truth: the helper profiles are materialized exactly
+  for the generated profile ids the flow references, so the two
+  artifacts cannot diverge and no dead profile remains for an attachment
+  removed by an assistant veto or a stage skip; without the artifacts
+  the section stays the bare static head. Every command the write
+  produces — the client wrapper and each profile command, wrapper or
+  closure alike — is labeled in the top-level command_names map with the
+  bare agent id of its underlying as-claude wrapper, so the dashboard
+  never falls back to the file base name; the map is written only when
+  at least one labeled command exists. A generated profile is exactly
   {title, command, delegate}: the title from the assistant name, the
-  delegate permission from the declaration, and the command resolved the
-  stage-agent way — the declaration's agent, else the effective global
+  delegate permission from the delivery source, and the command resolved
+  the stage-agent way — the source's agent, else the effective global
   pipeline agent; a name that resolves to nothing fails the launch with
   a pre-run error naming the assistant and its authoring site (the
-  catalog or the stage whose attachment declares it). An assistant carrying an env
-  instruction is delivered through a generated sh closure whose path
-  becomes the profile's command (a profile carries its own command and
-  inherits none); closures are regenerated on every launch, so the
-  authored configuration survives the per-launch rewrite by living in
-  the workflow-file. The whole-run task budget is written as
-  collaboration.limits.max_tasks only when the workflow carries a
+  catalog, the stage whose attachment declares it, or the pipeline stage
+  whose body declares it). A pipeline-declared assistant carries no
+  delivery fields of its own: its delivery configuration comes from the
+  workflow extension entry addressing its name (agent, env, delegate),
+  and without one it launches under the effective global agent. An
+  assistant carrying an env instruction is delivered through a generated
+  sh closure whose path becomes the profile's command (a profile carries
+  its own command and inherits none); closures are regenerated on every
+  launch, so the authored configuration survives the per-launch rewrite
+  by living in the workflow-file. The whole-run task budget is written
+  as collaboration.limits.max_tasks only when the workflow carries a
   delegation block — the materialized value, 50 when the block omits it.
   The goga- profile prefix is the intended override channel: a
   user-authored same-named profile in the project layer deliberately
-  replaces goga's plumbing, and the project-layer engine configuration is
-  user territory goga never touches. goga neither reads nor writes the
-  collaboration kill-switch — an environment that disables collaboration
-  gets engine warnings and skipped helpers, and the run proceeds.
+  replaces goga's plumbing, and the project-layer engine configuration
+  is user territory goga never touches. goga neither reads nor writes
+  the collaboration kill-switch — an environment that disables
+  collaboration gets engine warnings and skipped helpers, and the run
+  proceeds.
 
   Use `afm` for the collaboration configuration contract — the profile
   shape, the limits, and the config layers.
@@ -952,14 +959,18 @@ Annotations: |
     17. Author the afm home: write the afm configuration file via
         `write_afm_config` with the
         effective global agent (resolved at step 14), the compiled flow
-        document, and the
+        document, the
         effective workflow document (the overlay workflow; the resolved
         workflow when the amendment layer is off; None when no workflow
-        resolved) — the whole file at the fixed in-container home path,
+        resolved), and the parsed pipeline document (the compile step's
+        returned PipelineDocument — the carrier of the pipeline-file
+        stage-body assistant declarations) as the pipeline parameter of
+        `write_afm_config` —
+        the whole file at the fixed in-container home path,
         before the launch; the collaboration section (always headed by
         runtime_context: wrapper and hide_attach_helpers: true)
         materializes its profiles from
-        the two documents, and a collaboration pre-run error (an
+        the documents, and a collaboration pre-run error (an
         unresolvable assistant agent name or an illegal env key) fails
         the launch with a clean error naming the assistant and its
         authoring site before any events fire; then materialize the
@@ -1151,7 +1162,7 @@ Annotations: |
     - Do not print configuration values — summary lines carry the tool, the
       path, set or forced only
 
-"write_afm_config(agent: str | None, flow: FlowDocument | None = None, workflow: WorkflowDocument | None = None) -> config_path: Path":
+"write_afm_config(agent: str | None, flow: FlowDocument | None = None, workflow: WorkflowDocument | None = None, pipeline: PipelineDocument | None = None) -> config_path: Path":
   location: afm_config.py
   annotations: |
     Write the whole afm configuration file in-container before the afm
@@ -1172,8 +1183,19 @@ Annotations: |
             writes)
     `workflow`: the effective workflow document — the source of each
                 referenced assistant's declaration (agent, delegate,
-                env); None writes no collaboration profiles (the section
-                head still writes)
+                env) and of the delegation block; None when no workflow
+                resolved — the pipeline declarations remain the sole
+                profile source and the task budget stays unwritten
+    `pipeline`: the parsed pipeline document (a `PipelineDocument`) —
+                the carrier of the pipeline-file stage-body assistant
+                declarations. Together with `flow` and `workflow` it
+                completes the delivery resolution: a pipeline-declared
+                name resolves its delivery fields from the workflow
+                extension entry addressing it, and its authoring site
+                (the pipeline stage whose body declares it) is named by
+                strict pre-run errors. None when no pipeline document is
+                at hand — the section head still writes and no
+                pipeline-declared profile resolves
     `config_path`: the fixed in-container path of the written file
 
     Apply `convention` for docstring style and intra-package imports.
@@ -1215,15 +1237,27 @@ Annotations: |
        collaboration.hide_attach_helpers = true (the static dashboard
        decision: the run's dynamic attach-helpers entry point stays
        hidden — helpers join a goga-managed run only through the authored
-       workflow plumbing). When `flow` and `workflow` are both not None —
+       plumbing). When `flow` is not None and at least one of `workflow`
+       and `pipeline` is not None —
        materialize the rest of the
        plumbing under the head:
        1. Collect the referenced profile ids: the profile binding of
           every `FlowTeamMember` of the flow plus the profile binding of
           every stage attachment entry (`FlowAssistant`) of the flow
-       2. For each referenced id, locate the assistant declaration by
-          name in the workflow's assistant namespace — the catalog plus
-          every full inline declaration of the stages block
+       2. For each referenced id, locate the assistant's delivery source
+          by name across the effective namespace — the workflow's
+          assistant declarations (the catalog plus every full inline
+          declaration of the stages block) and the pipeline declarations
+          the `pipeline` document carries:
+          - a workflow catalog or inline declaration supplies agent,
+            delegate, and env as authored
+          - a pipeline declaration carries no delivery fields: the
+            workflow entry addressing the name (its extension entry)
+            supplies agent, delegate, and env; the pipeline stage whose
+            body declares the name is the authoring site
+          - a name resolving to no declaration is a caller-side
+            inconsistency (compilation validated the flow) — one strict
+            pre-run error naming the assistant
        3. Resolve each profile's command: when the declaration carries
           a NON-EMPTY effective env map (not None and not empty — an
           explicitly cleared env is no env) — validate every declared key as a legal
@@ -1234,10 +1268,11 @@ Annotations: |
           exec-ing the resolved target wrapper, and the closure path
           becomes the command; otherwise the wrapper of the declaration's
           agent, else the wrapper of the effective global agent (`agent`);
-          no agent resolves at all — one strict pre-run error naming the
-          assistant and its authoring site (the catalog or the stage
-          whose attachment declares it), raised before the file is
-          written; the effective delegate materializes False when None
+          no agent resolves at all — one strict pre-run error naming
+          the assistant and its authoring site (the catalog, the stage
+          whose attachment declares it, or the pipeline stage whose body
+          declares it), raised before the file is written; the effective
+          delegate materializes False when None
        4. Write collaboration.profiles.<id> = {title: <name>, command:
           <resolved>, delegate: <declaration delegate>} — nothing else in
           the profile
@@ -1264,11 +1299,17 @@ Annotations: |
       the same authoring takes effect on every consecutive launch
     - The collaboration section is written on every launch and always
       carries runtime_context: wrapper and hide_attach_helpers: true
-      first; the profiles and the task budget join it only when both
-      `flow` and `workflow` are given
+      first; the profiles join it when `flow` is given with `workflow`
+      or `pipeline` (either completes the delivery resolution); the task
+      budget joins it only when `workflow` is given
+    - A pipeline-declared assistant's profile resolves through the
+      workflow extension entry's delivery fields, else the effective
+      global agent — the declaration itself contributes no command, no
+      env, and no delegate; the goga-<name> id scheme and the {title,
+      command, delegate} profile shape are unchanged
     - The profiles are materialized exactly for the ids the compiled flow
-      references — no more, no less; an attachment removed by a stage
-      skip leaves no profile behind
+      references — no more, no less; an attachment removed by an
+      assistant veto or a stage skip leaves no profile behind
     - A generated profile carries exactly title, command, and delegate
     - collaboration.limits.max_tasks is written only when the workflow
       carries a delegation block
@@ -1318,6 +1359,10 @@ Annotations: |
     - Do not write closures under the project directory or /workspace —
       container-local temp only
     - Do not print or log env values
+    - Do not resolve a pipeline-declared name's delivery from the
+      pipeline document — it carries content and engagement only;
+      delivery fields come from the workflow entry addressing the name
+      or the global fallback
 
 "materialize_afm_skin() -> skin_dir: Path":
   location: afm_skin.py
