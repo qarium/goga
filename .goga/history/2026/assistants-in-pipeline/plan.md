@@ -1223,7 +1223,7 @@ flow-referenced, never resolved; an explicitly cleared env (`{}`) is no env (no 
 `_collaboration_section` gains the `pipeline` parameter (threaded into `_resolve_profiles`);
 `limits` still keys on the workflow delegation block alone.
 
-- [ ] **Contract tests**: rework
+- [x] **Contract tests**: rework
       `tests/pipeline/test_afm_config.py::TestWriteAfmConfigContract::test_write_afm_config_signature_matches_contract`
       (line 55) — the pinned parameter list `["agent", "flow", "workflow"]` gains the trailing
       `pipeline` (default `None`, annotation `PipelineDocument | None`) in the same change set as
@@ -1236,20 +1236,20 @@ flow-referenced, never resolved; an explicitly cleared env (`{}`) is no env (no 
       `write_afm_config("claude", flow=flow, workflow=workflow)` → profiles; NEW:
       `write_afm_config("claude", flow=flow, pipeline=pipeline)` → profiles)
       (expected to fail at this stage)
-- [ ] **Code**: add the `pipeline: PipelineDocument | None = None` parameter (last) to
+- [x] **Code**: add the `pipeline: PipelineDocument | None = None` parameter (last) to
       `write_afm_config`; import `PipelineDocument` from `.compiler` (joins the existing runtime
       import line); replace the gate with `flow is not None and (workflow is not None or
       pipeline is not None)`; thread `pipeline` into `_collaboration_section` and
       `_resolve_profiles`; implement `_pipeline_declaring_stages(pipeline)` and the pipeline
       branch per the algorithm
-- [ ] **Code**: update the docstrings (the `pipeline` arg line per the contract annotation —
+- [x] **Code**: update the docstrings (the `pipeline` arg line per the contract annotation —
       "None when no pipeline document is at hand — the section head still writes and no
       pipeline-declared profile resolves"; the gating sentence — "the profiles join it when `flow`
       is given with `workflow` or `pipeline`; the task budget joins it only when `workflow` is
       given")
-- [ ] **Interface verification**: `pytest tests/pipeline/test_afm_config_collaboration.py -x` —
+- [x] **Interface verification**: `pytest tests/pipeline/test_afm_config_collaboration.py -x` —
       the contract class passes
-- [ ] **Logic tests** (monkeypatch the closure/env foundations per the existing pattern) — the
+- [x] **Logic tests** (monkeypatch the closure/env foundations per the existing pattern) — the
       design's scenarios:
       - `test_sc1_profile_generated_without_workflow` — the SC1 flow + `write_afm_config("claude",
         flow=doc, workflow=None, pipeline=pipeline_doc)`: the written config carries
@@ -1268,11 +1268,11 @@ flow-referenced, never resolved; an explicitly cleared env (`{}`) is no env (no 
       - the no-agent pipeline branch — a pipeline-declared name with no workflow and
         `agent=None` → `ValueError` matching `r"assistant watcher at pipeline\.review resolved no
         agent: set its agent or a global agent"` (the D2 site)
-- [ ] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: the `{title, command, delegate}` profile shape unchanged;
+- [x] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: the `{title, command, delegate}` profile shape unchanged;
       every resolution error fires before any file is written; the defensive unknown-reference
       text unchanged; `goga lint` still 0 errors
-- [ ] **Lint**: `ruff check goga/ tests/pipeline/` — fix findings; `ruff format` the touched files
+- [x] **Lint**: `ruff check goga/ tests/pipeline/` — fix findings; `ruff format` the touched files
 
 ### Task 8: `run_pipeline` step 17 — threading and the end-to-end delivery (goga/pipeline)
 

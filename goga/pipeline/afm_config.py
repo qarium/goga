@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 from ..agents import resolve_wrapper_path
-from .compiler import FlowDocument
+from .compiler import FlowDocument, PipelineDocument
 from .workflow import WorkflowAssistant, WorkflowDocument
 
 logger = logging.getLogger(__name__)
@@ -102,6 +102,64 @@ def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, tuple[Workflow
     return namespace
 
 
+def _pipeline_declaring_stages(pipeline: PipelineDocument | None) -> dict[str, str]:
+    """Index every pipeline-declared assistant name to its declaring stage.
+
+    Args:
+        pipeline: The parsed pipeline document — the ORIGINAL body the
+            compiler never mutates, so a name declared on a stage the
+            compiled flow no longer carries (skipped) still indexes; only a
+            flow-referenced name ever resolves, so the dead entries stay
+            inert.
+
+    Returns:
+        The name → declaring stage map (the delivery site prefix
+        ``pipeline.<stage>``); ``{}`` when no pipeline document is at hand.
+    """
+    if pipeline is None:
+        return {}
+
+    declaring: dict[str, str] = {}
+
+    for step in pipeline.body.steps:
+        for name in step.assistants or {}:
+            declaring[name] = step.name
+
+    return declaring
+
+
+def _extension_delivery(
+    workflow: WorkflowDocument | None,
+    stage: str,
+    name: str,
+) -> tuple[str | None, bool | None, dict[str, str] | None]:
+    """Resolve a pipeline-declared name's delivery fields from its extension entry.
+
+    Args:
+        workflow: The effective workflow document, or ``None`` when no
+            workflow is at hand.
+        stage: The pipeline stage declaring the name — the only stage whose
+            entry can address it (a cross-stage entry dies at compilation,
+            so the lookup is unambiguous).
+        name: The pipeline-declared assistant name.
+
+    Returns:
+        The ``(agent, delegate, env)`` delivery triple of the workflow
+            extension entry addressing the name — all ``None`` when no
+            workflow, no stage entry, or no entry addresses it (the profile
+            then resolves the global agent and materializes
+            ``delegate: false``).
+    """
+    if workflow is not None:
+        stage_entry = workflow.stages.get(stage)
+        entry = (stage_entry.assistants or {}).get(name) if stage_entry is not None else None
+
+        if entry is not None:
+            return (entry.agent, entry.delegate, entry.env)
+
+    return (None, None, None)
+
+
 def _referenced_names(flow: FlowDocument) -> list[str]:
     """Collect the flow-referenced assistant names in emission order, deduplicated.
 
@@ -146,60 +204,79 @@ def _wrapper_agent_label(command: str) -> str | None:
 def _resolve_profiles(
     agent: str | None,
     flow: FlowDocument,
-    namespace: dict[str, tuple[WorkflowAssistant, str]],
+    workflow: WorkflowDocument | None,
+    pipeline: PipelineDocument | None,
 ) -> dict[str, tuple[bool, dict[str, str] | None, str]]:
     """Resolve every referenced assistant in memory — no file is touched here.
 
     Args:
         agent: The effective global agent — the workflow global agent of the
             effective workflow when it carries one, otherwise the effective
-            pipeline agent; the fallback tier when a declaration carries no
-            agent of its own.
+            pipeline agent; the fallback tier when a delivery source carries
+            no agent of its own.
         flow: The compiled flow document (the referenced names source).
-        namespace: The name → (declaration, site) map of the workflow.
+        workflow: The effective workflow document — the source of the
+            workflow-side namespace (the catalog plus the inline
+            declarations) and of each pipeline-declared name's extension
+            entry; ``None`` when no workflow is at hand (the namespace is
+            empty and every pipeline-declared name resolves the global agent
+            alone).
+        pipeline: The parsed pipeline document — the carrier of the
+            stage-body declarations; ``None`` when no pipeline document is
+            at hand (no pipeline-declared name resolves).
 
     Returns:
         The name → (delegate, env, wrapper) map — every command resolved to
         its absolute wrapper path.
 
     Raises:
-        ValueError: When the flow references a name the workflow does not
-            declare (the defensive branch), when an env key of a NON-EMPTY
+        ValueError: When the flow references a name neither document
+            declares (the defensive branch), when an env key of a NON-EMPTY
             effective env map is not a legal environment variable name, or
             when an assistant resolves no agent at all — every check fires
             before any file is written.
     """
+    namespace = _assistant_namespace(workflow) if workflow is not None else {}
+    declaring = _pipeline_declaring_stages(pipeline)
+
     resolved: dict[str, tuple[bool, dict[str, str] | None, str]] = {}
 
     for name in _referenced_names(flow):
         entry_site = namespace.get(name)
 
-        if entry_site is None:
+        if entry_site is not None:
+            declaration, site = entry_site
+            delivery = (declaration.agent, declaration.delegate, declaration.env)
+        elif name in declaring:
+            stage = declaring[name]
+            site = f"pipeline.{stage}"
+            delivery = _extension_delivery(workflow, stage, name)
+        else:
             raise ValueError(f"unknown assistant reference in the compiled flow: {name}")
 
-        declaration, site = entry_site
+        delivery_agent, delivery_delegate, delivery_env = delivery
 
         # None and {} both mean "no closure" — the env delivery keys on a
         # non-empty effective map only (an explicitly cleared env is no env).
-        if declaration.env:
-            for key in declaration.env:
+        if delivery_env:
+            for key in delivery_env:
                 if _LEGAL_ENV_NAME_PATTERN.fullmatch(key) is None:
                     raise ValueError(f"invalid environment variable name in the {name} assistant env: {key!r}")
 
-        target_agent = declaration.agent if declaration.agent is not None else agent
+        target_agent = delivery_agent if delivery_agent is not None else agent
 
         if target_agent is None:
             raise ValueError(
                 f"assistant {name} at {site} "
-                f"{'declares env but ' if declaration.env else ''}"
+                f"{'declares env but ' if delivery_env else ''}"
                 f"resolved no agent: set its agent or a global agent"
             )
 
         # The model's tri-state collapses to the engine's bool exactly once,
         # here at the delivery boundary — None (not authored) is False.
-        delegate = declaration.delegate if declaration.delegate is not None else False
+        delegate = delivery_delegate if delivery_delegate is not None else False
 
-        resolved[name] = (delegate, declaration.env, resolve_wrapper_path(target_agent))
+        resolved[name] = (delegate, delivery_env, resolve_wrapper_path(target_agent))
 
     return resolved
 
@@ -241,7 +318,8 @@ def _write_owner_only(path: Path, script: str) -> None:
 def _collaboration_section(
     agent: str | None,
     flow: FlowDocument,
-    workflow: WorkflowDocument,
+    workflow: WorkflowDocument | None,
+    pipeline: PipelineDocument | None,
 ) -> dict[str, object]:
     """Materialize the collaboration plumbing — profiles and the task budget.
 
@@ -255,8 +333,14 @@ def _collaboration_section(
             the ids the flow references; an attachment removed by a stage
             skip never appears in the flow, so no dead profile remains).
         workflow: The effective workflow document — the source of each
-            referenced assistant's declaration (agent, delegate, env) and of
-            the delegation block.
+            workflow-declared name's delivery fields, of each
+            pipeline-declared name's extension entry, and of the delegation
+            block; ``None`` when no workflow is at hand (the pipeline
+            declarations remain the sole profile source and the task budget
+            stays unwritten).
+        pipeline: The parsed pipeline document — the carrier of the
+            stage-body declarations; ``None`` when no pipeline document is
+            at hand (no pipeline-declared profile resolves).
 
     Returns:
         The ``(collaboration section, command names)`` pair — the section (see
@@ -274,7 +358,7 @@ def _collaboration_section(
         ValueError: Every resolution error of ``_resolve_profiles`` — all of
             them fire before any file (config or closure) is written.
     """
-    resolved = _resolve_profiles(agent, flow, _assistant_namespace(workflow))
+    resolved = _resolve_profiles(agent, flow, workflow, pipeline)
 
     _CLOSURE_BASE.mkdir(parents=True, exist_ok=True, mode=0o700)
     # mkdir(exist_ok=True) keeps the mode of an existing directory — pin it
@@ -309,7 +393,7 @@ def _collaboration_section(
         "profiles": profiles,
     }
 
-    if workflow.delegation is not None:
+    if workflow is not None and workflow.delegation is not None:
         section["limits"] = {"max_tasks": workflow.delegation.max_tasks}
 
     return section, command_names
@@ -319,6 +403,7 @@ def write_afm_config(
     agent: str | None,
     flow: FlowDocument | None = None,
     workflow: WorkflowDocument | None = None,
+    pipeline: PipelineDocument | None = None,
 ) -> Path:
     """Write the whole afm configuration file at the fixed in-container home path.
 
@@ -330,14 +415,20 @@ def write_afm_config(
             block.
         flow: The compiled flow document — the source of the generated
             profile ids (the binding of every team member and of every stage
-            attachment the flow carries); ``None`` (with a ``workflow`` given
-            or alone) writes no collaboration profiles — the section head
-            (``runtime_context``) still writes.
+            attachment the flow carries); ``None`` writes no collaboration
+            profiles — the section head (``runtime_context``) still writes.
         workflow: The effective workflow document — the source of each
-            referenced assistant's declaration (agent, delegate, env) and of
-            the delegation block; ``None`` (with a ``flow`` given or alone)
-            writes no collaboration profiles — the section head
-            (``runtime_context``) still writes.
+            workflow-declared name's delivery fields, of each
+            pipeline-declared name's extension entry, and of the delegation
+            block; ``None`` when no workflow is at hand — the pipeline
+            declarations remain the sole profile source and the task budget
+            stays unwritten.
+        pipeline: The parsed pipeline document — the carrier of the
+            stage-body assistant declarations (delivery fields are
+            workflow-file territory: a pipeline-declared name resolves them
+            from its workflow extension entry, else the global agent);
+            ``None`` when no pipeline document is at hand — the section head
+            still writes and no pipeline-declared profile resolves.
 
     Returns:
         The fixed in-container path of the written file
@@ -368,21 +459,22 @@ def write_afm_config(
         ``runtime_context: wrapper`` (the static collaboration execution
         context) and ``hide_attach_helpers: true`` (the dynamic
         attach-helpers dashboard entry point stays hidden — helpers come
-        only from the authored workflow plumbing); when both ``flow`` and
-        ``workflow`` are given the section also carries one generated
-        ``goga-<name>`` profile per flow-referenced id (exactly ``{title,
-        command, delegate}``; an assistant carrying a non-empty effective
-        env map gets a generated owner-only closure path as its command)
-        and ``limits.max_tasks`` only when the workflow carries a
-        delegation block.
+        only from the authored workflow plumbing); the profiles join it
+        when ``flow`` is given with ``workflow`` or ``pipeline`` (either
+        completes the delivery resolution — one generated ``goga-<name>``
+        profile per flow-referenced id, exactly ``{title, command,
+        delegate}``; an assistant carrying a non-empty effective env map
+        gets a generated owner-only closure path as its command); the task
+        budget joins it only when ``workflow`` is given — and only when the
+        workflow carries a delegation block.
 
     Raises:
         ValueError: When a referenced assistant's declared env carries an
             illegal environment variable name, when an assistant resolves no
             agent at all (no own agent, no global agent), or — defensively —
-            when the compiled flow references a name the workflow does not
-            declare; every variant fires before any file (config or closure)
-            is written.
+            when the compiled flow references a name neither the workflow
+            nor the pipeline document declares; every variant fires before
+            any file (config or closure) is written.
         OSError: When the home directory is unwritable — propagates unchanged
             (the caller returns before any run event fires; no partial file is
             left behind).
@@ -412,11 +504,11 @@ def write_afm_config(
         }
     ]
 
-    if flow is not None and workflow is not None:
-        collaboration, profile_command_names = _collaboration_section(agent, flow, workflow)
+    if flow is not None and (workflow is not None or pipeline is not None):
+        collaboration, profile_command_names = _collaboration_section(agent, flow, workflow, pipeline)
     else:
         # The section head still writes — the runtime context is a static
-        # delivery decision that never depends on the two documents; only the
+        # delivery decision that never depends on the documents; only the
         # profiles and the task budget are document-derived.
         collaboration = {"runtime_context": _RUNTIME_CONTEXT, "hide_attach_helpers": _HIDE_ATTACH_HELPERS}
         profile_command_names = {}
