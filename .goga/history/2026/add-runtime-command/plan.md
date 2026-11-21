@@ -1407,18 +1407,23 @@ criteria that no single-cell unit test can prove.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `tests/integration/test_runtime_command_end_to_end.py` (the
+- [x] Create `tests/integration/test_runtime_command_end_to_end.py` (the
   directory already has `__init__.py` and `conftest.py`) with a module
   docstring mapping the stitched path: root app → commands facade →
   runtime group → targets/archive → `goga/runtime` formula → docker marker
-- [ ] Test the registered surface end-to-end:
+- [x] Test the registered surface end-to-end:
   `CliRunner().invoke(app, ["runtime", "build"])` (git mocked, home/cwd
   patched, `GOGA_DOCKER` absent) → exit 0, one stdout line equal to the
   formula's output for the mocked branch; the same for
   `["runtime", "pipeline", "pybuggy:api"]` and (with a target tree in
   place) `["runtime", "archive", "-b"]` → the archive file exists at the
   printed path with the wrapper-root layout
-- [ ] Test location parity with the REAL call sites (the acceptance
+  (7 scenarios in 4 classes: the three registered-surface tests assert the
+  printed line equals `resolve_runtime_dir(...)` computed inside the same
+  git mock AND the composed `home/.goga/runtime/...` shape — single line,
+  purity; the archive lands at `work/goga-runtime-build-feature-x.tar.gz`
+  with `names[0]` the wrapper root and `a.txt`/`sub/b.log` members)
+- [x] Test location parity with the REAL call sites (the acceptance
   criteria): with git mocked to a fixed branch and cwd/home patched,
   `invoke(app, ["runtime", "build"]).output.strip()` equals
   `resolve_build_runtime_dir()` from `goga.commands.build`
@@ -1428,18 +1433,26 @@ criteria that no single-cell unit test can prove.
   `goga.commands.pipeline.run_pipeline_container`
   (`run_pipeline_container.py:153`) for the same branch — one formula, no
   second scheme
-- [ ] Test the branch override end-to-end:
+  (both parity functions called inside the same git mock as the CLI
+  invocation — identical branch, identical formula output)
+- [x] Test the branch override end-to-end:
   `invoke(app, ["runtime", "-b", "release/1.2", "build"])` equals the
   build-parity path computed for the slugified segment `release-1.2`
   (deleted-branch state stays addressable; git unused)
-- [ ] Test the in-image refusal through the root app:
+  (asserts `run_mock.call_count == 0` across the whole block — the CLI
+  call AND the explicit-branch parity computation are both git-free)
+- [x] Test the in-image refusal through the root app:
   `GOGA_DOCKER=1` + `invoke(app, ["runtime", "build"])` → exit 1, "host"
   in stderr, stdout empty (the marker consult is the docker cell's, not a
   reimplementation)
-- [ ] Run validation: `.venv/bin/pytest tests/integration/
+- [x] Run validation: `.venv/bin/pytest tests/integration/
   test_runtime_command_end_to_end.py -v` — all pass; then the full battery
   `.venv/bin/pytest tests/ -x`, the ruff gates, and `goga lint` (94 cells,
   0 errors) before the final commit
+  (7 passed first try — no fix needed; one E501 resolved and the
+  signatures collapsed by `ruff format`, then gates clean; battery 8461
+  passed / 8 skipped — 8454 baseline + the 7 new tests; goga lint 94/0 on
+  BOTH the workspace venv CLI and the host `/opt/goga/bin/goga`)
 
 ---
 
@@ -1476,40 +1489,46 @@ All commands run in the virtualenv (Task 1); `goga` runs on the host CLI
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is implemented in the correct `location`
   (`runtime.py`, `targets.py`, `archive.py`, and the `paths.py` extension)
-- [ ] Every contract entity is accessible from its facade
+- [x] Every contract entity is accessible from its facade
   (`goga.commands.runtime` exposes all 7 names; `goga.commands`
   re-exports `runtime`; `goga.runtime` unchanged)
-- [ ] Properties and methods match the declared API (signatures pinned by
+- [x] Properties and methods match the declared API (signatures pinned by
   contract tests, including the keyword-only `branch`)
-- [ ] Descriptions are reflected in behavior (all manifest Algorithms,
+- [x] Descriptions are reflected in behavior (all manifest Algorithms,
   Requirements, and Constraints implemented — including the empty-name
   guards, the guarded cleanup, and the OSError wrap)
-- [ ] Contract dependencies are met (`resolve_runtime_dir`,
+- [x] Contract dependencies are met (`resolve_runtime_dir`,
   `resolve_git_branch` from `goga/runtime`; `is_in_docker` from
   `goga/docker`; `runtime-paths` imported usage applied)
-- [ ] Re-exports are accessible from the facade (`->runtime: {}`)
-- [ ] Every coding task followed the TDD workflow (contract tests → code →
+- [x] Re-exports are accessible from the facade (`->runtime: {}`)
+- [x] Every coding task followed the TDD workflow (contract tests → code →
   verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior
+- [x] Contract tests and logic tests cover facade, API, and behavior
   within each coding task (31 named scenarios: the design's 29 — 6
   positive, 11 negative, 12 edge — plus the wrapper-root routine test and
   the unwritable-destination command test; plus contract, facade, and
   integration tests)
-- [ ] Integration tests exist for the cross-entity scenarios (Task 7:
+- [x] Integration tests exist for the cross-entity scenarios (Task 7:
   root-app end-to-end, run-parity, branch override, in-image refusal)
-- [ ] No package boundary was expanded (no new cells beyond the applied
+- [x] No package boundary was expanded (no new cells beyond the applied
   `goga/commands/runtime`; no new public names beyond the contract; no
   `pyproject.toml` changes)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass (full battery, ruff check + format,
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (full battery, ruff check + format,
   `goga lint` 94/0, facade checks, smoke checks)
-- [ ] Every Usages entry is mentioned in at least one task (`convention`,
+- [x] Every Usages entry is mentioned in at least one task (`convention`,
   `click`, `tarfile`, `runtime-paths`, `cli-commands`; the local usages
   `path-queries`/`archive` are verified for truthfulness)
-- [ ] The Mandatory Rules held for every task and every commit: coding
+- [x] The Mandatory Rules held for every task and every commit: coding
   style per `conventions.md`, test rules per `conventions.md` — Testing,
   ruff lint + format gates green at each stage, no `Co-Authored-By:`
   trailers, and the REPL cycle (probe → migrate → hot feedback) followed
   in every coding task
+
+Final state verified at Task 7 close: full battery **8461 passed / 8
+skipped** (the 8391 pre-change baseline + 70 new tests across Tasks 2–7),
+`ruff check` + `ruff format --check` zero findings, `goga lint` 94 cells /
+0 errors (workspace venv CLI and host CLI), all facade import checks and
+smoke checks green, and `git status` clean of any CODEMANIFEST change.
