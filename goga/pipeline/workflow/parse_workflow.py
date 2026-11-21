@@ -1549,9 +1549,10 @@ def _build_assistant_catalog(assistants_raw: dict[str, Any] | None) -> dict[str,
     catalog: dict[str, WorkflowAssistant] = {}
 
     # A map key cannot repeat, so no within-catalog duplicate check exists
-    # here — the dict is keyed by the authored name, and the later
-    # document-wide namespace walk over ``values()`` only guards the
-    # cross-surface repeats (catalog vs inline declarations).
+    # here — the dict is keyed by the authored name. Uniqueness of a name
+    # across the effective namespace (the catalog, the stage entry maps,
+    # and the pipeline declarations of the compiled pipeline-file) is a
+    # compilation check owned by ``compile_flow``, not a parse rule.
     for name, entry_value in assistants_raw.items():
         if not isinstance(entry_value, dict):
             raise WorkflowSyntaxError(f"non-mapping assistant entry in workflow.assistants.{name}")

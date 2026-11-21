@@ -16,11 +16,13 @@ class WorkflowAssistant:
     catalog) and :class:`WorkflowStage` (the attachments).
 
     Args:
-        name: The assistant name — the map key of the entry on both
-            authoring surfaces; matches ``[A-Za-z0-9._-]``; ``"assistant"``
-            is rejected; unique across the catalog and every inline
-            declaration of one workflow-file (:func:`parse_workflow` owns
-            the grammar, the reserved name, and the uniqueness checks).
+        name: The assistant name — the map key of the entry on every
+            authoring surface; matches ``[A-Za-z0-9._-]``; ``"assistant"``
+            is rejected (:func:`parse_workflow` owns the grammar and the
+            reserved name; uniqueness across the effective namespace — the
+            catalog, every inline declaration, and the pipeline
+            declarations of the compiled pipeline-file — is a compilation
+            check owned by ``compile_flow``).
         prompt: The assistant's instruction text, or ``None`` when not
             authored.
         skills: List of the assistant's own skill names, or ``None`` when
