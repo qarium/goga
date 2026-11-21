@@ -452,6 +452,68 @@ class TestOverlayAssistants:
         assert t1_build is not None
         assert list(t1_build) == ["reviewer", "security"]
 
+    def test_overlay_appends_skip_and_extension_forms_form_blind(self) -> None:
+        """The append rule is form-blind over the new entry forms; only the namespace drops declarations.
+
+        A ``{skip: true}`` entry and a gate/when-only entry are not
+        declaration-shaped, so they append like every other entry — the
+        namespace rule never drops them. A when-less extension entry
+        addressing a pipeline-declared name appends unresolved (the
+        pipeline namespace is invisible here); only a declaration whose
+        name is in the merged workflow-side namespace drops, silently —
+        its collision with a workflow declaration of the same name
+        surfaces at compilation, never in the overlay.
+        """
+        skip_entry = WorkflowAssistant(name="watcher", skip=True)
+        extension_entry = WorkflowAssistant(name="sec", agent="codex")
+        colliding = WorkflowAssistant(name="auditor", prompt="Audit the gates (tool).")
+        base = WorkflowDocument(
+            prompt="authored",
+            assistants={"auditor": WorkflowAssistant(name="auditor", prompt="Audit.")},
+            stages={
+                "build": WorkflowStage(
+                    agent="a",
+                    assistants={"reviewer": WorkflowAssistant(name="reviewer", gate=True, when="checkpoints")},
+                ),
+            },
+        )
+        contributions = [
+            ToolContribution(
+                tool="t1",
+                document=WorkflowDocument(
+                    stages={
+                        "build": WorkflowStage(agent="a", assistants={"watcher": skip_entry}),
+                        "review": WorkflowStage(agent="a", assistants={"sec": extension_entry}),
+                        "gate-check": WorkflowStage(agent="a", assistants={"auditor": colliding}),
+                    },
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        workflow = overlay.workflow
+        assert workflow is not None
+        # The authored entry keeps its landing; the veto form appends verbatim.
+        build = workflow.stages["build"].assistants
+        assert build is not None
+        assert list(build) == ["reviewer", "watcher"]
+        assert build["watcher"] is skip_entry
+        assert build["watcher"].skip is True
+        # The when-less extension addressing a pipeline name appends verbatim —
+        # the overlay never resolves a name beyond the workflow document.
+        review = workflow.stages["review"].assistants
+        assert review is not None
+        assert list(review) == ["sec"]
+        assert review["sec"] is extension_entry
+        assert review["sec"].when is None
+        assert review["sec"].agent == "codex"
+        # The colliding declaration drops silently — no error, no resolution.
+        assert workflow.stages["gate-check"].assistants is None
+        assert list(workflow.assistants) == ["auditor"]
+        assert workflow.assistants["auditor"].prompt == "Audit."
+        assert overlay.provenance == ["t1"]
+
     def test_overlay_catalog_entry_displaces_earlier_inline_declaration(self) -> None:
         """The pinned cross-kind collision — a later catalog entry displaces an earlier declaration."""
         declaration = WorkflowAssistant(name="sec", prompt="Audit the stage (t1 inline).")
