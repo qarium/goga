@@ -59,6 +59,9 @@ def package_runtime_archive(target_dir: Path, wrapper_root: str, destination: Pa
 
     Args:
         target_dir: The target directory — guaranteed by the caller to exist.
+            The tree root is resolved before adding (a symlinked root is
+            followed once); the contents are taken as encountered — inner
+            symlinks stay symlinks.
         wrapper_root: The single root directory name holding the whole tree
             inside the archive.
         destination: The resolved destination path — validated by the caller.
@@ -81,7 +84,11 @@ def package_runtime_archive(target_dir: Path, wrapper_root: str, destination: Pa
     try:
         with tarfile.open(destination, "w:gz") as tar:
             opened = True
-            tar.add(target_dir, arcname=wrapper_root)
+            # resolve() dereferences only the tree root: tarfile lstats the
+            # added name, so a symlinked target would otherwise land as one
+            # bare symlink member with none of its contents. Inner symlinks
+            # stay preserved as encountered.
+            tar.add(target_dir.resolve(), arcname=wrapper_root)
     except BaseException:
         if opened:
             destination.unlink(missing_ok=True)

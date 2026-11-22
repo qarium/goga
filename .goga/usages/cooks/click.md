@@ -87,7 +87,7 @@ app.add_command(command)
 ### Option — repeatable parameters
 
 ```python
-@click.option('--status', '-s', multiple=True, help='Фильтр по статусу (повторяемый)')
+@click.option("--status", "-s", multiple=True, help="Фильтр по статусу (повторяемый)")
 def status(status: tuple[str, ...]) -> None:
     for name in status:
         ...
@@ -101,9 +101,8 @@ def status(status: tuple[str, ...]) -> None:
 ### Option — optional value (three states)
 
 ```python
-@click.option('--todo', '-t', 'todo', is_flag=False, flag_value='__declared__', default=None)
-def create(todo):
-    ...
+@click.option("--todo", "-t", "todo", is_flag=False, flag_value="__declared__", default=None)
+def create(todo): ...
 ```
 
 - An option with `is_flag=False` and a `flag_value` distinguishes three

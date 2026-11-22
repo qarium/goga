@@ -50,6 +50,11 @@ untouched.
 - `dereference` defaults to `False`: symlinks are archived as symlinks (the
   target path is stored, not followed); other special file types are stored
   as-is — no content transformation happens
+- `tar.add` lstats the added name, so a tree root that is itself a symlink
+  lands as one bare symlink member and the tree is never recursed — resolve
+  the root first (`tar.add(source_dir.resolve(), arcname=...)`) when the link
+  is only the addressing path and the real tree is the payload;
+  `dereference=False` still keeps every symlink inside the tree a symlink
 
 ## Built-in guards
 

@@ -225,3 +225,33 @@ class TestPackageRuntimeArchiveLogic:
 
         with tarfile.open(destination) as tar:
             assert tar.getmember("root/link").issym()
+
+    def test_package_runtime_archive_symlinked_root_packages_real_tree(self, tmp_path: Path) -> None:
+        """A symlinked target root is followed once — the real tree is packaged.
+
+        The command layer's is_dir gate follows the link, so the packager must
+        package the directory the gate addressed: tar.add lstats the added
+        name, and an unresolved symlink root would land as one bare symlink
+        member with none of the contents — a "successful" empty archive.
+        Inner symlinks stay symlinks.
+        """
+        real = tmp_path / "real"
+        (real / "sub").mkdir(parents=True)
+        (real / "a.txt").write_text("hello")
+        (real / "sub" / "b.log").write_text("log")
+        (real / "inner-link").symlink_to("a.txt")
+        target = tmp_path / "target"
+        target.symlink_to(real, target_is_directory=True)
+        destination = tmp_path / "rooted.tar.gz"
+
+        package_runtime_archive(target, wrapper_root="goga-runtime-build-main", destination=destination)
+
+        with tarfile.open(destination) as tar:
+            names = tar.getnames()
+
+            assert names[0] == "goga-runtime-build-main"
+            assert tar.getmember("goga-runtime-build-main").isdir()
+            assert tar.getmember("goga-runtime-build-main/inner-link").issym()
+
+        assert "goga-runtime-build-main/a.txt" in names
+        assert "goga-runtime-build-main/sub/b.log" in names

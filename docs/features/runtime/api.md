@@ -37,8 +37,8 @@ The Click group registered on the root `goga` app — the `build`, `pipeline`, a
 ```python
 from goga.commands.runtime import package_runtime_archive, resolve_build_target_dir, resolve_effective_branch
 
-segment = resolve_effective_branch()          # e.g. "feature-x" (git-derived) or an explicit value
-target = resolve_build_target_dir(segment)    # ~/.goga/runtime/builds/<project>/<segment>
+segment = resolve_effective_branch()  # e.g. "feature-x" (git-derived) or an explicit value
+target = resolve_build_target_dir(segment)  # ~/.goga/runtime/builds/<project>/<segment>
 
 archive = package_runtime_archive(
     target,

@@ -369,9 +369,12 @@ Annotations: |
     Algorithm:
     1. Open the destination for compressed writing — an unwritable
        destination fails here before any data is written
-    2. Add the target directory recursively under the wrapper root: the
-       full contents as encountered, special files preserved, no
-       dereference, no filters
+    2. Resolve the target directory to its real path first — a symlinked
+       root is followed once (tarfile lstats the added name, so an
+       unresolved symlink root would land as one bare symlink member with
+       none of the contents) — then add it recursively under the wrapper
+       root: the full contents as encountered, special files preserved,
+       no dereference of the contents, no filters
     3. Close the archive and return its absolute path
     4. On any failure during packaging: close, remove the partial archive
        file, and surface the error — nothing partial is kept
