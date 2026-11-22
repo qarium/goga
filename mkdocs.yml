@@ -75,6 +75,12 @@ nav:
           - Configuration: features/build/configuration.md
           - Hooks: features/build/hooks.md
           - API: features/build/api.md
+      - Runtime:
+          - Overview: features/runtime/index.md
+          - CLI: features/runtime/cli.md
+          - Configuration: features/runtime/configuration.md
+          - Hooks: features/runtime/hooks.md
+          - API: features/runtime/api.md
       - Topics:
           - Overview: features/topics/index.md
           - CLI: features/topics/cli.md

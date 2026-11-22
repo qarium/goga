@@ -80,6 +80,8 @@ The build engine writes its persistent state to a `.ralphex/` directory it auto-
 
 The directory survives across runs of the same project on the same branch by default, so an interrupted build can be resumed. Pass `--clean` to wipe and recreate it before launch for a fresh run. The host path never reaches the container except as the `/workspace/.ralphex` mount source — the container sees only `/workspace/.ralphex`.
 
+From the host, that directory is addressable without a build: `goga runtime build` prints it (exactly one line — for scripting) and `goga runtime archive -b` packages it into a single `.tar.gz`; see [Runtime](../runtime/cli.md).
+
 On the [direct substrate](../pipelines/runtime.md#direct-in-container-execution) (inside the goga image) there is no host runtime mount: the build engine writes its `.ralphex/` under the current working directory, `--clean` wipes that directory, and the no-`.ralphex/`-left-in-the-project invariant holds on every exit path of both substrates.
 
 Note: concurrent builds of the same project on the same branch share one runtime directory; run them on different branches or use `--clean` if isolation is required.

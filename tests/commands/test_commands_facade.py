@@ -7,6 +7,7 @@ from goga.commands import drift as drift_reexport
 from goga.commands import hooks as hooks_reexport
 from goga.commands import install as install_reexport
 from goga.commands import pipeline as pipeline_reexport
+from goga.commands import runtime as runtime_reexport
 from goga.commands import topics as topics_reexport
 from goga.commands import uninstall as uninstall_reexport
 from goga.commands.codegraph import codegraph as codegraph_source
@@ -15,6 +16,7 @@ from goga.commands.hooks import hooks as hooks_source
 from goga.commands.install import install as install_source
 from goga.commands.install import uninstall as uninstall_source
 from goga.commands.pipeline import pipeline as pipeline_source
+from goga.commands.runtime import runtime as runtime_source
 from goga.commands.topics import topics as topics_source
 
 
@@ -118,3 +120,23 @@ class TestHooksFacade:
         assert "hooks" in commands.__all__
         assert isinstance(hooks_reexport, click.Command)
         assert any(cmd.name == "hooks" for cmd in app.commands.values())
+
+
+class TestRuntimeFacade:
+    def test_runtime_reexported_from_facade(self) -> None:
+        """The facade re-export binds the same runtime group object, not a copy."""
+        assert runtime_reexport is runtime_source
+
+    def test_runtime_listed_in_all(self) -> None:
+        """runtime is a declared member of the goga.commands facade."""
+        assert "runtime" in commands.__all__
+
+    def test_runtime_is_a_click_group_with_the_three_subcommands(self) -> None:
+        """The re-exported runtime is a click Group with exactly the contract subcommands."""
+        assert isinstance(runtime_reexport, click.Group)
+        assert set(runtime_reexport.commands) == {"build", "pipeline", "archive"}
+
+    def test_runtime_registered_on_the_root_app(self) -> None:
+        """The root app group carries the runtime group under its command name."""
+        assert "runtime" in app.commands
+        assert app.commands["runtime"] is runtime_source

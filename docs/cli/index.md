@@ -13,6 +13,7 @@ This page is the **command cross-road**: every command of the root `goga` group,
 | [`goga uninstall`](../features/install/uninstall.md) | [Install](../features/install/index.md) | Remove a goga-tool package from the current interpreter and re-sync connected agents |
 | [`goga lint`](../features/lint/cli.md) | [Lint](../features/lint/index.md) | Validate CODEMANIFEST files |
 | [`goga build`](../features/build/cli.md) | [Build](../features/build/index.md) | Execute a build plan in an isolated container |
+| [`goga runtime`](../features/runtime/cli.md) | [Runtime](../features/runtime/index.md) | Query and archive the host-side runtime state of builds and pipelines (`build`, `pipeline`, `archive`) |
 | [`goga contract`](../features/contract/cli.md) | [Contract](../features/contract/index.md) | Compare CODEMANIFEST with implementation |
 | [`goga config`](../configuration/cli.md) | [Configuration](../configuration/index.md) | Display configuration values |
 | [`goga schema`](../features/schema/cli.md) | [Schema](../features/schema/index.md) | Generate JSON schema from project cells |

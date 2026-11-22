@@ -1,0 +1,405 @@
+Imports:
+  - Types:
+      - resolve_runtime_dir
+      - resolve_git_branch
+    Usages:
+      - runtime-paths
+    From: goga/runtime
+  - Types:
+      - is_in_docker
+    From: goga/docker
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+  tarfile: .goga/usages/cooks/tarfile.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `click` practice to build the runtime command group: the group
+  decorator with its branch option placed before the subcommand token, the
+  subcommand registration, the mutually exclusive archive flags, the echo
+  and error surfaces, and the exit-code propagation.
+
+  Use the `runtime-paths` practice for the location identity behind every
+  printed path and archive target: the consumer facade over the shared
+  runtime formula, the path shape, and the purity guarantees.
+
+  Use the `tarfile` practice for the packaging step of the archive
+  subcommand: the compressed archive open mode, the wrapper-root naming of
+  the tree inside the archive, and the partial-archive removal on failure.
+
+  This cell is the host-side observer surface of the runtime state: a thin
+  wrapper that resolves inputs, delegates every path computation to the
+  runtime formula, and renders exactly one result line per command. Path
+  subcommands are read-only queries; the archive subcommand writes exactly
+  one new artifact — the archive file — and never touches the state it
+  packages. Every subcommand refuses to run inside the goga image with a
+  clean host-side-only error. All errors are human-readable messages on
+  stderr with non-zero exits; stdout is reserved for the single result
+  line. Use relative imports.
+
+---
+
+"runtime(branch: str | None = None)":
+  location: runtime.py
+  annotations: |
+    The goga runtime command group — a click.Group container for the
+    runtime subcommands. Exported via __all__ and registered in the root
+    application group. The group carries the branch scope every
+    subcommand shares.
+
+    `branch`: the -b/--branch group option — an explicit branch segment
+              replacing the git-derived one; None and the empty string
+              mean no branch given; the option is passed before the
+              subcommand and applies to every subcommand of the group.
+              No git validation is performed — the value is slugified and
+              trusted (state of a deleted branch is a legitimate address;
+              a typo surfaces as the archive subcommand's missing-target
+              error) — with one refusal: the literal "." and ".." are a
+              clean error in the group callback; they cannot form a single
+              filesystem-safe path component (no git branch can carry
+              them), and composed into the location they silently escape
+              the project/branch scope — for archive, packaging a wider
+              tree than the one target.
+
+    Use the `click` practice for the group decorator, the group option,
+    and the subcommand registration.
+
+    Subcommand surfaces:
+    - build — no arguments, no options
+    - pipeline — a required NAME positional
+    - archive — the mutually exclusive -b/--build flag and -p/--pipeline
+      NAME pair, plus the -o/--output destination option
+
+    The short alias -b deliberately carries two meanings — the group's
+    --branch and the archive subcommand's --build. Click binds group
+    options only before the subcommand token and subcommand options only
+    after it, so the parse positions never collide; both meanings are
+    documented in the help texts.
+
+    A bare group invocation prints help and exits non-zero — the click
+    group default, matching a bare goga history invocation.
+
+    Apply the `convention` CLI command docstring rule for the --help text
+    (rendered verbatim by Click; omit Args/Returns/Raises).
+  methods:
+    "build() -> exit_code: int": |
+      Subcommand goga runtime build: print the host location of the build
+      artifacts directory of the current project and the effective branch —
+      and nothing else.
+
+      `exit_code`: 0 on success, 1 on error
+
+      Algorithm:
+      1. Refuse inside the goga image: `is_in_docker` returning True is a
+         clean host-side-only error (stderr, non-zero exit)
+      2. Resolve the effective branch segment via `resolve_effective_branch`
+         with the group branch
+      3. Resolve the target directory via `resolve_build_target_dir`
+      4. Echo the resolved path to stdout — exactly one line, nothing else
+
+      Requirements:
+      - Prints the path and only the path — no decoration, no trailing text
+      - The path is printed even when the directory does not yet exist
+      - Nothing is created, modified, or deleted on disk
+
+      Constraints:
+      - Do not create or verify the directory — this subcommand is a pure
+        query
+      - Do not print anything besides the path on stdout
+
+    "pipeline(name: str) -> exit_code: int": |
+      Subcommand goga runtime pipeline: print the host location of the named
+      pipeline's artifacts directory — and nothing else.
+
+      `name`: required NAME positional — the pipeline name as used at run
+              time; sanitized exactly as the run composes its state segment
+      `exit_code`: 0 on success, 1 on error
+
+      Algorithm:
+      1. Refuse inside the goga image: `is_in_docker` returning True is a
+         clean host-side-only error (stderr, non-zero exit)
+      2. Reject an empty `name`, one starting with "-", or the literal
+         "."/".." as a clean error (argv parsability; an empty or dot value
+         addresses the branch-/project-level directory, not one pipeline's
+         artifacts)
+      3. Resolve the effective branch segment via `resolve_effective_branch`
+         with the group branch
+      4. Resolve the target directory via `resolve_pipeline_target_dir`
+      5. Echo the resolved path to stdout — exactly one line, nothing else
+
+      Requirements:
+      - A missing NAME is a usage error with a non-zero exit
+      - An empty NAME is a clean error — the empty segment is not a pipeline
+        address (an empty suffix part is silently dropped by path
+        composition, which would address the branch-level directory)
+      - The name's sanitization matches the run-time state segment, so the
+        printed path is the directory the run actually uses
+      - The path is printed even when the directory does not yet exist
+      - Nothing is created, modified, or deleted on disk
+
+      Constraints:
+      - Do not validate that the pipeline exists — the name addresses a
+        state directory, not a pipeline file
+      - Do not print anything besides the path on stdout
+
+    "archive(build: bool = False, pipeline: str | None = None, output: str | None = None) -> exit_code: int": |
+      Subcommand goga runtime archive: package exactly one target per
+      invocation — the build artifacts directory or one named pipeline's
+      artifacts directory — into a single self-contained compressed archive
+      under a wrapper root, and print the created archive's path.
+
+      `build`: the -b/--build flag — select the build artifacts as the
+               target
+      `pipeline`: the -p/--pipeline value — select the named pipeline's
+                  artifacts as the target
+      `output`: the -o/--output value — an explicit archive destination
+                path; absent means the deterministic default name
+      `exit_code`: 0 on success, 1 on error
+
+      Algorithm:
+      1. Refuse inside the goga image: `is_in_docker` returning True is a
+         clean host-side-only error (stderr, non-zero exit)
+      2. Validate the target selection: exactly one of `build`, `pipeline`
+         must be given — neither or both is a usage error; a `pipeline`
+         value that is empty, starts with "-", is the literal "."/".."
+         (those address the branch-/project-level directory — a whole-
+         branch/project sweep, not one target), or contains "/" (the
+         sanitized name forms the archive stem and the single wrapper
+         root, which must each be one directory name) is a clean error
+      3. Resolve the effective branch segment via `resolve_effective_branch`
+         with the group branch
+      4. Resolve the target: the build selection resolves the directory via
+         `resolve_build_target_dir` with the target label "build"; the
+         pipeline selection resolves it via `resolve_pipeline_target_dir`
+         with the target label taken from `sanitize_pipeline_name`
+      5. A target directory that does not exist is a clean error naming the
+         missing path — no archive file is created; an existing but empty
+         directory is a legitimate target
+      6. Compose the archive stem goga-runtime-<target label>-<branch
+         segment> — the base of both the default archive filename and the
+         wrapper root inside the archive
+      7. Resolve the destination via `resolve_archive_destination` with the
+         stem and `output`
+      8. Package via `package_runtime_archive` with the target directory,
+         the wrapper root equal to the stem, and the destination
+      9. Echo the created archive's absolute path to stdout — exactly one
+         line, nothing else
+
+      Requirements:
+      - The archive contains the full recursive contents of the target
+        directory under the single wrapper root directory, with the same
+        relative structure; special files are preserved as encountered —
+        no dereference, no content filters
+      - The archive is a self-contained .tar.gz openable with standard
+        tools without goga
+      - The source state is left unmodified — the only new artifact is the
+        archive file itself
+      - On success, stdout carries exactly the created archive's absolute
+        path and the file exists at that path
+      - Every failure leaves no partial archive file behind
+      - An OSError from the packaging step surfaces as a clean error —
+        no traceback reaches the user
+
+      Constraints:
+      - Do not package more than one target per invocation — no bulk mode
+      - Do not modify, move, or delete anything inside the target directory
+      - Do not print anything besides the archive path on stdout
+      - Do not extract, restore, or list archive contents — packaging only
+
+"resolve_effective_branch(branch: str | None = None) -> segment: str":
+  location: targets.py
+  annotations: |
+    Resolve the effective branch segment — the branch part of the location
+    identity every runtime subcommand addresses.
+
+    `branch`: the raw group option value; None and the empty string mean
+              no branch given
+    `segment`: the effective branch segment — a single filesystem-safe
+               path component
+
+    Algorithm:
+    1. A non-empty `branch` returns with every forward slash replaced by a
+       hyphen — no git consultation, no validation
+    2. Otherwise delegate to `resolve_git_branch` — the slugified current
+       git branch with the "default" fallback
+
+    Requirements:
+    - Deterministic — the same input produces the same segment on every
+      call
+    - Idempotent to an already-slugified input — the segment passes
+      through unchanged
+    - Pure with respect to the filesystem — only the derived form reads
+      git
+
+    Constraints:
+    - Do not validate the branch against the repository — a deleted
+      branch's state is a legitimate address
+    - Do not replace characters other than forward slashes
+
+"resolve_build_target_dir(branch_segment: str) -> target_dir: Path":
+  location: targets.py
+  annotations: |
+    Resolve the build artifacts directory of the current project for the
+    given effective branch segment.
+
+    `branch_segment`: the effective branch segment produced by
+                      `resolve_effective_branch`
+    `target_dir`: absolute host path of the build artifacts directory
+
+    Use the `runtime-paths` practice for the consumer facade pattern over
+    the shared formula.
+
+    Algorithm:
+    1. Delegate to `resolve_runtime_dir` with the purpose "builds", no
+       suffix parts, and `branch_segment` as the branch — no further
+       namespace exists under the branch directory
+    2. Return the resulting path
+
+    Requirements:
+    - Pure with respect to the filesystem — the directory is not created
+
+    Constraints:
+    - Do not add a suffix — build has no namespace below the branch
+      directory
+
+"sanitize_pipeline_name(name: str) -> sanitized: str":
+  location: targets.py
+  annotations: |
+    Sanitize a pipeline name into its host path segment and target label:
+    every colon is replaced by a hyphen.
+
+    `name`: the pipeline name as used at run time
+    `sanitized`: the colon-free segment — the same transformation the run
+                 composes for its state directory
+
+    Requirements:
+    - Literal one-to-one replacement — no collapsing, no trimming
+    - Deterministic and pure
+
+    Constraints:
+    - Do not sanitize for any use other than the host path segment and the
+      archive target label — other consumers keep the original name
+
+"resolve_pipeline_target_dir(pipeline_name: str, branch_segment: str) -> target_dir: Path":
+  location: targets.py
+  annotations: |
+    Resolve the artifacts directory of the named pipeline of the current
+    project for the given effective branch segment.
+
+    `pipeline_name`: the pipeline name as used at run time
+    `branch_segment`: the effective branch segment produced by
+                      `resolve_effective_branch`
+    `target_dir`: absolute host path of the pipeline's artifacts directory
+
+    Use the `runtime-paths` practice for the consumer facade pattern over
+    the shared formula.
+
+    Algorithm:
+    1. Sanitize the name via `sanitize_pipeline_name`
+    2. Delegate to `resolve_runtime_dir` with the purpose "pipelines", the
+       sanitized name as the single suffix part, and `branch_segment` as
+       the branch
+    3. Return the resulting path
+
+    Requirements:
+    - The sanitized suffix matches the run-time state segment — the
+      resolved path is the directory the run actually uses
+    - Pure with respect to the filesystem — the directory is not created
+
+    Constraints:
+    - Do not validate that the pipeline exists — the name addresses a
+      state directory, not a pipeline file
+
+"resolve_archive_destination(archive_stem: str, output: str | None = None) -> destination: Path":
+  location: archive.py
+  annotations: |
+    Resolve the archive destination path under strict destination
+    semantics: the deterministic default name, or an explicit override
+    that expresses overwrite intent.
+
+    `archive_stem`: the archive stem — the base of the default filename
+    `output`: the -o/--output value; None means the default
+    `destination`: absolute path the archive is written to
+
+    Algorithm:
+    1. Without `output`: compose <current working directory>/<archive_stem>
+       .tar.gz; an existing file at that path is a clean collision error
+       naming the path and pointing to -o/--output; otherwise return it
+    2. With `output`: an existing directory at the path is a clean error;
+       a missing parent directory is a clean error — no implicit
+       creation; an existing file is legitimate — an explicit destination
+       expresses the intent to overwrite
+    3. Return the absolute destination path
+
+    Requirements:
+    - Nothing is written or created by this routine — it resolves and
+      validates only; the unwritable-destination failure surfaces at the
+      packaging step, which leaves no partial file
+
+    Constraints:
+    - Do not create missing parent directories — predictability over
+      convenience
+    - Do not overwrite or refuse an existing file under an explicit
+      destination — the flag itself is the overwrite decision
+
+"package_runtime_archive(target_dir: Path, wrapper_root: str, destination: Path) -> archive_path: Path":
+  location: archive.py
+  annotations: |
+    Package the full recursive contents of the target directory into a
+    single compressed archive under the wrapper root, writing nothing else
+    and leaving the source untouched.
+
+    `target_dir`: the target directory — guaranteed by the caller to exist
+    `wrapper_root`: the single root directory name holding the whole tree
+                    inside the archive
+    `destination`: the resolved destination path — validated by the caller
+    `archive_path`: the absolute path of the created archive
+
+    Use the `tarfile` practice for the compressed open mode, the
+    wrapper-root naming of the added tree, and the failure cleanup.
+
+    Algorithm:
+    1. Open the destination for compressed writing — an unwritable
+       destination fails here before any data is written
+    2. Resolve the target directory to its real path first — a symlinked
+       root is followed once (tarfile lstats the added name, so an
+       unresolved symlink root would land as one bare symlink member with
+       none of the contents) — then add it recursively under the wrapper
+       root: the full contents as encountered, special files preserved,
+       no dereference of the contents, no filters
+    3. Close the archive and return its absolute path
+    4. On any failure during packaging: close, remove the partial archive
+       file, and surface the error — nothing partial is kept
+
+    Requirements:
+    - The archive layout is one wrapper root directory containing the
+      target's full tree with the same relative structure — a bare
+      extraction cannot scatter files
+    - The source directory is read only — nothing inside it is modified,
+      moved, or deleted
+    - The returned path is where the file exists on success
+    - The failure cleanup removes only an archive file this routine
+      created — a failure before the destination is opened leaves any
+      pre-existing file at the destination untouched
+
+    Constraints:
+    - Do not filter, exclude, or transform any content — the full
+      recursive contents are taken literally
+    - Do not keep a partial archive file on any failure path
+
+---
+
+Author: Goga
+CreatedAt: 21/11/26
+Description: |
+  The goga runtime command group — host-side read-only queries of runtime
+  artifact locations and a single-target archiver over the shared runtime
+  formula.

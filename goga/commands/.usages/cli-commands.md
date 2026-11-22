@@ -1,6 +1,6 @@
 # CLI Commands — goga/commands facade
 
-The `goga.commands` package is a facade that re-exports 18 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
+The `goga.commands` package is a facade that re-exports 19 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
 
 ## Import
 
@@ -26,6 +26,7 @@ from goga.commands import (
     history,
     hooks,
     topics,
+    runtime,
 )
 ```
 
@@ -50,6 +51,7 @@ from goga.commands.install import uninstall
 from goga.commands.history import history
 from goga.commands.hooks import hooks
 from goga.commands.topics import topics
+from goga.commands.runtime import runtime
 ```
 
 ## Registration in click group
@@ -76,6 +78,7 @@ from goga.commands import (
     history,
     hooks,
     topics,
+    runtime,
 )
 
 
@@ -102,6 +105,7 @@ app.add_command(uninstall)
 app.add_command(history)
 app.add_command(hooks)
 app.add_command(topics)
+app.add_command(runtime)
 ```
 
 ## Testing with CliRunner
@@ -139,4 +143,4 @@ def test_example():
 | `history`   | `goga/commands/history/`  | Work with the .goga/history/ tree    |
 | `hooks`     | `goga/commands/hooks/`    | Inspect registered tool hooks        |
 | `topics`    | `goga/commands/topics/`   | Topic board, creation, and switching |
-
+| `runtime`   | `goga/commands/runtime/`  | Runtime state paths and archives     |

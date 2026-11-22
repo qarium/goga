@@ -231,6 +231,8 @@ Run mode mounts a host directory at `/home/goga/pipeline` inside the container, 
 
 A `:` in the pipeline name becomes `-` in the path segment (`acme:deploy` → `acme-deploy`).
 
+From the host, that directory is addressable without a run: `goga runtime pipeline <name>` prints it — the name sanitized exactly as here — and `goga runtime archive -p <name>` packages it into a single `.tar.gz`; see [Runtime](../runtime/cli.md).
+
 It is created before launch and is **not** deleted on exit. Use `--clean` to wipe it before launch when you want a fresh run.
 
 Note that the `prompts/` subdirectory inside it is regenerated on every run (wiped and rebuilt from the shipped defaults plus any `roles` overrides) — it does not persist user-placed content even though the parent directory survives across runs.

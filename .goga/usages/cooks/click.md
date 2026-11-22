@@ -87,7 +87,7 @@ app.add_command(command)
 ### Option — repeatable parameters
 
 ```python
-@click.option('--status', '-s', multiple=True, help='Фильтр по статусу (повторяемый)')
+@click.option("--status", "-s", multiple=True, help="Фильтр по статусу (повторяемый)")
 def status(status: tuple[str, ...]) -> None:
     for name in status:
         ...
@@ -101,9 +101,8 @@ def status(status: tuple[str, ...]) -> None:
 ### Option — optional value (three states)
 
 ```python
-@click.option('--todo', '-t', 'todo', is_flag=False, flag_value='__declared__', default=None)
-def create(todo):
-    ...
+@click.option("--todo", "-t", "todo", is_flag=False, flag_value="__declared__", default=None)
+def create(todo): ...
 ```
 
 - An option with `is_flag=False` and a `flag_value` distinguishes three
@@ -174,6 +173,16 @@ Invocation: `cli db migrate`
 
 - Each level is a `@click.group()`
 - Terminal commands are registered at their own level: `@db.command()`
+
+### Option positioning in nested groups
+
+- A group-level option binds **only before** the subcommand token; a
+  subcommand-level option binds **only after** it
+- The two positions are disjoint, so one short alias may safely carry
+  different meanings at the two levels — a group's `-b/--branch` and a
+  subcommand's `-b/--build` never collide during parsing
+- Document both meanings in `--help`; the residual cost is human-only
+  ambiguity, accepted deliberately
 
 ## Output and Error Handling
 

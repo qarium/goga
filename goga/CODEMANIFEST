@@ -18,6 +18,7 @@ Imports:
       - history
       - hooks
       - topics
+      - runtime
     Usages:
       - cli-commands
     From: goga/commands
@@ -90,6 +91,7 @@ app():
     - `history`
     - `hooks`
     - `topics`
+    - `runtime`
 
 ---
 
