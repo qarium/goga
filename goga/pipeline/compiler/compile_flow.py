@@ -31,6 +31,7 @@ from .flow_verify_step import FlowVerifyStep
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
+from .pipeline_assistant import PipelineAssistant
 from .pipeline_document import PipelineDocument
 from .pipeline_header import PipelineHeader
 from .serialize_flow import serialize_flow
@@ -1016,32 +1017,194 @@ def _is_assistant_declaration(entry: WorkflowAssistant) -> bool:
     )
 
 
-def _assistant_namespace(workflow: WorkflowDocument) -> dict[str, tuple[WorkflowAssistant, str]]:
+def _assistant_collision(name: str, first_site: str, second_site: str) -> StructuralError:
+    """Build the both-sites collision error of the one global assistant namespace.
+
+    Args:
+        name: The colliding assistant name.
+        first_site: The authoring site of the earlier declaration.
+        second_site: The authoring site of the later declaration.
+
+    Returns:
+        The ``StructuralError`` naming the name and both sites — the single
+        collision message shape shared by every pair of authoring surfaces
+        (catalog, inline, pipeline).
+    """
+    return StructuralError(f"duplicate assistant name: {name} ({first_site}, {second_site})")
+
+
+def _pipeline_declaration_index(
+    expanded: list[PhaseStep | StageStep],
+    expanded_ids: dict[str, list[str]],
+) -> tuple[dict[str, dict[str, PipelineAssistant]], dict[str, str]]:
+    """Build the pipeline declaration index and its name-site map (step 4.10, input B).
+
+    Args:
+        expanded: The loop-expanded working step sequence — the source of each
+            produced id's declarations (every copy of one base carries the
+            same deep-copied map by construction).
+        expanded_ids: The base-name → produced-ids map (every final id appears
+            in exactly one produced-ids list). Read-only input — the walk
+            order (working-body order) fixes the collision-error site order.
+
+    Returns:
+        The ``(index, name_sites)`` pair — the base-stage → declarations map
+        (base stages carrying a non-empty ``assistants`` field only) and the
+        name → ``pipeline.<base>.assistants.<name>`` site map in the same
+        order.
+
+    Raises:
+        StructuralError: When a pipeline name repeats across two base stages
+            — the both-sites collision error (the pipeline-vs-pipeline case
+            of the one global uniqueness domain).
+    """
+    steps_by_id = {step.name: step for step in expanded}
+    index: dict[str, dict[str, PipelineAssistant]] = {}
+    name_sites: dict[str, str] = {}
+
+    for base_name, produced_ids in expanded_ids.items():
+        decls = steps_by_id[produced_ids[0]].assistants or {}
+
+        if not decls:
+            continue
+
+        index[base_name] = decls
+
+        for name in decls:
+            site = f"pipeline.{base_name}.assistants.{name}"
+
+            if name in name_sites:
+                raise _assistant_collision(name, name_sites[name], site)
+            name_sites[name] = site
+
+    return index, name_sites
+
+
+def _assistant_namespace(
+    workflow: WorkflowDocument,
+    pipeline_decls: dict[str, dict[str, PipelineAssistant]],
+) -> dict[str, tuple[WorkflowAssistant, str]]:
     """Build the assistant namespace with each declaration's authoring site.
 
     Args:
         workflow: The declarative workflow instructions. The catalog comes
             first (authored order), then every inline stage declaration in
-            authored stage order. The parser (and the overlay merge) already
-            guarantee no duplicate names, so a later declaration can never
-            shadow a catalog entry of the same name.
+            authored stage order. A declaration-shaped entry whose name the
+            SAME stage's pipeline body declares is NOT a member — it is an
+            extension of that declaration (the veto/extension merge consumes
+            it in ``_assemble_stage_attachments``).
+        pipeline_decls: The base-stage → declarations index (from
+            ``_pipeline_declaration_index``) — the origin knowledge that
+            separates an extension entry from a full inline declaration.
 
     Returns:
         The name → (declaration, site) map every attachment reference
         resolves against — the site is ``workflow.assistants.<name>`` for a
         catalog entry and ``workflow.stages.<stage>.assistants.<name>`` for
-        an inline declaration (the content check names it).
+        an inline declaration (the content check names it). Pipeline
+        declarations are NOT members — they join the one global uniqueness
+        domain through the caller's index check, never here.
+
+    Raises:
+        StructuralError: When a declaration name repeats across two DIFFERENT
+            workflow sites — an inline declaration colliding with a catalog
+            entry or with an inline declaration of another stage — the
+            both-sites collision error (the parse-time duplicate-name
+            guarantee is gone; compilation owns the workflow-side
+            uniqueness). A same-site repeat (two map keys of one stage
+            sharing a name) raises nothing here — the per-stage duplicate
+            guard of ``_assemble_stage_attachments`` owns that text.
     """
-    namespace: dict[str, tuple[WorkflowAssistant, str]] = {
-        name: (entry, f"workflow.assistants.{name}") for name, entry in workflow.assistants.items()
-    }
+    namespace: dict[str, tuple[WorkflowAssistant, str]] = {}
+
+    for name, entry in workflow.assistants.items():
+        site = f"workflow.assistants.{name}"
+
+        if name in namespace:
+            raise _assistant_collision(name, namespace[name][1], site)
+        namespace[name] = (entry, site)
 
     for stage_name, stage in workflow.stages.items():
+        stage_decls = pipeline_decls.get(stage_name) or {}
+
         for entry in (stage.assistants or {}).values():
-            if _is_assistant_declaration(entry):
-                namespace[entry.name] = (entry, f"workflow.stages.{stage_name}.assistants.{entry.name}")
+            if not _is_assistant_declaration(entry):
+                continue
+            if entry.name in stage_decls:
+                # An extension of the stage's own pipeline declaration — the
+                # merge consumes it; it is never a namespace member.
+                continue
+
+            site = f"workflow.stages.{stage_name}.assistants.{entry.name}"
+
+            if entry.name in namespace:
+                if namespace[entry.name][1] != site:
+                    raise _assistant_collision(entry.name, namespace[entry.name][1], site)
+                # A same-site repeat — two map keys of one stage sharing a
+                # name, reachable only programmatically — is the duplicate the
+                # per-stage guard of ``_assemble_stage_attachments`` rejects
+                # with its own text; the namespace keeps the first.
+                continue
+
+            namespace[entry.name] = (entry, site)
 
     return namespace
+
+
+def _join_prompt(pipeline_prompt: str | None, workflow_prompt: str | None) -> str | None:
+    """Join a pipeline declaration's prompt with its workflow extension text.
+
+    Args:
+        pipeline_prompt: The pipeline declaration's authored prompt, or
+            ``None``.
+        workflow_prompt: The extension entry's authored prompt, or ``None``.
+
+    Returns:
+        The joined text — both sides authored → the pipeline text, one blank
+        line, then the workflow text; a single authored side → that text
+        alone; neither → ``None``. The join is by PRESENCE, not truthiness:
+        an authored empty string participates (an empty pipeline prompt
+        yields the two-segment text with a leading blank line), so ``None``
+        stays the only non-joining side.
+    """
+    if pipeline_prompt is None:
+        return workflow_prompt
+
+    if workflow_prompt is None:
+        return pipeline_prompt
+
+    return f"{pipeline_prompt}\n\n{workflow_prompt}"
+
+
+def _expand_skills(pipeline_skills: list[str] | None, workflow_skills: list[str] | None) -> list[str] | None:
+    """Expand a pipeline declaration's skills with its workflow extension list.
+
+    Args:
+        pipeline_skills: The pipeline declaration's authored skills, or
+            ``None``.
+        workflow_skills: The extension entry's authored skills, or ``None``.
+
+    Returns:
+        The expanded list — declaration entries first, then the extension's,
+        deduplicated by value preserving the first occurrence; a single
+        authored side → that list alone (an authored empty list is a value
+        that survives); neither → ``None``.
+    """
+    if pipeline_skills is None:
+        return workflow_skills
+
+    if workflow_skills is None:
+        return pipeline_skills
+
+    merged: list[str] = []
+    seen: set[str] = set()
+
+    for skill in pipeline_skills + workflow_skills:
+        if skill not in seen:
+            seen.add(skill)
+            merged.append(skill)
+
+    return merged
 
 
 def _team_members(workflow: WorkflowDocument) -> list[FlowTeamMember]:
@@ -1099,12 +1262,14 @@ def _translate_body_agents(body: dict[str, Any]) -> list[str]:
     return list(_DEFAULT_AGENTS)
 
 
-def _reject_attachment_body(stage_name: str, assistant_name: str, body: dict[str, Any]) -> None:
+def _reject_attachment_body(site: str, assistant_name: str, body: dict[str, Any]) -> None:
     """Reject an attachment on a body that cannot host one (checks 3 and 4 of step 4.10).
 
     Args:
-        stage_name: The BASE stage id (the authoring site —
-            ``workflow.stages.NAME``), used in the error messages.
+        site: The attachment's authoring-site prefix —
+            ``workflow.stages.<base>`` for a workflow entry, ``pipeline.<base>``
+            for a pipeline declaration (the D2 site) — used in the error
+            messages.
         assistant_name: The attached assistant's name, used in the error
             messages.
         body: One produced copy's working body (each loop-expanded copy is
@@ -1119,120 +1284,163 @@ def _reject_attachment_body(stage_name: str, assistant_name: str, body: dict[str
             ``roles: [planner]``.
     """
     if "script" in body:
-        raise StructuralError(
-            f"assistant is forbidden on a script stage in workflow.stages.{stage_name}: {assistant_name}"
-        )
+        raise StructuralError(f"assistant is forbidden on a script stage in {site}: {assistant_name}")
 
     if _translate_body_agents(body) == ["planning"]:
-        raise StructuralError(
-            f"assistant is forbidden on a planning-only stage in workflow.stages.{stage_name}: {assistant_name}"
-        )
+        raise StructuralError(f"assistant is forbidden on a planning-only stage in {site}: {assistant_name}")
 
 
-def _assistants_by_id(
+def _assemble_stage_attachments(  # noqa: C901, PLR0913, PLR0917 — the assembly threads every resolution source of the two surfaces
+    base_name: str,
+    produced_ids: list[str],
     effective: dict[str, WorkflowStage],
-    expanded: list[PhaseStep | StageStep],
-    expanded_ids: dict[str, list[str]],
+    pipeline_decls: dict[str, dict[str, PipelineAssistant]],
+    bodies: dict[str, dict[str, Any]],
     namespace: dict[str, WorkflowAssistant],
     catalog: dict[str, WorkflowAssistant],
-) -> dict[str, list[FlowAssistant]]:
-    """Step 4.10 attachment walk — resolve every attachment and map it per final id.
+    skills_warned: set[str],
+) -> tuple[list[FlowAssistant], list[tuple[str, str | None, list[str] | None]]]:
+    """Assemble one base stage's effective attachments over the two authoring surfaces.
 
     Args:
+        base_name: The base stage id (the authoring site of every error).
+        produced_ids: The ids this base produced — one attachment list is
+            shared by every copy.
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name — the source of
-            each stage's effective attachment map (extend-seeded entries
-            carry none; merged entries carry the stages-block map).
-        expanded: The loop-expanded working step sequence — the source of each
-            produced id's body for the script/planning checks. Skipped stages
-            are already removed, so their attachments are never checked.
-        expanded_ids: The base-name → produced-ids map from ``_expand_loops``
-            (every final id appears in exactly one produced-ids list).
+            the stage's workflow entries (``{}`` without a workflow).
+        pipeline_decls: The base-stage → declarations index (from
+            ``_pipeline_declaration_index``).
+        bodies: The produced-id → working-body map (the script/planning
+            checks run per copy).
         namespace: The assistant namespace (from ``_assistant_namespace``,
             unwrapped to its entries at this boundary) — the resolution
-            source of every reference.
+            source of every reference. Pipeline declarations are NOT members
+            — a name pipeline-declared by another stage is invisible here
+            (the visibility rule).
         catalog: The workflow's assistant catalog (``workflow.assistants``) —
-            the only source of team members, hence the only declarations
-            whose ``skills`` reach the engine.
+            the no-warning set of the inline-skills WARNING.
+        skills_warned: The once-per-name WARNING guard, threaded across
+            stages by the caller.
 
     Returns:
-        The final-id → attachment-entries map. Entries are built once per base
-        stage and mapped onto every produced id — loop-expanded copies share
-        the SAME list, uniform across copies. A WARNING is logged (once per
-        assistant name) for every emitted inline declaration whose authored
-        ``skills`` have no engine channel — the stage entry carries no
-        ``skills`` key (the engine rejects it) and the team draws from the
-        catalog alone, so the warning replaces a silent drop.
+        The ``(assembled, attached_pipeline)`` pair — the stage's
+        ``FlowAssistant`` list (pipeline declarations first in authored
+        order, then workflow entries in authored order) and the
+        ``(name, effective_prompt, effective_skills)`` records feeding the
+        team emission (vetoed declarations never collect).
 
     Raises:
-        StructuralError: On any of the four attachment checks, in contract
-            order per entry (authored key order): an unknown reference, the
-            same name twice in one stage's effective attachment map (a
-            programmatic contribution — an authored map cannot repeat a
-            key), an attachment on a script-stage body, an attachment on a
-            planning-only body (each copy's body is checked).
+        StructuralError: On the assembly checks, in contract order: a skip
+            entry targeting no pipeline declaration of the stage; an unknown
+            reference; a when-less entry naming no pipeline declaration of
+            the stage (the origin-aware check — an extension inherits its
+            declaration's ``when``); the same name twice in one stage's
+            effective entry map (a programmatic contribution — an authored
+            map cannot repeat a key); an attachment on a script or
+            planning-only body (each copy checked, with the attachment's own
+            site prefix — ``pipeline.<base>`` or ``workflow.stages.<base>``).
     """
-    bodies = {step.name: step.body for step in expanded}
-    assistants_by_id: dict[str, list[FlowAssistant]] = {}
-    skills_warned: set[str] = set()
+    stage = effective.get(base_name)
+    wf_entries = (stage.assistants if stage is not None else None) or {}
+    decls = pipeline_decls.get(base_name) or {}
 
-    for base_name, produced_ids in expanded_ids.items():
-        stage = effective.get(base_name)
-        attachments = stage.assistants if stage is not None else None
-        if not attachments:
+    assembled: list[FlowAssistant] = []
+    attached_pipeline: list[tuple[str, str | None, list[str] | None]] = []
+    seen: set[str] = set()
+
+    # Pipeline declarations first (authored order) — the veto or the
+    # extension merge; a workflow entry of the same name is consumed here.
+    for name, decl in decls.items():
+        entry = wf_entries.get(name)
+
+        if entry is not None and entry.skip is True:
             continue
 
-        entries: list[FlowAssistant] = []
-        seen: set[str] = set()
-
-        for entry in attachments.values():
-            # Check 1 — a reference must name a namespace member; a
-            # declaration is its own source.
-            source = entry if _is_assistant_declaration(entry) else namespace.get(entry.name)
-            if source is None:
-                raise StructuralError(f"unknown assistant reference in workflow.stages.{base_name}: {entry.name}")
-
-            # Check 2 — the same name twice in one stage's effective
-            # attachment map (a programmatic contribution — an authored map
-            # cannot repeat a key; the guard stays as defense).
-            if entry.name in seen:
-                raise StructuralError(f"duplicate assistant in workflow.stages.{base_name}: {entry.name}")
-            seen.add(entry.name)
-
-            # Checks 3+4 — every produced copy's body must accept the
-            # attachment.
-            for produced_id in produced_ids:
-                _reject_attachment_body(base_name, entry.name, bodies[produced_id])
-
-            # A reference takes the declaration's ``prompt`` while keeping its
-            # OWN ``gate``/``when``; a declaration is its own source for every
-            # field. A CATALOG declaration's ``skills`` reach the engine
-            # through its ``team`` member entry (the engine strict-parses
-            # stage entries and rejects a ``skills`` key there); an inline
-            # declaration has no team member, so its authored ``skills`` have
-            # no channel — warn instead of dropping them silently.
-            if source.skills is not None and entry.name not in catalog and entry.name not in skills_warned:
-                skills_warned.add(entry.name)
-                logger.warning(
-                    "compile_flow: skills of an inline assistant declaration cannot "
-                    "reach the engine; declare the assistant in the catalog to deliver them",
-                    extra={"stage": base_name, "assistant": entry.name},
-                )
-
-            entries.append(
-                FlowAssistant(
-                    profile=f"{_PROFILE_PREFIX}{entry.name}",
-                    title=entry.name,
-                    instruction=(source.prompt if source.prompt is not None else ""),
-                    mode=_GATE_MODE[entry.gate],
-                    trigger=_attachment_trigger(entry.gate, entry.when),
-                )
-            )
+        eff_when = entry.when if entry is not None and entry.when is not None else decl.when
+        eff_gate = entry.gate if entry is not None and entry.gate is not None else decl.gate
+        eff_prompt = _join_prompt(decl.prompt, entry.prompt if entry is not None else None)
+        eff_skills = _expand_skills(decl.skills, entry.skills if entry is not None else None)
 
         for produced_id in produced_ids:
-            assistants_by_id[produced_id] = entries
+            _reject_attachment_body(f"pipeline.{base_name}", name, bodies[produced_id])
 
-    return assistants_by_id
+        assembled.append(
+            FlowAssistant(
+                profile=f"{_PROFILE_PREFIX}{name}",
+                title=name,
+                instruction=(eff_prompt if eff_prompt is not None else ""),
+                mode=_GATE_MODE[eff_gate],
+                trigger=_attachment_trigger(eff_gate, eff_when),
+            )
+        )
+        attached_pipeline.append((name, eff_prompt, eff_skills))
+
+    # Workflow entries second (authored order) — the origin-aware reference
+    # and inline resolution.
+    for name, entry in wf_entries.items():
+        if name in decls:
+            continue
+
+        if entry.skip is True:
+            raise StructuralError(
+                f"skip targets a pipeline-declared assistant in workflow.stages.{base_name}.assistants.{entry.name}"
+            )
+
+        # Check 1 — a reference must name a namespace member; a declaration
+        # is its own source.
+        source = entry if _is_assistant_declaration(entry) else namespace.get(entry.name)
+
+        if source is None:
+            raise StructuralError(f"unknown assistant reference in workflow.stages.{base_name}: {entry.name}")
+
+        # Check 2 — the origin-aware ``when`` check: an entry naming no
+        # pipeline declaration of the stage authors its engagement timing.
+        if entry.when is None:
+            raise StructuralError(f"when is required in workflow.stages.{base_name}.assistants.{entry.name}")
+
+        # Check 3 — the same name twice in one stage's effective attachment
+        # map (a programmatic contribution — an authored map cannot repeat a
+        # key; the guard stays as defense).
+        if entry.name in seen:
+            raise StructuralError(f"duplicate assistant in workflow.stages.{base_name}: {entry.name}")
+        seen.add(entry.name)
+
+        # Checks 4+5 — every produced copy's body must accept the attachment.
+        for produced_id in produced_ids:
+            _reject_attachment_body(f"workflow.stages.{base_name}", entry.name, bodies[produced_id])
+
+        # A reference takes the declaration's ``prompt`` while keeping its
+        # OWN ``gate``/``when``; a declaration is its own source for every
+        # field. A CATALOG declaration's ``skills`` reach the engine through
+        # its ``team`` member entry (the engine strict-parses stage entries
+        # and rejects a ``skills`` key there); an inline declaration has no
+        # team member, so its authored ``skills`` have no channel — warn
+        # instead of dropping them silently.
+        if source.skills is not None and entry.name not in catalog and entry.name not in skills_warned:
+            skills_warned.add(entry.name)
+            logger.warning(
+                "compile_flow: skills of an inline assistant declaration cannot "
+                "reach the engine; declare the assistant in the catalog to deliver them",
+                extra={"stage": base_name, "assistant": entry.name},
+            )
+
+        # The entry's ``gate`` is absence-preserving — an un-authored gate
+        # (a programmatic or overlay-merged entry) materializes ``False``
+        # here; an authored ``False`` stays an authored value.
+        gate = entry.gate if entry.gate is not None else False
+
+        assembled.append(
+            FlowAssistant(
+                profile=f"{_PROFILE_PREFIX}{entry.name}",
+                title=entry.name,
+                instruction=(source.prompt if source.prompt is not None else ""),
+                mode=_GATE_MODE[gate],
+                trigger=_attachment_trigger(gate, entry.when),
+            )
+        )
+
+    return assembled, attached_pipeline
 
 
 @dataclass(kw_only=True)
@@ -1262,63 +1470,121 @@ def _collaboration_emission(
     expanded: list[PhaseStep | StageStep],
     expanded_ids: dict[str, list[str]],
 ) -> _CollaborationEmission:
-    """Step 4.10 — compute the collaboration block, the team list, and the per-id attachments.
+    """Step 4.10 — the single place both authoring documents meet: assemble every stage's attachments.
+
+    Computes the collaboration block, the team list, and the per-id
+    attachment entries over the two authoring surfaces — the workflow's
+    collaboration instructions and the pipeline stage-body declarations.
 
     Args:
         workflow: The declarative workflow instructions, or ``None`` when no
-            workflow is applied — the block still emits (``mode: assistants``,
-            no ``max_depth``), the team is empty, and no attachments resolve,
-            so a workflow-less compile differs from the pre-collaboration
-            output only by the two-line block.
+            workflow is applied — the namespace and the workflow entries are
+            empty, so the pipeline declarations still assemble (attachments
+            on every run, SC1), the team draws from the pipeline
+            declarations alone, and the block emits with no ``max_depth``.
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name. Read-only input —
-            the source of each stage's effective attachment map.
+            the source of each stage's workflow entries.
         expanded: The loop-expanded working step sequence. Read-only input —
-            the source of each produced id's body.
-        expanded_ids: The base-name → produced-ids map from ``_expand_loops``.
-            Read-only input.
+            the source of each produced id's declarations and body.
+        expanded_ids: The base-name → produced-ids map (from ``_expand_loops``
+            on the workflow path, the identity map on the workflow-less
+            path). Read-only input — the assembly walk order (working-body
+            order) fixes the team's pipeline-member order.
 
     Returns:
         The ``_CollaborationEmission``. The block is unconditional (every
-        compiled flow carries it); the team list and the attachment entries
-        derive from the workflow's catalog and attachments. The emission is
+        compiled flow carries it); the team lists the catalog members in
+        authored order, then one member per attached pipeline declaration in
+        working-body order (loop copies collapse to their base stage's first
+        occurrence; vetoed and stage-skipped declarations never join); the
+        attachment entries derive from the per-stage assembly — pipeline
+        declarations first, workflow entries second — the same list mapped
+        onto every produced id of the base stage. The emission is
         byte-stable — the only diagnostic is the WARNING logged for an
         emitted inline declaration whose authored ``skills`` have no engine
         channel (never an output-side key).
 
     Raises:
-        StructuralError: When a namespace member resolves neither ``prompt``
-            nor ``skills`` — the content check over the (entry, site) pairs
-            of ``_assistant_namespace`` (an override-style entry naming an
-            assistant no tool delivered; a reference is never a member).
+        StructuralError: On the step-4.10 checks, in contract order: a name
+            collision across the one global namespace (catalog, inline,
+            pipeline declarations — both authoring sites named); a namespace
+            member resolving neither ``prompt`` nor ``skills`` (the content
+            check); then the per-stage assembly checks (see
+            ``_assemble_stage_attachments``).
     """
-    if workflow is None:
-        return _CollaborationEmission(
-            block=FlowCollaboration(mode="assistants", max_depth=None),
-            team=[],
-            assistants_by_id={},
-        )
+    pipeline_decls, pipeline_name_sites = _pipeline_declaration_index(expanded, expanded_ids)
 
-    namespace = _assistant_namespace(workflow)
+    if workflow is None:
+        namespace: dict[str, tuple[WorkflowAssistant, str]] = {}
+        catalog: dict[str, WorkflowAssistant] = {}
+    else:
+        namespace = _assistant_namespace(workflow, pipeline_decls)
+        catalog = workflow.assistants
+
+        # The pipeline side of the one global uniqueness domain — every
+        # pipeline name is checked against the workflow namespace (an
+        # extension entry of the same stage never joined it).
+        for name, site in pipeline_name_sites.items():
+            if name in namespace:
+                raise _assistant_collision(name, namespace[name][1], site)
 
     # The content check — every namespace member must resolve a prompt or a
     # skills list after the overlay merge; an override-style entry naming an
     # assistant no tool delivered stops compilation with a readable error
     # naming it and its authoring site. A reference (``gate``/``when`` only)
-    # is never a namespace member and is never checked.
+    # is never a namespace member; a pipeline declaration is not a member
+    # either (the parse-time content rule covers it).
     for name, (entry, site) in namespace.items():
         if entry.prompt is None and entry.skills is None:
             raise StructuralError(f"assistant {name} at {site} resolves neither prompt nor skills")
 
     declarations = {name: entry for name, (entry, _site) in namespace.items()}
+    bodies = {step.name: step.body for step in expanded}
+
+    assistants_by_id: dict[str, list[FlowAssistant]] = {}
+    attached_pipeline: list[tuple[str, str | None, list[str] | None]] = []
+    skills_warned: set[str] = set()
+
+    for base_name, produced_ids in expanded_ids.items():
+        assembled, records = _assemble_stage_attachments(
+            base_name,
+            produced_ids,
+            effective,
+            pipeline_decls,
+            bodies,
+            declarations,
+            catalog,
+            skills_warned,
+        )
+        attached_pipeline.extend(records)
+
+        if assembled:
+            for produced_id in produced_ids:
+                assistants_by_id[produced_id] = assembled
+
+    team = _team_members(workflow) if workflow is not None else []
+
+    # The pipeline-declared members — one per attached record in collection
+    # order (pipeline body stage order; authored order within a stage); a
+    # name joins exactly once (the namespace uniqueness guarantees it).
+    team.extend(
+        FlowTeamMember(
+            id=name,
+            title=name,
+            profile=f"{_PROFILE_PREFIX}{name}",
+            instruction=(eff_prompt if eff_prompt is not None else ""),
+            skills=(eff_skills if eff_skills is not None else []),
+        )
+        for name, eff_prompt, eff_skills in attached_pipeline
+    )
+
+    max_depth = workflow.delegation.depth if workflow is not None and workflow.delegation is not None else None
 
     return _CollaborationEmission(
-        block=FlowCollaboration(
-            mode="assistants",
-            max_depth=(workflow.delegation.depth if workflow.delegation is not None else None),
-        ),
-        team=_team_members(workflow),
-        assistants_by_id=_assistants_by_id(effective, expanded, expanded_ids, declarations, workflow.assistants),
+        block=FlowCollaboration(mode="assistants", max_depth=max_depth),
+        team=team,
+        assistants_by_id=assistants_by_id,
     )
 
 
@@ -1636,21 +1902,22 @@ def _make_expanded_copy(
         fmt: The body format — selects ``PhaseStep`` vs ``StageStep``.
 
     Returns:
-        A new step instance for the expanded copy (body deep-copied, so copies
-        never alias one another or the base step). PHASES copies carry no
-        ``depends_on`` (position derives it later); STAGES copies carry the
-        original external ``depends_on`` on the first copy and a chain
-        reference to the previous copy (``NAME-(index-1)``) on every
-        subsequent copy.
+        A new step instance for the expanded copy (body and assistant
+        declarations deep-copied, so copies never alias one another or the
+        base step). PHASES copies carry no ``depends_on`` (position derives
+        it later); STAGES copies carry the original external ``depends_on``
+        on the first copy and a chain reference to the previous copy
+        (``NAME-(index-1)``) on every subsequent copy.
 
     Raises:
         TypeError: When a STAGES expansion receives a non-``StageStep`` (an
             internal invariant breach, not a recoverable state).
     """
     body = copy.deepcopy(step.body)
+    assistants = copy.deepcopy(step.assistants)
 
     if fmt is BodyFormat.PHASES:
-        return PhaseStep(name=new_id, title=step.title, body=body)
+        return PhaseStep(name=new_id, title=step.title, body=body, assistants=assistants)
 
     # STAGES: first copy inherits the original external depends_on (rewritten in
     # 5c); later copies chain to the previous copy by id.
@@ -1664,7 +1931,7 @@ def _make_expanded_copy(
     else:
         depends_on = [f"{step.name}-{index - 1}"]
 
-    return StageStep(name=new_id, title=step.title, depends_on=depends_on, body=body)
+    return StageStep(name=new_id, title=step.title, depends_on=depends_on, body=body, assistants=assistants)
 
 
 def _expand_loops(
@@ -2133,9 +2400,13 @@ def _reconstruct_body(
         StructuralError: When a ``workflow.extend.<name>.before/.after`` ref
             matches no step name (4a1), when a ``workflow.stages`` name matches
             no step name (4pre), when every step is skipped (post-4skip
-            empty-body guard), on any attachment check of step 4.10
-            (unknown reference, duplicate name in one stage list, attachment
-            on a script or planning-only stage), or on any gates check of
+            empty-body guard), on any check of the step-4.10 two-surface
+            assembly (a namespace collision naming both sites, an unresolved
+            namespace member, a skip entry targeting no pipeline declaration
+            of the stage, an unknown reference, a when-less entry naming no
+            pipeline declaration of the stage, a duplicate name in one stage
+            list, an attachment on a script or planning-only stage — with
+            the attachment's own site prefix), or on any gates check of
             step 4.11 (a gate on a script or planning-only stage).
     """
     steps: list[PhaseStep | StageStep] = [copy.deepcopy(step) for step in body.steps]
@@ -2211,8 +2482,10 @@ def compile_flow(
         between ``repeat`` and the collaboration block), the compiled
         ``collaboration`` block (constructed on EVERY compilation — ``mode:
         assistants`` always, ``max_depth`` from the workflow's delegation
-        block), the compiled ``team`` list (one member per catalog entry in
-        authored order; empty when the workflow carries no catalog), and
+        block), the compiled ``team`` list (the workflow catalog in authored
+        order, then one member per attached pipeline declaration in pipeline
+        body stage order — loop copies collapse; empty when both sources are
+        empty), and
         compiled stages (the input ``roles`` field translated to the output
         ``agents`` field; ``depends_on`` position-derived for PHASES,
         pass-through for STAGES; attachments assembled into the canonical
@@ -2234,16 +2507,23 @@ def compile_flow(
             ``communication``/``trigger``), on an authoring
             ``reflect``/``memory_use`` key in a stage body (the memory stage
             keys are authored through the workflow memory instructions), on
-            an authoring ``assistants`` key in a stage body (attachments are
-            authored through the workflow stage attachments), on an
+            a raw ``assistants`` key surviving into a reconstructed body (the
+            pipeline-file declarations are extracted at parse time and the
+            embedded extend bodies may not author the key), on an
             authoring ``gates`` key or a raw ``verify`` key in a stage body
             (stage gates are authored through the workflow stage gates;
             ``verify`` is a compiled-only key), on a
             ``trigger`` value outside ``on_success``/``manual``, on any
-            attachment check of step 4.10 (an unknown assistant reference,
-            the same assistant name twice in one stage's effective
-            attachment map, an attachment
-            on a script or planning-only stage), or on any gates check of
+            attachment check of step 4.10 (a duplicate assistant name in the
+            one global namespace — the catalog, the inline declarations, and
+            the pipeline declarations; a ``skip`` entry that does not target
+            a pipeline-declared assistant of that stage; a workflow
+            attachment reference without ``when``; an unknown assistant
+            reference; the same assistant name twice in one stage's
+            effective attachment map; an attachment on a script or
+            planning-only stage — the workflow sites read
+            ``workflow.<site>`` and the pipeline declaration sites read
+            ``pipeline.<stage>``), or on any gates check of
             step 4.11 (a gate on a script or planning-only stage).
         FileNotFoundError: If ``pipeline_path`` does not exist or ``flow_path``'s
             parent is missing (propagated).
@@ -2274,9 +2554,12 @@ def compile_flow(
     # gates — all resolved by base name / final id so loop-expanded copies
     # share them); the ORIGINAL `body` is preserved for PipelineDocument
     # below. Workflow-less compiles carry an empty notes map, an empty memory
-    # emission, the default collaboration emission (block only), and an empty
-    # gates map, so every lookup below is ``None``/falsy and no ``buttons``/
-    # ``reflect``/``memory_use``/``assistants``/``verify`` key is assembled.
+    # emission, an empty gates map, and the identity id map — every step
+    # produces exactly itself, so the collaboration assembly walks the
+    # original sequence and the stage-body declarations attach without a
+    # workflow (SC1); with no declarations and no workflow collaboration the
+    # emission is data-empty and no ``buttons``/``reflect``/``memory_use``/
+    # ``assistants``/``verify`` key is assembled.
     if workflow is not None:
         (
             reconstructed,
@@ -2288,7 +2571,8 @@ def compile_flow(
     else:
         reconstructed, notes_by_id = list(body.steps), {}
         memory_emission = _MemoryEmission(block=None, keys_by_id={})
-        collaboration_emission = _collaboration_emission(None, {}, [], {})
+        identity_ids = {step.name: [step.name] for step in reconstructed}
+        collaboration_emission = _collaboration_emission(None, {}, reconstructed, identity_ids)
         verify_by_id = {}
 
     stages: list[FlowStage] = []

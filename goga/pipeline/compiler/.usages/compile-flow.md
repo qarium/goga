@@ -260,30 +260,41 @@ Translation (authored → engine):
 
 ## Collaboration emission
 
-The workflow's collaboration instructions compile into three output
-surfaces:
+Collaboration compiles from both authoring surfaces — the workflow's
+collaboration instructions and the pipeline-file stage-body
+declarations — into three output surfaces:
 
 - the top-level `collaboration` block is emitted into EVERY compiled flow
   — `mode: assistants` always, `max_depth` only when the workflow's
-  `delegation:` block authors a depth; it sits between `memory` and `team`
-- the `team` list is emitted from the workflow catalog in authored order —
-  one member per entry — and omitted entirely when the catalog is empty
+  `delegation:` block authors a depth; it sits between `memory` and
+  `team`
+- the `team` list is emitted from the workflow catalog in authored order,
+  then the pipeline-declared members in pipeline body stage order
+  (loop-expanded copies collapse to their base stage's first occurrence;
+  vetoed and stage-skipped declarations never join) — omitted entirely
+  when both sources are empty
 - a stage emits its `assistants` list when it carries at least one
-  effective attachment — the canonical slot after `memory_use`; uniform
-  across every loop-expanded copy; a skipped stage attaches nothing
+  effective attachment — the canonical slot after `memory_use`; within
+  the list, pipeline declarations first (authored order), then workflow
+  entries (authored order); uniform across every loop-expanded copy; a
+  skipped stage attaches nothing
 
-Compilation checks (structural errors naming the workflow location): an
-attachment naming no member of the assistant namespace (the catalog plus
-every full inline declaration); a DECLARATION of the namespace resolving
-no prompt and no skills — every declaration must resolve content, so an
-override-style entry (authored without prompt/skills) is legal only when
-a tool-delivered entry of the same name supplies the content; the same
-assistant name twice in one stage's list; an attachment on a stage whose
-translated body carries `script`; an attachment on a stage whose
-translated agents value is exactly `["planning"]`. The checks run over
-the working body after skip removal and loop expansion. An authored
-`assistants` key in a stage body is likewise a structural error — the
-single authoring source is the workflow stages block.
+Compilation checks (structural errors naming the location): a name
+collision across the effective namespace (catalog, inline, pipeline
+declarations, overlay contributions); an attachment naming no member of
+the namespace (a pipeline-declared name is visible only to its own
+stage's entry); a missing `when` on an entry naming no pipeline
+declaration of the stage; the same assistant name twice in one stage's
+list; an attachment from any source on a stage whose translated body
+carries `script`; an attachment from any source on a planning-only stage
+(translated agents exactly `["planning"]`); a workflow declaration
+resolving no effective prompt and no skills. The checks run over the
+working body after skip removal and loop expansion, with or without a
+workflow document. A workflow entry addressing a pipeline-declared name
+of its own stage is a `{skip: true}` veto or an additive extension
+(when/gate override with inheritance, prompt append with one blank line,
+skills expand with deduplication, agent/env/delegate delivery
+configuration).
 
 ## Key presence
 

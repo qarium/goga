@@ -2,12 +2,13 @@
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
 importability from the facade (including the ``__all__`` obligation), the
-eight declared properties in the fixed canonical order (``name``, ``prompt``,
-``skills``, ``agent``, ``delegate``, ``env``, ``gate``, ``when``), the exact
-defaults (``name`` required; ``delegate=None`` — not authored, the inheritable
-tri-state value; ``gate=False``; ``when="checkpoints"``; the four absence
-fields ``None``), and kw_only construction. These tests pin the contract
-surface — behavior lives in the logic test module.
+nine declared properties in the fixed canonical order (``name``, ``prompt``,
+``skills``, ``agent``, ``delegate``, ``env``, ``gate``, ``when``, ``skip``),
+the exact defaults (``name`` required; every other parameter ``None`` — the
+absence-preserving attachment parameters ``gate``/``when``/``skip`` keep
+absence distinguishable from every authored value), and kw_only
+construction. These tests pin the contract surface — behavior lives in the
+logic test module.
 """
 
 from __future__ import annotations
@@ -36,12 +37,14 @@ class TestWorkflowAssistantContract:
         assert is_kw_only_dataclass(WorkflowAssistant)
 
     def test_workflow_assistant_signature_matches_contract(self) -> None:
-        """The signature matches the contract exactly — eight parameters, name required.
+        """The signature matches the contract exactly — nine parameters, name required.
 
-        name, prompt, skills, agent, delegate, env, gate, when in the declared
-        order; ``name`` has no default (the model is nameless otherwise), the
-        absence fields default to ``None``, the materialized defaults carry
-        ``False``/``"checkpoints"``, and the annotations pin the declared types.
+        name, prompt, skills, agent, delegate, env, gate, when, skip in the
+        declared order; ``name`` has no default (the model is nameless
+        otherwise), every other parameter defaults to ``None`` — the
+        attachment parameters ``gate``/``when``/``skip`` are
+        absence-preserving, so absence stays distinguishable from every
+        authored value — and the annotations pin the declared types.
         """
         parameters = list(inspect.signature(WorkflowAssistant).parameters.values())
         empty = inspect.Parameter.empty
@@ -55,6 +58,7 @@ class TestWorkflowAssistantContract:
             "env",
             "gate",
             "when",
+            "skip",
         ]
         assert [parameter.default for parameter in parameters] == [
             empty,
@@ -63,8 +67,9 @@ class TestWorkflowAssistantContract:
             None,
             None,
             None,
-            False,
-            "checkpoints",
+            None,
+            None,
+            None,
         ]
         assert [parameter.annotation for parameter in parameters] == [
             "str",
@@ -73,12 +78,13 @@ class TestWorkflowAssistantContract:
             "str | None",
             "bool | None",
             "dict[str, str] | None",
-            "bool",
-            "str",
+            "bool | None",
+            "str | None",
+            "bool | None",
         ]
 
     def test_workflow_assistant_field_order_fixed(self) -> None:
-        """Field order is fixed across all eight fields (the dataclass ordering rule)."""
+        """Field order is fixed across all nine fields (the dataclass ordering rule)."""
         names = [field.name for field in fields(WorkflowAssistant)]
 
         assert names == [
@@ -90,6 +96,7 @@ class TestWorkflowAssistantContract:
             "env",
             "gate",
             "when",
+            "skip",
         ]
 
     def test_workflow_assistant_delegate_defaults_to_none(self) -> None:

@@ -7,12 +7,16 @@ override-style entries that carry none of the five declaration fields, the
 presence-preserving field discipline, the depth/max_tasks int checks with the
 materialized ``max_tasks: 50`` default and the authored-zero value), the
 PER-STAGE attachment map grammar (step 6.7 — the map-keyed reference and full
-inline declaration forms, the required ``when``, the seven-key declaration
-set, the ``gate``/``when`` parameter domains), the extend-entry prohibition
-(step 6.8), and the document-wide duplicate-name pass under the five-field
-declaration discriminator. Both surfaces are name-keyed maps — the retired
-list-of-mappings forms are hard-rejected with rename errors naming the map
-form.
+inline declaration forms, the optional ``when``, the ``{skip: true}`` veto
+form, the empty-entry rejection, the seven-key declaration set, the
+``gate``/``when``/``skip`` parameter domains), and the extend-entry
+prohibition (step 6.8). The parser decides nothing about origins: the
+stage-entry ``when``-requirement and the document-wide duplicate-name rule
+live in the compiler suite (``tests/pipeline/compiler/
+test_compile_flow_collaboration.py`` — the two-surface assembly owns both
+checks), so the parse-time pins of those scenarios were moved there. Both
+surfaces are name-keyed maps — the retired list-of-mappings forms are
+hard-rejected with rename errors naming the map form.
 """
 
 from __future__ import annotations
@@ -42,6 +46,24 @@ class TestAssistantMapContract:
     def test_workflow_assistant_import_surface_unchanged(self) -> None:
         """The WorkflowAssistant model stays importable from the workflow facade."""
         assert WorkflowAssistant(name="x", when="finish").name == "x"
+
+    def test_parse_stage_attachment_skip_entry_parses(self) -> None:
+        """A ``{skip: true}`` stage entry parses — the veto form is first-class grammar."""
+        document = parse_workflow("stages:\n  build:\n    assistants:\n      watcher:\n        skip: true\n")
+
+        assert list(document.stages["build"].assistants) == ["watcher"]
+
+    def test_parse_stage_attachment_when_less_entry_parses(self) -> None:
+        """An entry without ``when`` parses — the origin check is compile territory."""
+        document = parse_workflow("stages:\n  build:\n    assistants:\n      reviewer:\n        prompt: Review.\n")
+
+        assert list(document.stages["build"].assistants) == ["reviewer"]
+
+    def test_parse_stage_attachment_gate_only_entry_parses(self) -> None:
+        """A ``{gate: true}``-only entry parses — a reference carrying its gate."""
+        document = parse_workflow("stages:\n  build:\n    assistants:\n      reviewer:\n        gate: true\n")
+
+        assert list(document.stages["build"].assistants) == ["reviewer"]
 
 
 class TestAssistantCatalog:
@@ -88,7 +110,7 @@ class TestAssistantCatalog:
         )
 
     def test_parse_assistant_catalog_map_form(self) -> None:
-        """The design's canonical map-form YAML parses with every default materialized."""
+        """The design's canonical map-form YAML parses with absence preserved on gate/when."""
         document = parse_workflow(
             "assistants:\n"
             "  reviewer:\n"
@@ -112,13 +134,13 @@ class TestAssistantCatalog:
         assert reviewer.agent == "claude"
         assert reviewer.delegate is True
         assert reviewer.env is None
-        assert reviewer.gate is False
-        assert reviewer.when == "checkpoints"
+        assert reviewer.gate is None
+        assert reviewer.when is None
         assert document.delegation is None
 
         attachment = document.stages["build"].assistants["reviewer"]
         assert attachment.name == "reviewer"
-        assert attachment.gate is False
+        assert attachment.gate is None
         assert attachment.when == "finish"
         assert attachment.prompt is None
 
@@ -203,9 +225,9 @@ class TestAssistantCatalog:
         """A catalog ``X: {}`` parses with every field None and joins the namespace.
 
         The degenerate override — legal parse (the compile content check
-        owns the failure); the entry counts for the duplicate-name rule via
-        the five-field discriminator, while a pure reference still repeats
-        freely.
+        owns the failure); the entry joins the workflow-side namespace,
+        whose cross-surface uniqueness the compiler enforces (the parser
+        runs no document-wide duplicate-name pass).
         """
         document = parse_workflow("assistants:\n  X: {}\nstages:\n  s1:\n    prompt: p\n")
 
@@ -216,18 +238,19 @@ class TestAssistantCatalog:
         assert entry.delegate is None
         assert entry.env is None
 
-        with pytest.raises(WorkflowSyntaxError, match="duplicate assistant name: X"):
-            parse_workflow(
-                "assistants:\n"
-                "  X: {}\n"
-                "stages:\n"
-                "  s1:\n"
-                "    prompt: p\n"
-                "    assistants:\n"
-                "      X:\n"
-                "        prompt: q\n"
-                "        when: start\n",
-            )
+        declaration_repeat = parse_workflow(
+            "assistants:\n"
+            "  X: {}\n"
+            "stages:\n"
+            "  s1:\n"
+            "    prompt: p\n"
+            "    assistants:\n"
+            "      X:\n"
+            "        prompt: q\n"
+            "        when: start\n",
+        )
+
+        assert list(declaration_repeat.stages["s1"].assistants) == ["X"]
 
         reference_repeat = parse_workflow(
             "assistants:\n  X: {}\nstages:\n  s1:\n    prompt: p\n    assistants:\n      X:\n        when: start\n",
@@ -306,6 +329,11 @@ class TestAssistantCatalog:
                 r"unknown key in workflow\.assistants\.r: when; "
                 r"valid keys: prompt, skills, agent, delegate, env",
             ),
+            (
+                "assistants:\n  r:\n    skip: true\n",
+                r"unknown key in workflow\.assistants\.r: skip; "
+                r"valid keys: prompt, skills, agent, delegate, env",
+            ),
             ('assistants:\n  "bad name!":\n    prompt: p\n', "invalid assistant name: bad name!"),
             ("assistants:\n  assistant:\n    prompt: p\n", "assistant name is reserved"),
             ("assistants:\n  123:\n    prompt: p\n", "invalid assistant name: 123"),
@@ -345,45 +373,6 @@ class TestAssistantCatalog:
             parse_workflow(workflow_yaml)
 
         assert fragment in str(exc_info.value)
-
-    def test_parse_duplicate_assistant_name_across_surfaces(self) -> None:
-        """A catalog name repeated as a stage inline declaration raises the duplicate error."""
-        with pytest.raises(WorkflowSyntaxError, match="duplicate assistant name: r"):
-            parse_workflow(
-                "assistants:\n"
-                "  r:\n"
-                "    prompt: p\n"
-                "stages:\n"
-                "  b:\n"
-                "    assistants:\n"
-                "      r:\n"
-                "        prompt: q\n"
-                "        when: start\n",
-            )
-
-    def test_parse_workflow_override_style_inline_counts_for_duplicate_name(self) -> None:
-        """An override-style inline declaration counts for the duplicate rule via its ``agent``.
-
-        The five-field discriminator: the inline entry ``{when: start,
-        agent: y}`` is a DECLARATION (``agent is not None``), so repeating
-        the catalog name raises — under the OLD prompt/skills-only rule it
-        parsed as a reference and its ``agent`` was silently dropped.
-        """
-        with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(
-                "assistants:\n"
-                "  X:\n"
-                "    prompt: p\n"
-                "stages:\n"
-                "  s1:\n"
-                "    prompt: go\n"
-                "    assistants:\n"
-                "      X:\n"
-                "        when: start\n"
-                "        agent: y\n",
-            )
-
-        assert str(exc_info.value) == "duplicate assistant name: X"
 
 
 class TestDelegationBlock:
@@ -437,7 +426,7 @@ class TestDelegationBlock:
 
 
 class TestStageAttachments:
-    """Contract and logic tests — the per-stage attachment map (steps 6.7/6.8) and the namespace."""
+    """Contract and logic tests — the per-stage attachment map grammar (steps 6.7/6.8)."""
 
     def test_parse_stage_attachment_map_parses_into_stage(self) -> None:
         """A stage carrying a map-form ``assistants:`` parses its entries keyed by name."""
@@ -501,7 +490,7 @@ class TestStageAttachments:
         assert entry.env is None
 
     def test_parse_attachment_reference_with_when_only(self) -> None:
-        """A reference with only ``when`` authored parses — gate materializes False."""
+        """A reference with only ``when`` authored parses — gate stays ``None`` (absence)."""
         document = parse_workflow(
             "assistants:\n"
             "  reviewer:\n"
@@ -516,7 +505,7 @@ class TestStageAttachments:
         entry = document.stages["build"].assistants["reviewer"]
         assert entry.prompt is None
         assert entry.skills is None
-        assert entry.gate is False
+        assert entry.gate is None
         assert entry.when == "start"
 
     def test_parse_attachment_when_message_is_accepted(self) -> None:
@@ -553,14 +542,61 @@ class TestStageAttachments:
             "non-mapping assistants in workflow.stages.build; author the map form keyed by assistant name"
         )
 
-    def test_parse_attachment_missing_when(self) -> None:
-        """An attachment without ``when`` raises the required-when error naming the entry."""
+    @pytest.mark.parametrize(
+        ("workflow_yaml", "message"),
+        [
+            (
+                "stages:\n  b:\n    assistants:\n      r:\n        skip: true\n        when: start\n",
+                "skip cannot be combined with extension keys in workflow.stages.b.assistants.r",
+            ),
+            (
+                "stages:\n  b:\n    assistants:\n      r:\n        skip: false\n",
+                "skip: false requires an extension field in workflow.stages.b.assistants.r",
+            ),
+            (
+                "stages:\n  b:\n    assistants:\n      r: {}\n",
+                "empty assistant entry in workflow.stages.b.assistants.r",
+            ),
+            (
+                'stages:\n  b:\n    assistants:\n      r:\n        skip: "yes"\n',
+                "non-bool value in workflow.stages.b.assistants.r.skip",
+            ),
+        ],
+    )
+    def test_parse_time_skip_grammar_errors(self, workflow_yaml: str, message: str) -> None:
+        """Each malformed skip/empty entry raises WorkflowSyntaxError with the exact text."""
         with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(
-                "stages:\n  build:\n    assistants:\n      reviewer:\n        gate: true\n",
-            )
+            parse_workflow(workflow_yaml)
 
-        assert str(exc_info.value) == "when is required in workflow.stages.build.assistants.reviewer"
+        assert str(exc_info.value) == message
+
+    def test_parse_stage_attachment_skip_form_carries_only_the_veto(self) -> None:
+        """A ``{skip: true}`` entry builds the veto model — every other field ``None``."""
+        document = parse_workflow("stages:\n  b:\n    assistants:\n      watcher:\n        skip: true\n")
+
+        entry = document.stages["b"].assistants["watcher"]
+        assert entry.name == "watcher"
+        assert entry.skip is True
+        assert entry.prompt is None
+        assert entry.skills is None
+        assert entry.agent is None
+        assert entry.delegate is None
+        assert entry.env is None
+        assert entry.gate is None
+        assert entry.when is None
+
+    def test_parse_attachment_when_less_entries_carry_absence(self) -> None:
+        """When-less entries parse with ``when`` absent and ``gate`` as authored or absent."""
+        document = parse_workflow(
+            "stages:\n  b:\n    assistants:\n      ref:\n        gate: true\n      decl:\n        prompt: X\n",
+        )
+
+        entries = document.stages["b"].assistants
+        assert entries["ref"].when is None
+        assert entries["ref"].gate is True
+        assert entries["decl"].when is None
+        assert entries["decl"].gate is None
+        assert entries["decl"].prompt == "X"
 
     def test_parse_attachment_empty_map_equals_absence(self) -> None:
         """A stage's empty ``assistants: {}`` map builds the stage with assistants=None."""
@@ -610,20 +646,20 @@ class TestStageAttachments:
             ),
             (
                 "stages:\n  b:\n    assistants:\n      r: {}\n",
-                r"when is required in workflow\.stages\.b\.assistants\.r",
-            ),
-            (
-                "stages:\n  b:\n    assistants:\n      r:\n        gate: true\n",
-                r"when is required in workflow\.stages\.b\.assistants\.r",
-            ),
-            (
-                "stages:\n  b:\n    assistants:\n      r:\n        prompt: p\n",
-                r"when is required in workflow\.stages\.b\.assistants\.r",
+                r"empty assistant entry in workflow\.stages\.b\.assistants\.r",
             ),
             (
                 "stages:\n  b:\n    assistants:\n      r:\n        when: start\n        bogus: 1\n",
                 r"unknown key in workflow\.stages\.b\.assistants\.r: bogus; "
                 r"valid keys: prompt, skills, agent, delegate, env, gate, when",
+            ),
+            (
+                "stages:\n  b:\n    assistants:\n      r:\n        skip: true\n        bogus: 1\n",
+                r"skip cannot be combined with extension keys in workflow\.stages\.b\.assistants\.r",
+            ),
+            (
+                'stages:\n  b:\n    assistants:\n      "bad name!":\n        skip: true\n',
+                r"invalid assistant name: bad name!",
             ),
             (
                 "stages:\n  b:\n    assistants:\n      r:\n        when: later\n",
@@ -636,12 +672,6 @@ class TestStageAttachments:
             (
                 "stages:\n  b:\n    agent: codex\nextend:\n  n:\n    assistants: {}\n    before: [b]\n",
                 r"assistants is forbidden in workflow\.extend\.n",
-            ),
-            (
-                "stages:\n"
-                "  b:\n    assistants:\n      r:\n        prompt: p\n        when: start\n"
-                "  c:\n    assistants:\n      r:\n        skills: [s]\n        when: start\n",
-                r"duplicate assistant name: r",
             ),
             (
                 'stages:\n  b:\n    assistants:\n      "bad name!":\n        when: start\n',

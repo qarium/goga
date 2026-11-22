@@ -1409,17 +1409,19 @@ class _WriteAfmConfigSpy:
     Wrapped into the module seam's ``MagicMock`` so the clean-error scenarios
     keep their mock assertions (``call_count``, ``assert_not_called``, a
     replaced ``side_effect``); records the threaded
-    ``(agent, flow, workflow)`` triplet of every call for the threading
-    assertions.
+    ``(agent, flow, workflow, pipeline)`` quadruplet of every call for the
+    threading assertions.
     """
 
     def __init__(self, order: list[str]) -> None:
         self.order = order
-        self.calls: list[tuple[str | None, object, object]] = []
+        self.calls: list[tuple[str | None, object, object, object]] = []
 
-    def __call__(self, agent: str | None, flow: object = None, workflow: object = None) -> Path:
+    def __call__(
+        self, agent: str | None, flow: object = None, workflow: object = None, pipeline: object = None
+    ) -> Path:
         self.order.append("write_afm_config")
-        self.calls.append((agent, flow, workflow))
+        self.calls.append((agent, flow, workflow, pipeline))
         return Path("/home/goga/.afm/config.yaml")
 
 
@@ -1520,7 +1522,7 @@ class TestRunPipelineConfigAndLaunchLayer:
         # (no workflow resolved here, so the overlay workflow is None).
         mock_write_afm = _run_pipeline_module.write_afm_config
         assert mock_write_afm.call_count == 1
-        assert mock_write_afm.call_args == call("opencode", documents[1], None)
+        assert mock_write_afm.call_args == call("opencode", documents[1], None, documents[0])
 
         captured = capsys.readouterr()
         assert "config amendments: 1 applied" in captured.err
@@ -1564,10 +1566,12 @@ class TestRunPipelineConfigAndLaunchLayer:
         assert isinstance(write_spy, _WriteAfmConfigSpy)
 
         # The threaded objects are the compile output and the overlay
-        # workflow themselves — the same instances, no copies.
-        assert write_spy.calls == [("codex", documents[1], merged)]
+        # workflow themselves — the same instances, no copies — with the
+        # parsed pipeline document (the other compile return) threaded last.
+        assert write_spy.calls == [("codex", documents[1], merged, documents[0])]
         assert write_spy.calls[0][1] is documents[1]
         assert write_spy.calls[0][2] is merged
+        assert write_spy.calls[0][3] is documents[0]
         mock_run_flow.assert_called_once()
 
     def test_run_pipeline_collaboration_error_fires_no_events(
@@ -1679,7 +1683,7 @@ class TestRunPipelineConfigAndLaunchLayer:
         assert exit_code == 0
         write_spy = _run_pipeline_module.write_afm_config.side_effect
         assert isinstance(write_spy, _WriteAfmConfigSpy)
-        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["claude"]
+        assert [recorded_agent for recorded_agent, _, _, _ in write_spy.calls] == ["claude"]
         assert mock_run_flow.call_args.kwargs["env"] == {"B": "2"}
 
     def test_run_pipeline_workflow_global_agent_feeds_all_three_consumers(
@@ -1717,7 +1721,7 @@ class TestRunPipelineConfigAndLaunchLayer:
 
         # The config write receives the WORKFLOW global agent, never the
         # configuration's "codex", with the same overlay workflow object.
-        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["claude"]
+        assert [recorded_agent for recorded_agent, _, _, _ in write_spy.calls] == ["claude"]
 
         workflow_doc = write_spy.calls[0][2]
         assert workflow_doc.agent == "claude"
@@ -1815,7 +1819,7 @@ class TestRunPipelineConfigAndLaunchLayer:
         write_spy = _run_pipeline_module.write_afm_config.side_effect
         assert isinstance(write_spy, _WriteAfmConfigSpy)
 
-        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["codex"]
+        assert [recorded_agent for recorded_agent, _, _, _ in write_spy.calls] == ["codex"]
         mock_wrappers.assert_called_once()
         assert mock_wrappers.call_args.args[2] == "codex"
 
@@ -1879,7 +1883,7 @@ class TestRunPipelineConfigAndLaunchLayer:
         # configuration's "codex" nor the tool's "tool-agent".
         write_spy = _run_pipeline_module.write_afm_config.side_effect
         assert isinstance(write_spy, _WriteAfmConfigSpy)
-        assert [recorded_agent for recorded_agent, _, _ in write_spy.calls] == ["claude"]
+        assert [recorded_agent for recorded_agent, _, _, _ in write_spy.calls] == ["claude"]
         assert write_spy.calls[0][2] is compiled
         mock_wrappers.assert_called_once()
         assert mock_wrappers.call_args.args[2] == "claude"

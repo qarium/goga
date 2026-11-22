@@ -293,6 +293,46 @@ deploy:
   timeout: 30m
 ```
 
+### Stage assistants
+
+A stage body (both body formats) may declare the stage's helper
+assistants — a name-keyed `assistants` map where each entry ships with
+the pipeline:
+
+```yaml
+---
+- name: review
+  title: Review
+  prompt: Implement the feature
+  assistants:
+    auditor:
+      prompt: Audit the diff.
+      skills: [code-audit]
+      when: finish
+      gate: true
+```
+
+| Value key | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `prompt` | string | — | The helper's instruction. |
+| `skills` | list of strings | — | The helper's own skills (delivered via the team member). |
+| `when` | `start` \| `checkpoints` \| `finish` \| `message` | **required** | When the helper engages. |
+| `gate` | bool | `false` | `true` — the verdict must pass before the stage finishes. |
+
+Every declaration resolves content — `prompt` or `skills` must be
+authored. The delivery keys `agent`, `env`, `delegate` are NOT part of
+this vocabulary: authoring any of them is a structural error naming the
+stage and the assistant — delivery is configured per project in the
+workflow-file (`stages.<stage>.assistants.<name>`; see
+[Workflows — Governing pipeline-shipped
+assistants](workflows.md#governing-pipeline-shipped-assistants)).
+
+The declarations attach to their own stage on EVERY run — with a
+workflow-file or without one — and every `loop`-expanded copy carries
+them. Assistants are forbidden on a stage whose body carries `script`
+and on a planning-only stage. An `assistants` map in a workflow
+extend-entry body is a structural error there (workflow-side rule).
+
 ## Shipped pipelines
 
 Goga ships ready-to-use pipelines — `bugfix`, `development`, `patch`,

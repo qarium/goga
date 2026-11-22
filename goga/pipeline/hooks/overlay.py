@@ -1,4 +1,15 @@
-"""Authored-wins workflow overlay: tools fill unset slots and add unnamed stages."""
+"""Authored-wins workflow overlay: tools fill unset slots and add unnamed stages.
+
+The per-stage attachment append is form-blind over the workflow entry
+forms: a ``{skip: true}`` entry and a gate/when-only entry are not
+declaration-shaped, so they append like every other entry — the namespace
+rule never drops them. Only an entry shaped as a declaration (any of the
+five declaration fields present) whose name is in the merged workflow-side
+namespace drops, silently. The overlay is pipeline-blind — it never
+resolves a name beyond the workflow document, so an extension entry
+addressing a pipeline-declared name appends unresolved; its collision with
+a workflow declaration of the same name surfaces at compilation.
+"""
 
 from __future__ import annotations
 
@@ -100,8 +111,12 @@ def _is_assistant_declaration(entry: WorkflowAssistant) -> bool:
         ``prompt``, ``skills``, ``agent``, ``delegate``, or ``env``. With
         the presence discipline every authored declaration key leaves a
         non-``None`` value, so this is exactly the parse-time key-set
-        discrimination (keys within ``{gate, when}`` ⇔ reference) — the
-        one-line declaration rule shared by every consuming cell.
+        discrimination (keys within ``{gate, when, skip}`` ⇔ not a
+        declaration) — the one-line declaration rule shared by every
+        consuming cell. The governance forms ride the negative side: a
+        ``{skip: true}`` veto entry and a gate/when-only entry carry none
+        of the five fields, so the append rule takes them form-blind and
+        the namespace rule never drops them.
     """
     return (
         entry.prompt is not None
@@ -256,7 +271,14 @@ def _merge_stage_assistants(
         delivered entry contributes field values only. Every append
         collision is a silent drop: a name already on the stage drops
         every entry kind; the namespace drops appended declarations only
-        (references never collide across stages).
+        (references never collide across stages). The append is form-blind
+        over the entry forms: a ``{skip: true}`` entry and a gate/when-only
+        entry are not declaration-shaped, so they append like every other
+        entry — the namespace rule never drops them; an extension entry
+        addressing a pipeline-declared name appends unresolved (the
+        pipeline namespace is invisible here, its collision with a
+        workflow declaration of the same name surfacing at compilation —
+        the merge never resolves a name beyond the workflow document).
     """
     result: dict[str, WorkflowAssistant] = dict(authored_map) if authored_map is not None else {}
 

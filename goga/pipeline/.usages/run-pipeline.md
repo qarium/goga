@@ -46,12 +46,15 @@ proxy, hosts) of the effective configuration are applied-but-unconsumed here —
 
 ## afm configuration
 
-Before the launch the coordination writes the whole afm configuration file
-via `write_afm_config`: the client command resolved from the effective
-global agent (the workflow's global `agent` when the effective workflow
-carries one, else the effective `pipeline.agent`) — written only when an
-agent resolves, so per-stage workflow agents or afm's own defaults cover
-the absent global default — plus the five static fields (open_browser, proxy.enabled,
+Before the launch the coordination writes the whole afm configuration
+file via `write_afm_config` — passing the parsed pipeline document
+alongside the compiled flow and the effective workflow (the delivery
+resolution of pipeline-declared assistants): the client command resolved
+from the effective global agent (the workflow's global `agent` when the
+effective workflow carries one, else the effective `pipeline.agent`) —
+written only when an agent resolves, so per-stage workflow agents or
+afm's own defaults cover the
+absent global default — plus the five static fields (open_browser, proxy.enabled,
 prompts_dir, add_stage.enabled=false — the dashboard stage-addition is off for goga-managed runs — and
 skin_dir=/home/goga/.afm/skins/goga — the engine's custom skin directory, served wholesale as the
 active skin while it holds `index.css`; no `theme` is written, so the engine-builtin theme is the
@@ -73,7 +76,12 @@ entries (`goga-<name>` = `{title, command, delegate}`) exactly for the
 profile ids the compiled flow references, and
 `collaboration.limits.max_tasks` when the workflow carries a `delegation:`
 block. The compiled flow is the single source of truth for the profile
-set; assistant env travels through regenerated closures whose paths
+set; the delivery sources resolve across the effective namespace —
+workflow catalog and inline declarations supply their own
+agent/env/delegate, a pipeline-file stage declaration takes them from
+the workflow extension entry addressing its name (else the effective
+global agent), with the authoring site named by any strict pre-run
+error; assistant env travels through regenerated closures whose paths
 become the profile commands.
 
 ## afm skin materialization

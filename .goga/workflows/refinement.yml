@@ -64,6 +64,7 @@ stages:
 {{ stage_config(stages["discover"]) }}
     assistants:
       architector:
+        gate: true
         when: finish
   specify:
 {{ stage_config(stages["specify"]) }}

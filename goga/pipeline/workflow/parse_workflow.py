@@ -106,11 +106,12 @@ _APPROVE_DIRECTIVES = ("auto", "plan", "dialog")
 # the catalog is a structural error).
 _ASSISTANT_CATALOG_KEYS = ("prompt", "skills", "agent", "delegate", "env")
 
-# Fixed keys of a stage attachment's full inline declaration form, in canonical
-# order — the catalog key set plus the two attachment parameters. A mapping
-# value carrying any key beyond ``gate``/``when`` is a full inline declaration
-# validated against THIS set; a mapping within ``gate``/``when`` is a
-# reference with its attachment parameters.
+# Fixed keys of a stage attachment's non-skip entry, in canonical order — the
+# catalog key set plus the two attachment parameters. Every entry of the
+# per-stage map (a reference, an inline declaration, or an extension of a
+# pipeline declaration) is validated against THIS set; the parser runs no
+# origin classification — consumers discriminate reference vs declaration by
+# field PRESENCE, never by key set here.
 _ATTACHMENT_DECLARATION_KEYS = (*_ASSISTANT_CATALOG_KEYS, "gate", "when")
 
 # Fixed keys of the top-level ``delegation`` block, in canonical order. Used
@@ -199,17 +200,18 @@ def parse_workflow(text: str) -> WorkflowDocument:
             ``after``), ``loop`` is
             below one, the ``assistants`` catalog is malformed (a non-mapping
             block, a non-mapping entry value, an unknown key —
-            ``name``/``gate``/``when`` included —, a wrong-typed field, an
-            entry with neither ``prompt`` nor ``skills``, or a key outside
+            ``name``/``gate``/``when``/``skip`` included —, a wrong-typed
+            field, an entry with neither ``prompt`` nor ``skills``, or a key
+            outside
             ``[A-Za-z0-9._-]`` or equal to the reserved ``assistant``), a
             per-stage ``assistants`` map is malformed (a non-mapping value, a
-            non-mapping attachment value, a missing ``when``, a non-bool
-            ``gate``, a ``when`` outside ``start``/``checkpoints``/``finish``/
-            ``message``,
-            an unknown declaration key, a wrong-typed field, a declaration
-            with neither ``prompt`` nor ``skills``, or a key violating the
-            name rules), a declaration name repeats across the
-            catalog and every stage declaration, the ``delegation`` block is
+            non-mapping attachment value, a ``skip`` combined with extension
+            keys, a non-bool or lone-false ``skip``, an empty entry, a
+            non-bool ``gate``, an optional ``when`` outside
+            ``start``/``checkpoints``/``finish``/``message``, an unknown key
+            outside the seven-key set (``prompt``, ``skills``, ``agent``,
+            ``delegate``, ``env``, ``gate``, ``when``), a wrong-typed field,
+            or a key violating the name rules), the ``delegation`` block is
             malformed (a non-mapping block, an unknown key, a ``depth`` that
             is not an ``int >= 0``, or a ``max_tasks`` that is not an
             ``int >= 1``), the ``repeat`` block is malformed (a non-mapping
@@ -264,7 +266,6 @@ def parse_workflow(text: str) -> WorkflowDocument:
     repeat = _build_repeat(repeat_raw)
     gates = _build_gates(gates_raw)
     _validate_instruction_correspondence(stages, memory)
-    _validate_assistant_namespace(assistants, stages)
 
     # The empty-workflow rule counts CONTENT — prompt, stages, extend, memory,
     # the build block, the assistants catalog, the delegation block, the
@@ -1548,9 +1549,10 @@ def _build_assistant_catalog(assistants_raw: dict[str, Any] | None) -> dict[str,
     catalog: dict[str, WorkflowAssistant] = {}
 
     # A map key cannot repeat, so no within-catalog duplicate check exists
-    # here — the dict is keyed by the authored name, and the later
-    # document-wide namespace walk over ``values()`` only guards the
-    # cross-surface repeats (catalog vs inline declarations).
+    # here — the dict is keyed by the authored name. Uniqueness of a name
+    # across the effective namespace (the catalog, the stage entry maps,
+    # and the pipeline declarations of the compiled pipeline-file) is a
+    # compilation check owned by ``compile_flow``, not a parse rule.
     for name, entry_value in assistants_raw.items():
         if not isinstance(entry_value, dict):
             raise WorkflowSyntaxError(f"non-mapping assistant entry in workflow.assistants.{name}")
@@ -1646,8 +1648,9 @@ def _build_stage_assistants(stage: Any, value: Any) -> dict[str, WorkflowAssista
         empty (an empty map equals absence).
 
     Raises:
-        WorkflowSyntaxError: If ``value`` is not a mapping, or an entry is
-            malformed (see the entry loop below).
+        WorkflowSyntaxError: If ``value`` is not a mapping, an entry value
+            is not a mapping, or an entry is malformed (the entry grammar
+            lives in :func:`_build_stage_attachment`).
     """
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(
@@ -1666,49 +1669,74 @@ def _build_stage_assistants(stage: Any, value: Any) -> dict[str, WorkflowAssista
 
         scope = f"workflow.stages.{stage}.assistants.{name}"
 
-        # ``when`` is required on EVERY attachment, checked before the form
-        # discrimination — an empty entry dies here, never as an unknown key.
-        if "when" not in entry_value:
-            raise WorkflowSyntaxError(f"when is required in {scope}")
+        attachments[name] = _build_stage_attachment(scope, name, entry_value)
 
-        # ``gate``/``when`` are the attachment parameters. Absence
-        # materializes the model defaults; an authored ``null`` is a type
-        # error rejected by the validators, never an absence.
-        gate = entry_value.get("gate", False)
-        if not isinstance(gate, bool):
-            raise WorkflowSyntaxError(f"non-bool value in {scope}.gate")
+    return attachments
 
-        when = _validate_when(scope, entry_value["when"])
 
-        # The key set discriminates the two entry forms: a value within
-        # ``{gate, when}`` is a reference (the declaration fields come from
-        # the namespace at compile time); any further key makes it a full
-        # inline declaration.
-        if set(entry_value) <= {"gate", "when"}:
-            _validate_assistant_name(name)
+def _build_stage_attachment(scope: str, name: Any, entry_value: dict[str, Any]) -> WorkflowAssistant:
+    """Validate one stage-attachment entry and build its model (the 6.7 entry grammar).
 
-            attachments[name] = WorkflowAssistant(name=name, gate=gate, when=when)
-            continue
+    Args:
+        scope: The dotted location of the entry
+            (``workflow.stages.STAGE.assistants.NAME``).
+        name: The authored assistant name (the map key of the entry).
+        entry_value: The raw mapping value of the entry.
 
-        fields: dict[str, Any] = {}
+    Returns:
+        The validated :class:`WorkflowAssistant` — the skip form carries
+        nothing but the veto; every other form carries its authored fields,
+        with ``gate``/``when``/``skip`` absent as ``None``.
 
-        for key, field_value in entry_value.items():
-            fields[key] = _validate_attachment_field(scope, key, field_value)
+    Raises:
+        WorkflowSyntaxError: If the entry is a ``skip`` combined with
+            extension keys, a non-bool or lone-false ``skip``, an empty
+            entry, an unknown key outside the seven-key set, a wrong-typed
+            field, or a name violating the name rules.
+    """
+    # The skip form is discriminated before every other shape: a veto
+    # entry carries nothing but the veto.
+    if "skip" in entry_value:
+        if set(entry_value) != {"skip"}:
+            raise WorkflowSyntaxError(f"skip cannot be combined with extension keys in {scope}")
+
+        skip = entry_value["skip"]
+
+        if not isinstance(skip, bool):
+            raise WorkflowSyntaxError(f"non-bool value in {scope}.skip")
+
+        if skip is False:
+            raise WorkflowSyntaxError(f"skip: false requires an extension field in {scope}")
 
         _validate_assistant_name(name)
 
-        attachments[name] = WorkflowAssistant(
-            name=name,
-            prompt=fields.get("prompt"),
-            skills=fields.get("skills"),
-            agent=fields.get("agent"),
-            delegate=fields.get("delegate"),
-            env=fields.get("env"),
-            gate=gate,
-            when=when,
-        )
+        return WorkflowAssistant(name=name, skip=True)
 
-    return attachments
+    if not entry_value:
+        raise WorkflowSyntaxError(f"empty assistant entry in {scope}")
+
+    # ``gate``/``when`` are attachment parameters carried as authored —
+    # absence stays ``None`` (never materialized); an authored ``null``
+    # is a type error rejected by the validators, never an absence. The
+    # parser decides nothing about origins: a when-less entry parses,
+    # and the compile-time origin check owns the vocabulary decision.
+    fields: dict[str, Any] = {}
+
+    for key, field_value in entry_value.items():
+        fields[key] = _validate_attachment_field(scope, key, field_value)
+
+    _validate_assistant_name(name)
+
+    return WorkflowAssistant(
+        name=name,
+        prompt=fields.get("prompt"),
+        skills=fields.get("skills"),
+        agent=fields.get("agent"),
+        delegate=fields.get("delegate"),
+        env=fields.get("env"),
+        gate=fields.get("gate"),
+        when=fields.get("when"),
+    )
 
 
 def _validate_attachment_field(scope: str, key: Any, field_value: Any) -> Any:
@@ -1772,67 +1800,6 @@ def _validate_when(scope: str, field_value: Any) -> str:
         raise WorkflowSyntaxError(f"when must be one of: {', '.join(_WHEN_VALUES)} in {scope}")
 
     return field_value
-
-
-def _is_declaration(entry: WorkflowAssistant) -> bool:
-    """Return whether the entry authors declaration content (the entry-form discriminator).
-
-    Args:
-        entry: The assistant entry to classify.
-
-    Returns:
-        ``True`` when any of the five declaration fields is authored —
-        ``prompt``, ``skills``, ``agent``, ``delegate``, or ``env``. The
-        check is PRESENCE (``is not None``), never truthiness: an authored
-        ``skills: []``/``env: {}`` is a declaration while a reference
-        carries ``None`` for all five fields. With the presence discipline
-        every authored declaration key leaves a non-``None`` value, so this
-        is exactly the parse-time key-set discrimination (keys within
-        ``{gate, when}`` ⇔ reference) — the one-line declaration rule
-        shared by every consuming cell.
-    """
-    return (
-        entry.prompt is not None
-        or entry.skills is not None
-        or entry.agent is not None
-        or entry.delegate is not None
-        or entry.env is not None
-    )
-
-
-def _validate_assistant_namespace(
-    assistants: dict[str, WorkflowAssistant],
-    stages: dict[str, WorkflowStage],
-) -> None:
-    """Reject a declaration name repeated across the catalog and every stage (document-wide).
-
-    Args:
-        assistants: The built catalog map (name → entry).
-        stages: The built per-stage map (name → ``WorkflowStage``).
-
-    Raises:
-        WorkflowSyntaxError: If a DECLARATION name occurs a second time —
-            against the catalog or any inline declaration of any stage.
-            References never count: a name may repeat freely across
-            references.
-    """
-    seen: set[str] = set()
-
-    for entry in assistants.values():
-        if entry.name in seen:
-            raise WorkflowSyntaxError(f"duplicate assistant name: {entry.name}")
-
-        seen.add(entry.name)
-
-    for stage in stages.values():
-        for entry in (stage.assistants or {}).values():
-            if not _is_declaration(entry):
-                continue
-
-            if entry.name in seen:
-                raise WorkflowSyntaxError(f"duplicate assistant name: {entry.name}")
-
-            seen.add(entry.name)
 
 
 def _build_delegation(delegation_raw: dict[str, Any] | None) -> WorkflowDelegation | None:

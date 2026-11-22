@@ -515,13 +515,15 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 24-s
 
     # Step 17: author the afm home — write the afm configuration file with the
     # effective global agent (resolved at step 14), the compiled flow
-    # document, and the overlay workflow — the whole file at the fixed
-    # in-container home path, before the launch. The two documents are the
-    # very objects the flow-file was serialized from and compiled from (the
-    # merged workflow when a tool contributed, the skip-merged resolved
-    # workflow otherwise, ``None`` when nothing resolved), so the engine
-    # config's collaboration plumbing (the generated profiles and limits)
-    # can never diverge from the compiled flow-file. The section is
+    # document, the overlay workflow, and the parsed pipeline document (the
+    # step-13 ``compile_flow`` return, the carrier of the stage-body
+    # declarations) — the whole file at the fixed in-container home path,
+    # before the launch. The documents are the very objects the flow-file
+    # was serialized from and compiled from (the merged workflow when a
+    # tool contributed, the skip-merged resolved workflow otherwise,
+    # ``None`` when nothing resolved), so the engine config's collaboration
+    # plumbing (the generated profiles and limits) can never diverge from
+    # the compiled flow-file. The section is
     # guaranteed present (the host structural guard and the set/force-only
     # amendments materialize it), so no in-container section guard exists.
     # An ``OSError`` (an unwritable home) and a collaboration
@@ -529,7 +531,7 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 24-s
     # an unknown flow reference — every variant before any file is written)
     # propagate — declared error semantics; this precedes the run-creation
     # facts, so no events have fired.
-    write_afm_config(effective_agent, flow_doc, overlay.workflow)
+    write_afm_config(effective_agent, flow_doc, overlay.workflow, pipeline_doc)
 
     # Step 17 (continued): materialize the packaged goga dashboard skin into
     # the skins directory the just-written ``skin_dir`` field points at — the

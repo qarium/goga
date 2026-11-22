@@ -52,6 +52,40 @@ def _skip_version_check(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GOGA_SKIP_VERSION_CHECK", "1")
 
 
+def child_interpreter_env(repo_root: Path | None = None, **overrides: str) -> dict[str, str]:
+    """Build the environment a child interpreter needs to import like its parent.
+
+    The suite's autouse HOME isolation re-keys a child's user-site resolution:
+    dependencies installed with ``pip install --user`` resolve beneath the
+    redirected HOME and vanish in the child (the parent already imported them,
+    so only subprocess-spawning tests see this). The parent's startup
+    ``sys.path`` still names the real site-packages directories as plain
+    strings, so forwarding them through ``PYTHONPATH`` keeps the child
+    importing the same third-party packages regardless of HOME.
+
+    Args:
+        repo_root: The repository root to put first on the child's path —
+            the repo's ``goga`` tree wins over any installed copy. ``None``
+            leaves the path without it (the child resolves goga exactly as
+            the parent did).
+        overrides: Extra environment variables layered on top (callers'
+            values always win, including an explicit ``PYTHONPATH``).
+
+    Returns:
+        The child's environment — the current environment plus the composed
+        ``PYTHONPATH`` and the overrides.
+    """
+    paths = [str(p) for p in sys.path if p and "site-packages" in p]
+
+    if repo_root is not None:
+        paths.insert(0, str(repo_root))
+
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(paths)}
+    env.update(overrides)
+
+    return env
+
+
 @pytest.fixture(autouse=True)
 def _isolate_goga_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the goga carriage and substrate variables for the whole suite.
