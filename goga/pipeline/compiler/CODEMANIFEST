@@ -39,6 +39,12 @@ Annotations: |
   no environment-variable reads — the caller supplies the root_dir value
   explicitly.
 
+  The parsing half honors YAML links: a pipeline-file parses as one stream
+  whose anchor registry survives the "---" document boundary (anchors
+  declared in the header or in hidden body keys resolve in the body), and
+  hidden declaration keys — top-level body keys starting with "." — are
+  dropped before stage assembly.
+
   The cell consumes `WorkflowDocument` (the optional workflow argument of
   `compile_flow`) and `WorkflowStage` (the value type of the workflow stages
   map, referenced in the workflow reconstruction algorithm). The import is
@@ -1424,11 +1430,25 @@ Annotations: |
     Algorithm:
     1. Split `text` into a header segment and a body segment on the
        three-dash separator. If no such separator exists — raise a
-       structural error "missing body separator"
-    2. Parse the header segment; extract name and description. If either
-       is missing or not a str — raise a structural error
+       structural error "missing body separator". The split is the
+       structural pre-check (separator presence, exactly three dashes);
+       the content is not parsed from the segments
+    2. Parse the whole `text` as ONE YAML stream whose anchor registry
+       survives the document boundary, so YAML links carry across the
+       separator: an anchor declared in the header segment (or in a
+       hidden body key) resolves in the body segment, and aliases keep
+       their sequential order (an alias authored before its anchor
+       fails). On a YAML error of any kind — raise a structural error
+       "invalid YAML in pipeline-file". The stream must carry exactly
+       two documents: a single document means the header segment is
+       empty or comment-only, and a leading separator line means the
+       same (the stream's first document is body content) — both raise
+       "header missing name/description"; a third document (an extra
+       separator line inside the body) raises "extra body separator".
+       Extract the header from the first document: name and description.
+       If either is missing or not a str — raise a structural error
        "header missing name/description". Then extract the optional
-       roles block from the header segment. If the block is absent or
+       roles block from the header mapping. If the block is absent or
        an empty mapping — set roles to None. If the block is present but
        its value is not a mapping (e.g. a scalar, a string, a list) —
        raise a structural error "non-mapping roles block in header".
@@ -1443,10 +1463,13 @@ Annotations: |
        "non-bool value in header.repeatable"; an absent key equals False.
        Build `PipelineHeader` with name, description, roles, and
        repeatable.
-       ADDITIONALLY, if the header segment carries the agents
+       ADDITIONALLY, if the header mapping carries the agents
        key — raise a structural error "agents key is forbidden in
        header; use roles".
-    3. Parse the body segment
+    3. Take the second stream document as the body and drop every hidden
+       declaration key from a mapping body — top-level str keys starting
+       with "." are YAML anchor sites, not stage names; their content is
+       already merged by YAML resolution
     4. Detect format by the structure of the parsed body:
        - a list → `BodyFormat` PHASES; build a `PhasesBody` of `PhaseStep`
          items (one per list entry). Each list item must carry string name
@@ -1481,6 +1504,20 @@ Annotations: |
     Requirements:
     - The three-dash separator is matched as a line of exactly three dashes
       (per YAML document separator convention), not as a substring
+    - YAML links carry across the separator: the file parses as one stream
+      with a shared anchor registry, so an anchor declared in the header
+      segment or in a hidden body key resolves in the body segment; aliases
+      stay sequential (an alias before its anchor fails) and a duplicate
+      anchor name across segments fails
+    - A YAML error of any kind (header or body) raises the clean structural
+      error "invalid YAML in pipeline-file" — raw YAML internals never leak
+    - The stream must carry exactly two documents: fewer (an empty or
+      comment-only header segment, or a leading separator line) raises
+      "header missing name/description"; more (an extra separator line
+      inside the body) raises "extra body separator"
+    - Hidden declaration keys — top-level str keys of a mapping body
+      starting with "." — are dropped before stage assembly: they are YAML
+      anchor sites, never stage names, and their content is already merged
     - An empty body (`PhasesBody` with zero steps or `StagesBody` with zero
       steps) is NOT a structural error here — `compile_flow` checks for
       emptiness

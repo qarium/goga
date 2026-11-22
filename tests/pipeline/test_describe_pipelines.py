@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import get_type_hints
 
 import pytest
-import yaml
 from goga.pipeline.compiler import StructuralError
 from goga.pipeline.describe_pipelines import describe_pipelines
 from goga.pipeline.list_pipelines import list_pipelines
@@ -172,8 +171,9 @@ class TestDescribePipelinesLogic:
         """A non-YAML body aborts the overview before any later file is processed (no partial list).
 
         The broken YAML sits in the body segment (after the ``---`` line) so
-        the failure comes from the YAML parser itself; a broken header segment
-        would fail ``_split_segments`` first with a ``StructuralError``.
+        the failure comes from the YAML parser itself — wrapped by
+        ``parse_dsl`` into the clean structural message, never leaked as a
+        raw ``yaml.YAMLError``.
         """
         from unittest import mock
 
@@ -185,7 +185,7 @@ class TestDescribePipelinesLogic:
             mock.patch.object(
                 _describe_pipelines_module, "parse_dsl", wraps=_describe_pipelines_module.parse_dsl
             ) as spy,
-            pytest.raises(yaml.YAMLError),
+            pytest.raises(StructuralError, match="invalid YAML in pipeline-file"),
         ):
             describe_pipelines(project_dir, tmp_path / "user_pipelines")
 

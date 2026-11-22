@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 # and exactly two (header, body) when it is present.
 _EXPECTED_SEGMENT_COUNT = 2
 
+# A well-formed pipeline-file stream carries exactly two documents — the
+# header and the body. The anchor-carrying stream parse below keys its
+# document-count dispatch on this constant.
+_EXPECTED_DOCUMENT_COUNT = 2
+
 # Fixed keys of the header-level ``roles`` block (one per overridable role alias;
 # each translates to its afm agent name / prompt-file stem via ``translate_role``).
 # Used both for unknown-key rejection and for projecting the validated mapping
@@ -71,6 +76,53 @@ class StructuralError(ValueError):
     """Raised when a pipeline-file is structurally malformed (authored-time defect)."""
 
 
+class _PipelineFileLoader(yaml.SafeLoader):
+    """SafeLoader that keeps the anchor registry across the stream's documents.
+
+    A pipeline-file is one authoring unit split by the ``---`` separator line,
+    so YAML links must cross the split: an anchor declared in the header
+    segment (or in a hidden body key) stays resolvable in the body segment.
+    The base loader resets the registry per document — the YAML spec scopes
+    anchors to a document — so ``compose_document`` is overridden to keep it.
+    Aliases still follow sequential order: an alias authored before its
+    anchor fails as undefined, exactly as within one document.
+    """
+
+    def compose_document(self) -> Any:
+        """Compose one document while preserving the shared anchor registry.
+
+        Returns:
+            The composed node graph of the next document in the stream.
+        """
+        # Drop the DOCUMENT-START/END events as the base loader does, but
+        # deliberately skip the registry reset — the carriage of anchors
+        # across the header/body separator lives exactly here.
+        self.get_event()
+
+        node = self.compose_node(None, None)
+
+        self.get_event()
+
+        return node
+
+
+def _is_hidden_key(key: Any) -> bool:
+    """Return whether ``key`` is a hidden declaration key (a ``str`` starting with ``.``).
+
+    Args:
+        key: The parsed body-level map key to classify.
+
+    Returns:
+        ``True`` when ``key`` is a ``str`` whose first character is a dot —
+        the authoring idiom for YAML anchor declaration sites
+        (``.defaults: &name``). By the time the body mapping reaches stage
+        assembly, YAML resolution has already merged the anchored content
+        into its use sites (aliases and ``<<:`` merge keys), so the key is
+        not a stage name and must be dropped here.
+    """
+    return isinstance(key, str) and key.startswith(".")
+
+
 def _split_segments(text: str) -> tuple[str, str]:
     """Split ``text`` into (header_text, body_text) on the literal ``---`` line.
 
@@ -94,11 +146,12 @@ def _split_segments(text: str) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
-def _parse_header(header_text: str) -> PipelineHeader:
-    """Parse the header segment into a ``PipelineHeader`` with string name/description.
+def _parse_header(header_data: Any) -> PipelineHeader:
+    """Validate the parsed header mapping into a ``PipelineHeader`` with string name/description.
 
     Args:
-        header_text: The header segment text (before the ``---`` line).
+        header_data: The YAML-parsed header document (the first document of
+            the stream) — any shape; a non-mapping fails the checks below.
 
     Returns:
         The parsed ``PipelineHeader`` (with ``roles`` set when the header
@@ -111,8 +164,6 @@ def _parse_header(header_text: str) -> PipelineHeader:
             unknown key, or non-str value), or carries a present
             ``repeatable`` value that is not strictly bool.
     """
-    header_data = yaml.safe_load(header_text)
-
     if not isinstance(header_data, dict):
         raise StructuralError("header missing name/description")
 
@@ -461,6 +512,13 @@ def _build_body(parsed_body: Any) -> tuple[BodyFormat, PhasesBody | StagesBody]:
 def parse_dsl(text: str) -> tuple[PipelineHeader, BodyFormat, PhasesBody | StagesBody]:
     """Structurally parse a pipeline-file into a header, a body format, and a typed body.
 
+    YAML links carry across the ``---`` separator: the file is parsed as one
+    stream whose anchor registry survives the document boundary, so an anchor
+    declared in the header segment (or in a hidden body key) resolves in the
+    body segment. Hidden declaration keys — top-level body keys starting with
+    ``.`` — are anchor sites, not stages: their content is already merged by
+    YAML resolution, and they are dropped before stage assembly.
+
     Args:
         text: Full pipeline-file text (must contain a ``---`` separator line —
             matched as a line of exactly three dashes, not a substring).
@@ -476,26 +534,67 @@ def parse_dsl(text: str) -> tuple[PipelineHeader, BodyFormat, PhasesBody | Stage
         (``compile_flow`` rejects it).
 
     Raises:
-        StructuralError: If the separator is missing, the header lacks string
-            name/description, the header's ``repeatable`` flag is present and
-            not strictly bool, the body is neither list nor mapping, a step is
-            not a mapping or lacks required fields, ``depends_on`` is not
-            ``None``/``list[str]``, or a step's ``assistants`` map fails the
-            step-4a vocabulary (a non-mapping map or entry, a missing
-            ``when``, a bad value type, an unknown key — the delivery keys
-            carry the workflow-file clause —, an invalid or reserved name, or
-            a declaration resolving neither ``prompt`` nor ``skills``).
+        StructuralError: If the separator is missing, the text is invalid YAML
+            ("invalid YAML in pipeline-file"), the stream carries an extra
+            separator line inside the body ("extra body separator"), the
+            header lacks string name/description (an empty or comment-only
+            header segment included), the header's ``repeatable`` flag is
+            present and not strictly bool, the body is neither list nor
+            mapping, a step is not a mapping or lacks required fields,
+            ``depends_on`` is not ``None``/``list[str]``, or a step's
+            ``assistants`` map fails the step-4a vocabulary (a non-mapping
+            map or entry, a missing ``when``, a bad value type, an unknown
+            key — the delivery keys carry the workflow-file clause —, an
+            invalid or reserved name, or a declaration resolving neither
+            ``prompt`` nor ``skills``).
     """
-    header_text, body_text = _split_segments(text)
+    # The split stays the structural pre-check: the separator line must be a
+    # line of exactly three dashes ("missing body separator", the four-dash
+    # rejection) — the body segment itself is not re-parsed from the split,
+    # the stream parse below owns the content.
+    header_text, _ = _split_segments(text)
 
-    header = _parse_header(header_text)
+    # One stream parse with anchor carriage: an anchor declared in the
+    # header segment resolves in the body segment (and vice versa in
+    # authored order). The low-level YAML error is replaced with a clean
+    # structural message — the parser contract does not expose YAML
+    # internals.
+    try:
+        documents = list(yaml.load_all(text, Loader=_PipelineFileLoader))
+    except yaml.YAMLError:
+        raise StructuralError("invalid YAML in pipeline-file") from None
 
-    parsed_body = yaml.safe_load(body_text)
+    if len(documents) == _EXPECTED_DOCUMENT_COUNT and not header_text.strip():
+        # A leading separator line: the header segment is empty, so the
+        # stream's first document is body content — the header itself is
+        # absent, the same empty-header error an empty header text produces.
+        raise StructuralError("header missing name/description")
 
-    # An empty body segment parses to None; normalize so an empty list body is
+    if len(documents) != _EXPECTED_DOCUMENT_COUNT:
+        # The separator pre-check has passed, so fewer than two documents
+        # mean an empty or comment-only header segment (the single document
+        # is the body); more than two mean an extra separator line inside
+        # the body.
+        message = (
+            "header missing name/description" if len(documents) < _EXPECTED_DOCUMENT_COUNT else "extra body separator"
+        )
+
+        raise StructuralError(message)
+
+    header = _parse_header(documents[0])
+
+    parsed_body = documents[1]
+
+    # An empty body document parses to None; normalize so an empty list body is
     # treated as PHASES with zero steps (compile_flow raises "empty body").
     if parsed_body is None:
         parsed_body = []
+
+    # Hidden declaration keys (anchor sites such as ``.defaults: &name``) are
+    # not stage names — YAML resolution has already merged their content, so
+    # they are dropped before stage assembly.
+    if isinstance(parsed_body, dict):
+        parsed_body = {key: value for key, value in parsed_body.items() if not _is_hidden_key(key)}
 
     fmt, body = _build_body(parsed_body)
 

@@ -1514,3 +1514,79 @@ class TestParseWorkflowGlobalRunSettings:
         document = parse_workflow(workflow_path.read_text())
 
         assert document.env is None
+
+
+class TestParseWorkflowAnchors:
+    """Logic tests for YAML links — hidden declaration keys, aliases, merge keys."""
+
+    def test_hidden_anchor_key_with_stage_merge(self, tmp_path: Path) -> None:
+        """A hidden ``.anchor`` declaration merges into a stage via ``<<:``."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            ".anchor: &defaults\n"
+            "  agent: claude\n"
+            "  skills:\n"
+            "    - review\n"
+            "\n"
+            "stages:\n"
+            "  build:\n"
+            "    <<: *defaults\n"
+            "    prompt: shared starting point\n",
+        )
+
+        document = parse_workflow(workflow_path.read_text())
+
+        stage = document.stages["build"]
+        assert stage.agent == "claude"
+        assert stage.skills == ["review"]
+        assert stage.prompt == "shared starting point"
+
+    def test_hidden_anchor_key_block_merge_into_stages(self, tmp_path: Path) -> None:
+        """A hidden declaration merges whole stages into the ``stages`` block."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            ".anchor: &stages\n  build:\n    prompt: hi\n  test:\n    prompt: again\n\nstages:\n  <<: *stages\n",
+        )
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert set(document.stages) == {"build", "test"}
+        assert document.stages["build"].prompt == "hi"
+        assert document.stages["test"].prompt == "again"
+
+    def test_hidden_key_scalar_value_is_skipped(self, tmp_path: Path) -> None:
+        """A hidden key's value shape is irrelevant — the key is skipped, not validated."""
+        workflow_path = _write(tmp_path, "workflow.yml", ".note: true\nprompt: hi\n")
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.prompt == "hi"
+        assert document.stages == {}
+
+    def test_hidden_key_alone_is_empty_workflow(self, tmp_path: Path) -> None:
+        """A hidden declaration alone carries no content — the empty-workflow rule fires."""
+        workflow_path = _write(tmp_path, "workflow.yml", ".anchor: &a\n  x: 1\n")
+
+        with pytest.raises(WorkflowSyntaxError, match="empty workflow"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_unknown_key_still_rejected_next_to_hidden_key(self, tmp_path: Path) -> None:
+        """The hidden-key tolerance is selective — an ordinary unknown key still errors."""
+        workflow_path = _write(tmp_path, "workflow.yml", ".anchor: &a\n  x: 1\nbogus: 2\n")
+
+        with pytest.raises(WorkflowSyntaxError, match="unknown key in workflow: bogus"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_alias_reuse_within_stages(self, tmp_path: Path) -> None:
+        """A plain alias between stages works without any hidden declaration key."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  build: &b\n    prompt: hi\n  test: *b\n",
+        )
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.stages["test"].prompt == "hi"

@@ -89,6 +89,38 @@ them. Assistants are forbidden on a stage whose body carries `script`
 and on a planning-only stage. An `assistants` map in a workflow
 extend-entry body is a structural error there (workflow-side rule).
 
+## YAML links and shared starting points
+
+A pipeline-file parses as ONE YAML stream whose anchor registry survives
+the `---` separator: declare an anchor in the header segment or in a
+hidden body key (any top-level body key starting with `.`) and reuse it
+in the body through aliases (`*name`) and merge keys (`<<:`).
+
+```yaml
+name: Goga feature
+description: Feature implementation
+.defaults: &stage_defaults
+  skills:
+    - goga-change
+---
+build:
+  <<: *stage_defaults
+  title: Build
+verify:
+  <<: *stage_defaults
+  title: Verify
+  depends_on: [build]
+```
+
+- Hidden declaration keys are dropped before stage assembly — a `.defaults`
+  key is never a stage, whatever its content.
+- A PHASES (list) body cannot carry a hidden top-level key — declare the
+  anchor in the header segment instead; `<<:` merges work inside list
+  items.
+- Aliases keep sequential order: an alias authored before its anchor
+  fails, and a duplicate anchor name across the segments fails too — both
+  as the clean structural error "invalid YAML in pipeline-file".
+
 ## Parameters
 
 - `text: str` — the full pipeline-file text (including the `---` separator
@@ -124,6 +156,8 @@ objects. Pure (modulo exceptions).
 | Condition                                       | Exception                                 |
 |-------------------------------------------------|-------------------------------------------|
 | `---` separator missing                         | structural error "missing body separator" |
+| Invalid YAML anywhere (incl. a broken alias or a duplicate anchor) | structural error "invalid YAML in pipeline-file" |
+| Extra `---` line inside the body                | structural error "extra body separator" |
 | Header missing `name` or `description`          | structural error "header missing name/description" |
 | Legacy `agents` key in header                    | structural error "agents key is forbidden in header; use roles" |
 | Unknown key in header `roles` block (incl. `summary`) | structural error "unknown role in header.roles: <key>; valid keys: planner, executor, reviewer" |
