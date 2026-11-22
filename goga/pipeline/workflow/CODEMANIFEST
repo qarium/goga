@@ -22,6 +22,12 @@ Annotations: |
   no network or subprocess calls, and has no Imports — it depends only on
   the Python standard library and PyYAML.
 
+  YAML links (anchors, aliases, and "<<" merge keys) resolve through the
+  standard YAML loading; hidden declaration keys — top-level str keys
+  starting with "." — are anchor sites skipped by the top-level validation
+  (their content is already merged at parse time, and they never count as
+  workflow content).
+
   This cell is intentionally DECLARATIVE: it does NOT know about the compiler
   or any compiler-level concept (flow documents, flow stages, the compile
   routine, body embedding, depends_on derivation, command composition,
@@ -976,10 +982,16 @@ Annotations: |
          non-str key raises "non-str key in workflow.env"; a non-str
          value raises "non-str value in workflow.env.KEY". An empty map
          equals absence — build with env=None
-    5. For every other top-level key — raise a structural error
+    5. For every other top-level key that is not a hidden declaration
+       key — raise a structural error
        "unknown key in workflow: KEY; valid keys: prompt, stages, extend,
        memory, profile, build, assistants, delegation, repeat, gates,
-       agent, env"
+       agent, env". A hidden declaration key (a str starting with ".") is
+       skipped: it is a YAML anchor site — by parse time YAML resolution
+       has already merged the anchored content into its use sites
+       (aliases and "<<" merge keys), so the key carries no workflow
+       content, never satisfies the empty-workflow rule, and is not
+       listed among valid keys
     6.0. For the memory block (when present), validate each key and value:
        - an unknown key raises "unknown key in workflow.memory: KEY; valid
          keys: method, path, max_rules, commit, mode"
@@ -1352,6 +1364,10 @@ Annotations: |
       every name it references exists in each target pipeline; a name
       absent from a target pipeline is a structural error (not a silent
       warning+skip) — split or prune such workflows
+    - Hidden declaration keys — top-level str keys starting with "." — are
+      skipped, not rejected and not validated: they are YAML anchor sites
+      whose content YAML resolution has already merged into its use sites;
+      a hidden key alone does not satisfy the empty-workflow rule
     - A workflow-file with none of a prompt, any stage entries, any extend
       entries, the memory block, the build block, the assistants block, the
       delegation block, the repeat block, the gates block, the agent key,

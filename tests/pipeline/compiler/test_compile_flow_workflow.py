@@ -2950,3 +2950,45 @@ class TestApproveScriptsRoundTrip:
             "  depends_on:\n"
             "  - a\n"
         )
+
+
+class TestCompileFlowAnchors:
+    """End-to-end compiles of anchored pipeline-files and workflow-files."""
+
+    def test_compile_flow_with_anchored_pipeline_and_workflow(self, tmp_path: Path) -> None:
+        """Anchored starting points compile through: header anchor into stages, hidden keys into the workflow."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: D\n"
+            ".defaults: &stage_defaults\n"
+            "  skills:\n"
+            "    - goga-change\n"
+            "---\n"
+            "build:\n"
+            "  <<: *stage_defaults\n"
+            "  title: Build\n"
+            "verify:\n"
+            "  <<: *stage_defaults\n"
+            "  title: Verify\n"
+            "  depends_on: [build]\n",
+        )
+
+        workflow = parse_workflow(
+            ".overrides: &stage_agent\n  build:\n    agent: codex\n\nstages:\n  <<: *stage_agent\n",
+        )
+
+        flow_path = tmp_path / "flow.yml"
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        # The pipeline body carries the merged anchor content; no bogus
+        # ``.defaults`` stage exists anywhere.
+        assert [step.name for step in pipeline_doc.body.steps] == ["build", "verify"]
+        assert pipeline_doc.body.steps[0].body["skills"] == ["goga-change"]
+
+        # The merged per-stage agent override reaches the compiled flow stage
+        # through the reconstruction (the composed wrapper command slot).
+        assert flow_doc.stages[0].fields["command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert "command" not in flow_doc.stages[1].fields
+        assert [stage.id for stage in flow_doc.stages] == ["build", "verify"]

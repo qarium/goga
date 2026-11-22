@@ -297,9 +297,10 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 24-s
             propagated unchanged from :func:`parse_workflow` (step 8) when
             ``no_workflow`` is ``False`` and the resolved workflow-file exists
             but is malformed.
-        StructuralError: On a structural defect in the pipeline DSL, propagated
-            unchanged from :func:`parse_dsl` (step 11, the fact-resolution
-            header read) or :func:`compile_flow`.
+        StructuralError: On a structural defect in the pipeline DSL — invalid
+            YAML included — propagated unchanged from :func:`parse_dsl`
+            (step 11, the fact-resolution header read) or
+            :func:`compile_flow`.
         ValueError: When a hook of the hard ``pipeline.amend_workflow`` action
             failed during the amendment delivery (step 12, before any compile,
             write, or launch) — the message names the hook, the tool, and the
@@ -316,8 +317,6 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 24-s
         FileNotFoundError / PermissionError: Propagated unchanged from
             :func:`compile_flow` when ``pipeline_path`` is unreadable or the
             ``flow_path`` parent directory does not exist.
-        yaml.YAMLError: Propagated unchanged from :func:`parse_dsl` when the
-            pipeline-file is not valid YAML.
     """
     # Steps 1-2 — the in-container configuration load-and-amend. The authored
     # load and the config-amendment delivery each own a clean-error boundary:

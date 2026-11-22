@@ -12,6 +12,29 @@ all of that is the compiler's job.
 Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
 `assistants`, `delegation`, `repeat`, `gates`, `agent`, `env`.
 
+### YAML links and hidden declaration keys
+
+Top-level keys starting with `.` (for example `.anchor`) are hidden
+declaration keys — YAML anchor sites for reusable starting points. They are
+skipped by the top-level validation (never rejected, never validated as
+content), their anchored content reaches the file through aliases (`*name`)
+and merge keys (`<<:`), and a hidden key alone does not satisfy the
+empty-workflow rule:
+
+```yaml
+.anchor: &defaults
+  agent: claude
+
+stages:
+  build:
+    <<: *defaults
+    prompt: Implement the feature
+```
+
+Aliases and merge keys also work anywhere inside one file with no hidden
+key at all (declare the anchor on any node, reference it later in the same
+file).
+
 - `profile` — optional top-level string default naming the workflow's default
   contributor profile (`profile: default`); a non-str value is a structural
   error "non-str value in workflow.profile"; an empty/whitespace value

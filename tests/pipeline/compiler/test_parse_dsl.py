@@ -917,3 +917,131 @@ class TestParseDslRepeatableFlag:
 
         with pytest.raises(StructuralError, match=r"non-bool value in header\.repeatable"):
             parse_dsl(text)
+
+
+class TestParseDslAnchors:
+    """Behavioral tests for YAML links — anchor carriage across the separator and hidden keys."""
+
+    def test_header_anchor_merged_into_stages_stage(self) -> None:
+        """An anchor declared in the header segment merges into a STAGES body stage."""
+        text = (
+            "name: demo\ndescription: demo\n"
+            ".defaults: &shared\n"
+            "  agent: claude\n"
+            "---\n"
+            "build:\n"
+            "  <<: *shared\n"
+            "  title: Build\n"
+        )
+
+        _header, fmt, body = parse_dsl(text)
+
+        assert fmt is BodyFormat.STAGES
+
+        step = body.steps[0]
+        assert step.name == "build"
+        assert step.title == "Build"
+        assert step.body["agent"] == "claude"
+
+    def test_hidden_body_key_with_merge(self) -> None:
+        """A hidden ``.defaults`` body key merges into stages and never becomes one."""
+        text = (
+            "name: demo\ndescription: demo\n"
+            "---\n"
+            ".defaults: &shared\n"
+            "  agent: claude\n"
+            "build:\n"
+            "  <<: *shared\n"
+            "  title: Build\n"
+        )
+
+        _header, fmt, body = parse_dsl(text)
+
+        assert fmt is BodyFormat.STAGES
+        assert [step.name for step in body.steps] == ["build"]
+        assert body.steps[0].body["agent"] == "claude"
+
+    def test_hidden_body_key_alone_is_dropped(self) -> None:
+        """A hidden body key without use sites is dropped, not compiled into a stage."""
+        text = "name: demo\ndescription: demo\n---\n.anchor: &a\n  q: 1\nbuild:\n  title: Build\n"
+
+        _header, _fmt, body = parse_dsl(text)
+
+        assert [step.name for step in body.steps] == ["build"]
+
+    def test_header_anchor_merged_into_phases_item(self) -> None:
+        """A header anchor merges into a PHASES list item mapping."""
+        text = (
+            "name: demo\ndescription: demo\n"
+            ".defaults: &shared\n"
+            "  agent: claude\n"
+            "---\n"
+            "- name: s1\n"
+            "  title: T1\n"
+            "  <<: *shared\n"
+        )
+
+        _header, fmt, body = parse_dsl(text)
+
+        assert fmt is BodyFormat.PHASES
+        assert body.steps[0].body["agent"] == "claude"
+
+    def test_alias_within_body_segment(self) -> None:
+        """An anchor and its alias inside one body segment work without a hidden key."""
+        text = "name: demo\ndescription: demo\n---\nbuild: &b\n  title: Build\ncopy: *b\n"
+
+        _header, _fmt, body = parse_dsl(text)
+
+        assert [step.name for step in body.steps] == ["build", "copy"]
+        assert body.steps[1].title == "Build"
+
+    def test_alias_before_anchor_raises_wrapped(self) -> None:
+        """An alias authored before its anchor fails as the clean structural error."""
+        text = "name: *a\n---\n.x: &a\n  q: 1\n"
+
+        with pytest.raises(StructuralError, match="invalid YAML in pipeline-file"):
+            parse_dsl(text)
+
+    def test_duplicate_anchor_across_segments_raises_wrapped(self) -> None:
+        """Re-declaring the same anchor name in both segments fails as a structural error."""
+        text = "name: d\ndescription: d\n.x: &a\n  q: 1\n---\n.y: &a\n  q: 2\nbuild:\n  <<: *a\n  title: B\n"
+
+        with pytest.raises(StructuralError, match="invalid YAML in pipeline-file"):
+            parse_dsl(text)
+
+    def test_invalid_yaml_raises_structural_error(self) -> None:
+        """A damaged body YAML raises the wrapped structural error, never a raw YAMLError."""
+        text = "name: Deploy\ndescription: d\n---\n:\n  [broken\n"
+
+        with pytest.raises(StructuralError, match="invalid YAML in pipeline-file"):
+            parse_dsl(text)
+
+    def test_extra_separator_raises(self) -> None:
+        """A third document (an extra ``---`` line inside the body) is a structural error."""
+        text = "name: d\ndescription: d\n---\nbuild:\n  title: B\n---\nextra: 1\n"
+
+        with pytest.raises(StructuralError, match="extra body separator"):
+            parse_dsl(text)
+
+    def test_crlf_file_parses(self) -> None:
+        """A CRLF pipeline file parses through the stream loader with anchors intact."""
+        text = "name: d\r\ndescription: d\r\n.x: &a\r\n  agent: claude\r\n---\r\nbuild:\r\n  <<: *a\r\n  title: B\r\n"
+
+        header, _fmt, body = parse_dsl(text)
+
+        assert header.name == "d"
+        assert body.steps[0].body["agent"] == "claude"
+
+    def test_empty_header_segment_keeps_message(self) -> None:
+        """A whitespace-only header segment keeps the empty-header error of the split era."""
+        text = "\n---\nbuild:\n  title: B\n"
+
+        with pytest.raises(StructuralError, match="header missing name/description"):
+            parse_dsl(text)
+
+    def test_leading_separator_keeps_message(self) -> None:
+        """A file starting with the separator line keeps the empty-header error."""
+        text = "---\nname: d\ndescription: d\n---\nbuild:\n  title: B\n"
+
+        with pytest.raises(StructuralError, match="header missing name/description"):
+            parse_dsl(text)

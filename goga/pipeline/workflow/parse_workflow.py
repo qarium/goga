@@ -21,6 +21,8 @@ from .workflow_repeat import WorkflowRepeat
 from .workflow_stage import WorkflowStage
 
 # Fixed keys of the top-level workflow mapping. Used for unknown-key rejection.
+# Hidden declaration keys (a str starting with ``.``) are skipped, not rejected —
+# they are YAML anchor sites, not workflow content (see ``_is_hidden_key``).
 _TOP_LEVEL_KEYS = (
     "prompt",
     "stages",
@@ -159,6 +161,11 @@ class WorkflowSyntaxError(ValueError):
 
 def parse_workflow(text: str) -> WorkflowDocument:
     """Structurally parse a rendered workflow-file text into a ``WorkflowDocument`` — no resolution logic.
+
+    Top-level keys starting with ``.`` are hidden declaration keys — YAML
+    anchor sites for reusable starting points. They are skipped after YAML
+    resolution (aliases and ``<<:`` merge keys have already applied), carry
+    no workflow content, and never satisfy the empty-workflow rule.
 
     Args:
         text: The rendered workflow-file text (the caller owns reading and
@@ -308,6 +315,23 @@ def parse_workflow(text: str) -> WorkflowDocument:
     )
 
 
+def _is_hidden_key(key: Any) -> bool:
+    """Return whether ``key`` is a hidden declaration key (a ``str`` starting with ``.``).
+
+    Args:
+        key: The parsed top-level map key to classify.
+
+    Returns:
+        ``True`` when ``key`` is a ``str`` whose first character is a dot —
+        the authoring idiom for YAML anchor declaration sites
+        (``.anchor: &name``). Such keys carry no workflow content: by the
+        time the mapping reaches validation, YAML resolution has already
+        merged the anchored content into its use sites (aliases and ``<<:``
+        merge keys).
+    """
+    return isinstance(key, str) and key.startswith(".")
+
+
 def _extract_top_level(  # noqa: C901, PLR0912 — one direct branch per validated top-level block
     loaded: dict[str, Any],
 ) -> tuple[
@@ -371,6 +395,12 @@ def _extract_top_level(  # noqa: C901, PLR0912 — one direct branch per validat
     env: dict[str, str] | None = None
 
     for key, value in loaded.items():
+        if _is_hidden_key(key):
+            # A hidden declaration key — an anchor site such as
+            # ``.anchor: &name``. Aliases and merge keys are already
+            # resolved, so the key carries no workflow content: skip it.
+            continue
+
         if key == "prompt":
             prompt = _validate_top_level_prompt(value)
         elif key == "stages":

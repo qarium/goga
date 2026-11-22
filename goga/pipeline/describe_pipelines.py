@@ -30,9 +30,9 @@ def describe_pipelines(project_dir: Path, user_dir: Path) -> list[PipelineSummar
 
     Raises:
         OSError: If a discovered pipeline-file cannot be read.
-        yaml.YAMLError: If a discovered pipeline-file is not valid YAML.
         StructuralError: If a discovered pipeline-file is structurally
-            malformed (missing ``---`` separator, header without string
+            malformed (missing ``---`` separator, invalid YAML, an extra
+            separator line inside the body, header without string
             name/description, unsupported body format).
     """
     entries = list_pipelines(project_dir, user_dir)

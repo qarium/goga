@@ -68,10 +68,9 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 7-parameter signature i
         WorkflowSyntaxError: On a structural defect in a resolved
             workflow-file, propagated unchanged from ``parse_workflow`` via
             ``resolve_workflow``.
-        StructuralError: On a structural defect in the pipeline DSL,
-            propagated unchanged from ``parse_dsl`` / ``compile_flow``.
-        yaml.YAMLError: If the pipeline-file is not valid YAML, propagated
-            unchanged from ``parse_dsl`` / ``compile_flow``.
+        StructuralError: On a structural defect in the pipeline DSL — invalid
+            YAML included — propagated unchanged from ``parse_dsl`` /
+            ``compile_flow``.
         OSError: If the pipeline-file cannot be read or the temp flow-file
             cannot be written, propagated unchanged.
         ValueError: If the ``GOGA_HOME_PROFILES`` bundle is damaged (the
